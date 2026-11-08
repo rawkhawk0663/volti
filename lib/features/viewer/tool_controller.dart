@@ -20,6 +20,16 @@ enum ToolMode {
   text,
 }
 
+/// Wie viele Seiten nebeneinander gezeigt werden.
+enum PageLayout {
+  /// Querformat → zwei Seiten, Hochformat → eine Seite.
+  auto,
+  single,
+  double;
+
+  static PageLayout fromName(String? n) => PageLayout.values.firstWhere((l) => l.name == n, orElse: () => auto);
+}
+
 /// Werkzeuge, ihre Einstellungen und Favoriten – gelten in allen Stücken.
 ///
 /// Einstellungen und Favoriten liegen in der Bibliothek und werden
@@ -71,6 +81,13 @@ class ToolController extends ChangeNotifier {
 
   // -------------------------------------------------------- Geräte-Vorlieben
   bool get instantPen => settings.flag('instantPen', orElse: true);
+  PageLayout get pageLayout => PageLayout.fromName(settings.text('pageLayout'));
+
+  Future<void> setPageLayout(PageLayout l) async {
+    await settings.setText('pageLayout', l.name);
+    notifyListeners();
+  }
+
   bool get paletteLeft => settings.flag('paletteLeft', orElse: true);
 
   Future<void> setInstantPen(bool v) => _setFlag('instantPen', v);

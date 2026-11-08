@@ -57,6 +57,15 @@ class AppSettings {
     await _write();
   }
 
+  /// Einfache Text-Einstellungen dieses Geräts.
+  String? text(String name) => (_data['texts'] as Map?)?[name] as String?;
+
+  Future<void> setText(String name, String value) async {
+    final texts = (_data['texts'] ??= <String, dynamic>{}) as Map<String, dynamic>;
+    texts[name] = value;
+    await _write();
+  }
+
   Map<String, dynamic> get _usage => (_data['usage'] ??= <String, dynamic>{}) as Map<String, dynamic>;
 
   /// Wann das Stück zuletzt geöffnet wurde (null = nie).

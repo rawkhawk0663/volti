@@ -10,6 +10,7 @@ import '../../core/pdf/page_image_cache.dart';
 import 'fullscreen.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
+import 'page_flow.dart';
 import 'pen_diagnostics.dart';
 import 'text_layer.dart';
 import 'tool_controller.dart';
@@ -54,89 +55,152 @@ class ViewerScreen extends StatefulWidget {
   State<ViewerScreen> createState() => _ViewerScreenState();
 }
 
+/// Ein geöffnetes Stück: PDF, Seitenbilder und Anmerkungen.
+class _Piece {
+  _Piece(this.item) : ink = InkController(pdfPath: item.path);
+
+  final ViewerItem item;
+  final InkController ink;
+  PdfDocument? doc;
+  PageImageCache? cache;
+  String? error;
+  late final Future<void> ready = _load();
+
+  int? get pageCount => cache?.pageCount ?? (error != null ? 0 : null);
+
+  Future<void> _load() async {
+    try {
+      final d = await PdfDocument.openFile(item.path);
+      await ink.load();
+      doc = d;
+      cache = PageImageCache(d);
+    } catch (e) {
+      error = 'Die Datei konnte nicht geöffnet werden.\n${item.path}\n\n$e';
+    }
+  }
+
+  void dispose() {
+    ink.dispose(); // speichert offene Änderungen
+    cache?.dispose();
+    doc?.dispose();
+  }
+}
+
 class _ViewerScreenState extends State<ViewerScreen> {
-  PdfDocument? _doc;
-  PageImageCache? _cache;
-  late InkController _ink;
+  /// Geöffnete Stücke (das aktuelle und die Nachbarn).
+  final Map<int, _Piece> _pieces = {};
+
+  /// Linke (bzw. einzige) sichtbare Seite.
+  late PageSlot _left = PageSlot(widget.startIndex.clamp(0, widget.items.length - 1), 1);
+
+  /// Zuletzt berührte Seite – für Rückgängig und "Seite leeren".
+  PageSlot? _activeSlot;
+
+  /// Wird gerade die Doppelseite gezeigt? (Ergibt sich aus Fenster und Einstellung.)
+  bool _twoUp = false;
+
   final _diagnostics = PenDiagnostics();
   bool _showDiagnostics = false;
 
   /// Wird gerade eine Text-Notiz getippt? Dann blättern Tasten nicht um.
   bool _editingText = false;
-  String? _error;
-  int _page = 1;
-  late int _index = widget.startIndex.clamp(0, widget.items.length - 1);
-  int _loadToken = 0;
 
   /// Leiste oben/unten sichtbar (in der Spielansicht nur kurz).
   bool _controlsVisible = true;
   Timer? _hideTimer;
   bool _fullscreen = false;
   PointerDeviceKind? _dragKind;
+  int? _reportedPiece;
 
-  ViewerItem get _item => widget.items[_index];
-  bool get _isSetlist => widget.items.length > 1;
   ToolController get tools => widget.tools;
+  bool get _isSetlist => widget.items.length > 1;
+
+  late final _flow = PageFlow(pieceCount: widget.items.length, pageCount: (i) => _pieces[i]?.pageCount);
+
+  // Für Leisten und Titel: das Stück der linken Seite.
+  int get _index => _left.piece;
+  int get _page => _left.page;
+  ViewerItem get _item => widget.items[_left.piece];
+  _Piece? get _leftPiece => _pieces[_left.piece];
+  int get _pageCount => _leftPiece?.pageCount ?? 0;
+  PageSlot? get _right => _twoUp ? _flow.rightOf(_left) : null;
+
+  /// z. B. "Seite 3 von 8", "Seiten 3–4 von 8" oder "Seite 8 · rechts: Ave Maria".
+  String get _pageLabel {
+    final r = _right;
+    if (r == null) return 'Seite ${_left.page} von $_pageCount';
+    if (r.piece == _left.piece) return 'Seiten ${_left.page}–${r.page} von $_pageCount';
+    return 'Seite ${_left.page} von $_pageCount · rechts: ${widget.items[r.piece].title}';
+  }
+
+  _Piece get _activePiece => _pieces[(_activeSlot ?? _left).piece] ?? _leftPiece!;
+  int get _activePage => (_activeSlot ?? _left).page;
 
   @override
   void initState() {
     super.initState();
     tools.setMode(ToolMode.read);
     tools.addListener(_onToolsChanged);
-    _ink = InkController(pdfPath: _item.path);
-    _openPiece(_index);
+    _ensureAround(_left.piece);
     _restartHideTimer();
   }
 
   ToolMode? _lastMode;
   bool? _lastPaletteLeft;
+  PageLayout? _lastLayout;
 
   /// Die ganze Ansicht nur neu aufbauen, wenn sich das Werkzeug wechselt –
   /// nicht bei jeder Bewegung eines Reglers im Einstellungsfenster.
   void _onToolsChanged() {
     if (!mounted) return;
-    if (tools.mode != _lastMode || tools.paletteLeft != _lastPaletteLeft) {
+    if (tools.mode != _lastMode || tools.paletteLeft != _lastPaletteLeft || tools.pageLayout != _lastLayout) {
       _lastMode = tools.mode;
       _lastPaletteLeft = tools.paletteLeft;
+      _lastLayout = tools.pageLayout;
       setState(() {});
     }
   }
 
-  /// Öffnet ein Stück der Liste. [atEnd]: auf der letzten Seite beginnen
-  /// (beim Zurückblättern aus dem nächsten Stück).
-  Future<void> _openPiece(int index, {bool atEnd = false}) async {
-    final token = ++_loadToken;
-    final item = widget.items[index];
-    final ink = InkController(pdfPath: item.path);
-    PdfDocument? doc;
-    String? error;
-    try {
-      doc = await PdfDocument.openFile(item.path);
-      await ink.load();
-    } catch (e) {
-      error = 'Die Datei konnte nicht geöffnet werden.\n${item.path}\n\n$e';
-    }
-    if (!mounted || token != _loadToken) {
-      await doc?.dispose();
-      ink.dispose();
-      return;
-    }
-    final oldDoc = _doc, oldCache = _cache, oldInk = _ink;
-    setState(() {
-      _index = index;
-      _doc = doc;
-      _cache = doc == null ? null : PageImageCache(doc);
-      _ink = ink;
-      _error = error;
-      _page = atEnd && doc != null ? doc.pages.length : 1;
+  /// Lädt ein Stück (einmalig) und baut danach neu auf.
+  Future<_Piece> _ensure(int i) {
+    final p = _pieces.putIfAbsent(i, () => _Piece(widget.items[i]));
+    return p.ready.then((_) {
+      if (mounted) setState(() {});
+      return p;
     });
-    // Alte Daten erst nach dem nächsten Bild freigeben.
+  }
+
+  /// Das aktuelle Stück und seine Nachbarn bereithalten (für das Blättern
+  /// über Songgrenzen und die rechte Seite der Doppelansicht).
+  void _ensureAround(int i) {
+    for (final j in [i, i + 1, i - 1, i + 2]) {
+      if (j >= 0 && j < widget.items.length) _ensure(j);
+    }
+    // Weiter entfernte Stücke freigeben (speichert deren Anmerkungen).
+    final far = _pieces.keys.where((k) => k < i - 1 || k > i + 2).toList();
+    if (far.isEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      oldInk.dispose(); // speichert offene Änderungen
-      oldCache?.dispose();
-      oldDoc?.dispose();
+      for (final k in far) {
+        if (k >= _left.piece - 1 && k <= _left.piece + 2) continue;
+        _pieces.remove(k)?.dispose();
+      }
     });
-    if (doc != null) widget.onOpened?.call(item.path);
+  }
+
+  void _show(PageSlot slot) {
+    if (slot == _left) return;
+    setState(() {
+      _left = slot;
+      _activeSlot = null;
+    });
+    _ensureAround(slot.piece);
+  }
+
+  void _reportOpened() {
+    final p = _leftPiece;
+    if (p == null || p.doc == null || _reportedPiece == _left.piece) return;
+    _reportedPiece = _left.piece;
+    widget.onOpened?.call(p.item.path);
   }
 
   @override
@@ -145,35 +209,36 @@ class _ViewerScreenState extends State<ViewerScreen> {
     tools.removeListener(_onToolsChanged);
     tools.setMode(ToolMode.read);
     if (_fullscreen) setAppFullscreen(false);
-    _ink.dispose(); // speichert offene Änderungen
-    _cache?.dispose();
-    _doc?.dispose();
+    for (final p in _pieces.values) {
+      p.dispose();
+    }
     _diagnostics.dispose();
     super.dispose();
   }
 
-  int get _pageCount => _cache?.pageCount ?? 0;
-
+  /// Seite im aktuellen Stück (Regler, Pos1/Ende).
   void _goTo(int page) {
     if (_pageCount == 0) return;
-    final target = page.clamp(1, _pageCount);
-    if (target != _page) setState(() => _page = target);
+    _show(PageSlot(_left.piece, page.clamp(1, _pageCount)));
   }
 
-  void _next() {
-    if (_page < _pageCount) {
-      _goTo(_page + 1);
-    } else if (_index < widget.items.length - 1) {
-      _openPiece(_index + 1);
-    }
+  /// Springt an den Anfang eines Stücks der Setlist.
+  void _openPiece(int index) => _show(PageSlot(index, 1));
+
+  Future<void> _next() async {
+    // Für das Blättern über die Songgrenze muss das nächste Stück bereit sein.
+    if (_left.piece + 1 < widget.items.length) await _ensure(_left.piece + 1);
+    if (_twoUp && _left.piece + 2 < widget.items.length) await _ensure(_left.piece + 2);
+    if (!mounted) return;
+    final target = _flow.next(_left, twoUp: _twoUp);
+    if (target != null) _show(target);
   }
 
-  void _prev() {
-    if (_page > 1) {
-      _goTo(_page - 1);
-    } else if (_index > 0) {
-      _openPiece(_index - 1, atEnd: true);
-    }
+  Future<void> _prev() async {
+    if (_left.piece > 0) await _ensure(_left.piece - 1);
+    if (!mounted) return;
+    final target = _flow.previous(_left, twoUp: _twoUp);
+    if (target != null) _show(target);
   }
 
   // --------------------------------------------------- Leiste und Vollbild
@@ -246,9 +311,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     } else if (key == LogicalKeyboardKey.end) {
       _goTo(_pageCount);
     } else if (ctrl && key == LogicalKeyboardKey.keyZ) {
-      shift ? _ink.redo() : _ink.undo();
+      shift ? _activePiece.ink.redo() : _activePiece.ink.undo();
     } else if (ctrl && key == LogicalKeyboardKey.keyY) {
-      _ink.redo();
+      _activePiece.ink.redo();
     } else if (down && key == LogicalKeyboardKey.f11) {
       _toggleFullscreen();
     } else if (down && key == LogicalKeyboardKey.keyP) {
@@ -278,6 +343,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
   // ---------------------------------------------------------------- Aufbau
   @override
   Widget build(BuildContext context) {
+    // Doppelseite: im Querformat automatisch (oder fest eingestellt). Schon
+    // hier bestimmen, damit Leisten und Seiten dasselbe anzeigen.
+    final screen = MediaQuery.sizeOf(context);
+    final layout = tools.pageLayout;
+    _twoUp = layout == PageLayout.double || (layout == PageLayout.auto && screen.width > screen.height * 1.05);
     final editing = tools.editing;
     final showBars = _controlsVisible && !editing;
     return Focus(
@@ -303,10 +373,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
               left: 0,
               right: 0,
               child: ExcludeFocus(
-                child: _Slide(
-                  visible: showBars,
-                  fromTop: true,
-                  child: _TopBar(state: this),
+                child: RepaintBoundary(
+                  child: _Slide(
+                    visible: showBars,
+                    fromTop: true,
+                    child: _TopBar(state: this),
+                  ),
                 ),
               ),
             ),
@@ -316,21 +388,23 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 left: 0,
                 right: 0,
                 child: ExcludeFocus(
-                  child: _Slide(
-                    visible: showBars,
-                    fromTop: false,
-                    child: _PageBar(state: this),
+                  child: RepaintBoundary(
+                    child: _Slide(
+                      visible: showBars,
+                      fromTop: false,
+                      child: _PageBar(state: this),
+                    ),
                   ),
                 ),
               ),
-            if (editing && _cache != null)
+            if (editing && _leftPiece?.cache != null)
               Positioned.fill(
                 child: SafeArea(
                   // TextFieldTapRegion: Antippen des Einstellungsfensters beendet
                   // das Schreiben einer Text-Notiz nicht.
                   child: ExcludeFocus(
                     child: TextFieldTapRegion(
-                      child: ToolOverlay(tools: tools, ink: _ink, page: _page),
+                      child: ToolOverlay(tools: tools, ink: _activePiece.ink, page: _activePage),
                     ),
                   ),
                 ),
@@ -341,14 +415,14 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 bottom: 72,
                 child: IgnorePointer(child: PenDiagnosticsPanel(diagnostics: _diagnostics)),
               ),
-            if (_ink.saveError != null)
+            if (_leftPiece?.ink.saveError != null)
               Positioned(
                 left: 12,
                 bottom: 12,
                 child: Material(
                   color: Theme.of(context).colorScheme.errorContainer,
                   borderRadius: BorderRadius.circular(8),
-                  child: Padding(padding: const EdgeInsets.all(8), child: Text(_ink.saveError!)),
+                  child: Padding(padding: const EdgeInsets.all(8), child: Text(_leftPiece!.ink.saveError!)),
                 ),
               ),
           ],
@@ -358,26 +432,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   }
 
   Widget _buildPageArea() {
-    if (_error != null) {
-      return SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_error!, textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                FilledButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Zurück')),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    final cache = _cache;
-    if (cache == null) return const Center(child: CircularProgressIndicator());
+    final left = _leftPiece;
+    if (left == null || left.pageCount == null) return const Center(child: CircularProgressIndicator());
     final reading = tools.mode == ToolMode.read;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportOpened());
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -392,7 +450,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
         onTapUp: reading ? _onTap : null,
         onHorizontalDragStart: reading ? (d) => _dragKind = d.kind : null,
         onHorizontalDragEnd: reading ? _onSwipe : null,
-        child: SafeArea(child: LayoutBuilder(builder: (context, box) => _buildPage(cache, box))),
+        child: SafeArea(child: LayoutBuilder(builder: (context, box) => _buildPages(box))),
       ),
     );
   }
@@ -419,26 +477,93 @@ class _ViewerScreenState extends State<ViewerScreen> {
     if (v > 300) _prev();
   }
 
-  Widget _buildPage(PageImageCache cache, BoxConstraints box) {
-    const margin = 6.0;
+  /// Eine oder zwei Seiten, so gross wie möglich.
+  Widget _buildPages(BoxConstraints box) {
+    const margin = 6.0, gap = 8.0;
     final availW = box.maxWidth - 2 * margin;
     final availH = box.maxHeight - 2 * margin;
-    final aspect = cache.aspectRatio(_page);
-    final w = availW / availH > aspect ? availH * aspect : availW;
-    final h = w / aspect;
+    final slots = [_left, ?_right];
+    double aspectOf(PageSlot s) {
+      final c = _pieces[s.piece]?.cache;
+      return c == null ? (_leftPiece?.cache?.aspectRatio(_left.page) ?? 0.707) : c.aspectRatio(s.page);
+    }
 
+    final aspects = [for (final s in slots) aspectOf(s)];
+    final totalAspect = aspects.reduce((a, b) => a + b);
+    final gaps = gap * (slots.length - 1);
+    final h = ((availW - gaps) / availH > totalAspect ? availH : (availW - gaps) / totalAspect);
+
+    // Sichtbare Seiten nicht aus dem Zwischenspeicher verdrängen; die
+    // nächsten Seiten schon vorbereiten, damit das Umblättern sofort geht.
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final visibleByPiece = <int, Set<int>>{};
+    for (final s in slots) {
+      (visibleByPiece[s.piece] ??= {}).add(s.page);
+    }
+    for (final e in visibleByPiece.entries) {
+      _pieces[e.key]?.cache?.setVisiblePages(e.value);
+    }
+    final last = slots.last;
+    final upcoming = <PageSlot>[];
+    var cursor = _flow.after(last);
+    for (var i = 0; i < slots.length * 2 && cursor != null; i++) {
+      upcoming.add(cursor);
+      cursor = _flow.after(cursor);
+    }
+    final before = _flow.before(_left);
+    for (final s in [...upcoming, ?before]) {
+      final c = _pieces[s.piece]?.cache;
+      if (c == null) continue;
+      final w = h * c.aspectRatio(s.page);
+      c.preload([s.page], ((w * dpr / 128).ceil() * 128).clamp(128, 4096));
+    }
+
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (i, s) in slots.indexed) ...[
+            if (i > 0) const SizedBox(width: gap),
+            _buildPage(s, h * aspects[i], h, dpr),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPage(PageSlot slot, double w, double h, double dpr) {
+    final piece = _pieces[slot.piece];
+    final cache = piece?.cache;
+    if (piece == null || cache == null) {
+      return SizedBox(
+        width: w,
+        height: h,
+        child: ColoredBox(
+          color: Colors.white,
+          child: Center(
+            child: piece?.error != null
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(piece!.error!, textAlign: TextAlign.center),
+                  )
+                : const CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
     // In 128-Pixel-Schritten rendern, damit nicht jede kleine
     // Fensteränderung ein neues Rendern auslöst.
-    final dpr = MediaQuery.devicePixelRatioOf(context);
     final pixelWidth = ((w * dpr / 128).ceil() * 128).clamp(128, 4096);
-
-    cache.setVisiblePages({_page});
-    cache.preload([_page + 1, _page + 2, _page - 1], pixelWidth);
+    final key = '${slot.piece}/${slot.page}';
 
     // RepaintBoundary: Jede Ebene wird nur neu gemalt, wenn sie sich selbst
     // ändert. Sonst würde z. B. jede Stiftbewegung auch die grosse Notenseite
     // neu malen – das macht das Zeichnen träge.
-    return Center(
+    return Listener(
+      // Merken, auf welcher Seite zuletzt gearbeitet wurde (Rückgängig, Leeren).
+      onPointerDown: (_) {
+        if (_activeSlot != slot) setState(() => _activeSlot = slot);
+      },
       child: RepaintBoundary(
         child: SizedBox(
           width: w,
@@ -452,19 +577,19 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 child: ListenableBuilder(
                   listenable: cache,
                   builder: (context, _) {
-                    final img = cache.imageFor(_page, pixelWidth);
+                    final img = cache.imageFor(slot.page, pixelWidth);
                     return img == null
                         ? const SizedBox.shrink()
                         : RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
                   },
                 ),
               ),
-              InkLayer(key: ValueKey('$_index/$_page'), page: _page, controller: _ink, tools: tools),
+              InkLayer(key: ValueKey('ink/$key'), page: slot.page, controller: piece.ink, tools: tools),
               RepaintBoundary(
                 child: TextNotesLayer(
-                  key: ValueKey('text/$_index/$_page'),
-                  page: _page,
-                  controller: _ink,
+                  key: ValueKey('text/$key'),
+                  page: slot.page,
+                  controller: piece.ink,
                   tools: tools,
                   onEditingChanged: (v) => setState(() => _editingText = v),
                 ),
@@ -530,7 +655,7 @@ class _TopBar extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Text(
-                        'Seite ${state._page} von ${state._pageCount}',
+                        state._pageLabel,
                         style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
                       ),
                     ),
@@ -554,6 +679,17 @@ class _TopBar extends StatelessWidget {
                         checked: tools.instantPen,
                         child: const Text('Mit dem Stift sofort zeichnen'),
                       ),
+                      for (final (l, label) in const [
+                        (PageLayout.auto, 'Seiten: automatisch (quer = zwei)'),
+                        (PageLayout.single, 'Seiten: immer eine'),
+                        (PageLayout.double, 'Seiten: immer zwei'),
+                      ])
+                        CheckedPopupMenuItem(
+                          value: () => tools.setPageLayout(l),
+                          checked: tools.pageLayout == l,
+                          child: Text(label),
+                        ),
+                      const PopupMenuDivider(),
                       CheckedPopupMenuItem(
                         value: state._toggleDiagnostics,
                         checked: state._showDiagnostics,

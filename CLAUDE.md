@@ -73,5 +73,5 @@ flutter test
 ## Vereinbarte Richtung für Bearbeitungsfunktionen (angelehnt an forScore, eigenes Design)
 - Zuschneiden und Seiten umordnen verändern das PDF nicht. Volti speichert nur, wie die Seiten angezeigt werden, und Anmerkungen bleiben an ihrem Platz.
 - Alles wird synchronisiert: Ebenen, Stempel, Vorlagen und Sprungmarken.
-- Doppelseiten-Ansicht (zwei Seiten nebeneinander) kommt mit Paket C. Danach prüfen, ob Werkzeugleiste und Fenster gut dazu passen.
+- Doppelseiten-Ansicht ist gebaut (vorgezogen aus Paket C): Im Querformat automatisch, umstellbar im ⋮-Menü (`PageLayout`). Sie geht über Songgrenzen (`PageFlow`, `PageSlot`), die Notenansicht hält dafür mehrere Stücke offen (`_Piece`). Rückgängig und „Seite leeren“ wirken auf die zuletzt berührte Seite.
 - Die App ist für alle Instrumente gedacht. Stempel deshalb in Gruppen (Streicher, Bläser/Gesang, Tasten, Gitarre …). Der Besitzer spielt Gitarre.

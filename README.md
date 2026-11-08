@@ -44,6 +44,7 @@ Beim Öffnen siehst du nur die Noten auf anthrazitfarbenem Hintergrund. Die Leis
 | Sofort zeichnen | Mit dem **Stift aufsetzen und ziehen**. Kurz antippen blättert weiterhin. Ausschalten über ⋮ → „Mit dem Stift sofort zeichnen“ |
 | Radieren mit dem Surface Pen | Radierer-Ende des Stifts benutzen oder Seitentaste gedrückt halten, auch in der Spielansicht |
 | Seite springen | Leiste einblenden, dann den Regler unten ziehen |
+| Zwei Seiten nebeneinander | Im **Querformat automatisch**. In einer Setlist geht es über Songgrenzen hinweg: Ist ein Song nur eine Seite lang, steht rechts schon der nächste. Umstellen über ⋮ → „Seiten: automatisch / immer eine / immer zwei“ |
 
 **Notenansicht – Bearbeiten**
 
