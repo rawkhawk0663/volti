@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import '../../core/library/library_filter.dart';
 import '../../core/library/library_scanner.dart';
 import '../../core/library/setlist.dart';
@@ -101,101 +102,104 @@ class SetlistDetailScreen extends StatelessWidget {
       listenable: library,
       builder: (context, _) {
         final s = setlist;
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(s.name),
-            actions: [
-              IconButton(
-                tooltip: 'Umbenennen',
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () async {
-                  final name = await askForName(context, title: 'Setlist umbenennen', initial: s.name);
-                  if (name == null) return;
-                  s.name = name;
-                  await library.saveSetlist(s);
-                },
-              ),
-              IconButton(
-                tooltip: 'Setlist löschen',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (c) => AlertDialog(
-                      title: const Text('Setlist löschen?'),
-                      content: Text('„${s.name}“ wird gelöscht. Die Noten selbst bleiben erhalten.'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-                        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Löschen')),
-                      ],
-                    ),
-                  );
-                  if (ok != true) return;
-                  await library.deleteSetlist(s);
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: s.items.isEmpty ? null : () => playSetlist(context, library, s),
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Spielen'),
-              ),
-              const SizedBox(width: 12),
-            ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () async {
-              final picked = await showScorePicker(context, library);
-              if (picked != null && picked.isNotEmpty) await library.addToSetlist(s, picked);
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Stücke hinzufügen'),
-          ),
-          body: s.items.isEmpty
-              ? const Center(child: Text('Noch leer. Füge Stücke hinzu.'))
-              : ReorderableListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                  itemCount: s.items.length,
-                  onReorderItem: (from, to) {
-                    final item = s.items.removeAt(from);
-                    s.items.insert(to, item);
-                    library.saveSetlist(s);
-                  },
-                  itemBuilder: (context, i) {
-                    final item = s.items[i];
-                    final entry = library.byRelativePath(item.relativePath);
-                    return Card(
-                      key: ValueKey(item.id),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          radius: 14,
-                          child: Text('${i + 1}', style: const TextStyle(fontSize: 12)),
-                        ),
-                        title: Text(entry?.title ?? item.relativePath),
-                        subtitle: entry == null
-                            ? Text(
-                                'Nicht gefunden – umbenannt oder gelöscht?',
-                                style: TextStyle(color: Theme.of(context).colorScheme.error),
-                              )
-                            : (entry.composer == null ? null : Text(entry.composer!)),
-                        onTap: entry == null ? null : () => playSetlist(context, library, s, start: i),
-                        trailing: Padding(
-                          padding: const EdgeInsets.only(right: 24), // Platz für den Zieh-Griff
-                          child: IconButton(
-                            tooltip: 'Aus Setlist entfernen',
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed: () {
-                              s.items.removeAt(i);
-                              library.saveSetlist(s);
-                            },
-                          ),
-                        ),
-                      ),
-                    );
+        return VoltiBackground(
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              title: Text(s.name),
+              actions: [
+                IconButton(
+                  tooltip: 'Umbenennen',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () async {
+                    final name = await askForName(context, title: 'Setlist umbenennen', initial: s.name);
+                    if (name == null) return;
+                    s.name = name;
+                    await library.saveSetlist(s);
                   },
                 ),
+                IconButton(
+                  tooltip: 'Setlist löschen',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text('Setlist löschen?'),
+                        content: Text('„${s.name}“ wird gelöscht. Die Noten selbst bleiben erhalten.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
+                          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Löschen')),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+                    await library.deleteSetlist(s);
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: s.items.isEmpty ? null : () => playSetlist(context, library, s),
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Spielen'),
+                ),
+                const SizedBox(width: 12),
+              ],
+            ),
+            floatingActionButton: FloatingActionButton.extended(
+              onPressed: () async {
+                final picked = await showScorePicker(context, library);
+                if (picked != null && picked.isNotEmpty) await library.addToSetlist(s, picked);
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Stücke hinzufügen'),
+            ),
+            body: s.items.isEmpty
+                ? const Center(child: Text('Noch leer. Füge Stücke hinzu.'))
+                : ReorderableListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                    itemCount: s.items.length,
+                    onReorderItem: (from, to) {
+                      final item = s.items.removeAt(from);
+                      s.items.insert(to, item);
+                      library.saveSetlist(s);
+                    },
+                    itemBuilder: (context, i) {
+                      final item = s.items[i];
+                      final entry = library.byRelativePath(item.relativePath);
+                      return Card(
+                        key: ValueKey(item.id),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            radius: 14,
+                            child: Text('${i + 1}', style: const TextStyle(fontSize: 12)),
+                          ),
+                          title: Text(entry?.title ?? item.relativePath),
+                          subtitle: entry == null
+                              ? Text(
+                                  'Nicht gefunden – umbenannt oder gelöscht?',
+                                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                                )
+                              : (entry.composer == null ? null : Text(entry.composer!)),
+                          onTap: entry == null ? null : () => playSetlist(context, library, s, start: i),
+                          trailing: Padding(
+                            padding: const EdgeInsets.only(right: 24), // Platz für den Zieh-Griff
+                            child: IconButton(
+                              tooltip: 'Aus Setlist entfernen',
+                              icon: const Icon(Icons.remove_circle_outline),
+                              onPressed: () {
+                                s.items.removeAt(i);
+                                library.saveSetlist(s);
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
         );
       },
     );

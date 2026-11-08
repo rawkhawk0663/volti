@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../core/ink/stroke.dart';
+import '../../app/theme.dart';
 import 'ink_controller.dart';
 import 'text_layer.dart';
 
@@ -191,7 +192,7 @@ class _ActivePainter extends CustomPainter {
           Paint()
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.5
-            ..color = const Color(0x99B5593A),
+            ..color = VoltiColors.seafoam.withValues(alpha: 0.6),
         );
       }
       return;

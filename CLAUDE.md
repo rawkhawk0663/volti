@@ -7,7 +7,7 @@ Volti ist ein PDF-Notenleser mit Stift-Anmerkungen. Hauptziel ist Windows (Surfa
 - Bezeichner im Code sind auf Englisch.
 
 ## Technik
-- Flutter `3.47.9` (in `.github/workflows/build.yml` festgelegt), Material 3, Akzentfarbe Terrakotta `#B5593A`.
+- Flutter `3.47.9` (in `.github/workflows/build.yml` festgelegt), Material 3. Markenfarbe Seegrün `#3BA796` (`VoltiColors.seafoam`), für Knöpfe das tiefere `#1A8070` und im Dunkelmodus `#5CC8B4`. Bibliothek und Setlists haben einen sanften Hintergrundverlauf (`VoltiBackground`). Logo und Icons erzeugt `tool/extract_brand.py`.
 - PDF-Darstellung über `pdfrx` (PDFium). Seiten werden selbst gerendert und gecacht (`lib/core/pdf/page_image_cache.dart`), damit das Umblättern sofort geht.
 - Builds laufen über GitHub Actions. Jeder Push auf `main` erzeugt ein Release mit `Volti-Windows.zip` und `Volti-Android.apk`.
 

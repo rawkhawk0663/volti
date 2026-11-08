@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/ink/text_note.dart';
+import '../../app/theme.dart';
 import 'ink_controller.dart';
 
 /// Schriftstil einer Text-Notiz auf einer Seite der Breite [pageWidth].
@@ -183,7 +184,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
               // Leicht heller Hintergrund, damit der Text über Notenlinien lesbar bleibt.
               decoration: BoxDecoration(
                 color: const Color(0xC8FFFFFF),
-                border: active ? Border.all(color: const Color(0x55B5593A)) : null,
+                border: active ? Border.all(color: VoltiColors.seafoam.withValues(alpha: 0.35)) : null,
                 borderRadius: BorderRadius.circular(3),
               ),
               child: Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: label),
@@ -233,11 +234,11 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(color: Color(0xFFB5593A)),
+                  borderSide: const BorderSide(color: VoltiColors.seafoam),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(color: Color(0xFFB5593A), width: 1.5),
+                  borderSide: const BorderSide(color: VoltiColors.seafoam, width: 1.5),
                 ),
               ),
             ),

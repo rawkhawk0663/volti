@@ -344,8 +344,9 @@ class _Toolbar extends StatelessWidget {
     return Material(
       color: scheme.surface,
       elevation: 1,
-      child: SizedBox(
+      child: Ink(
         height: 52,
+        decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
         child: ListenableBuilder(
           listenable: ink,
           builder: (context, _) {

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import '../../core/library/library_filter.dart';
 import '../../core/library/library_scanner.dart';
 import '../../core/library/score_importer.dart';
@@ -41,39 +42,45 @@ class _LibraryScreenState extends State<LibraryScreen> {
           (Icons.queue_music_outlined, Icons.queue_music, 'Setlists'),
         ];
         if (wide) {
-          return Scaffold(
-            body: SafeArea(
-              child: Row(
-                children: [
-                  NavigationRail(
-                    selectedIndex: _tab,
-                    onDestinationSelected: (i) => setState(() => _tab = i),
-                    labelType: NavigationRailLabelType.all,
-                    leading: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Image.asset('assets/brand/volti_mark.png', height: 34),
+          return VoltiBackground(
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              body: SafeArea(
+                child: Row(
+                  children: [
+                    NavigationRail(
+                      selectedIndex: _tab,
+                      onDestinationSelected: (i) => setState(() => _tab = i),
+                      labelType: NavigationRailLabelType.all,
+                      leading: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Image.asset('assets/brand/volti_mark.png', height: 34),
+                      ),
+                      destinations: [
+                        for (final (icon, sel, label) in destinations)
+                          NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: Text(label)),
+                      ],
                     ),
-                    destinations: [
-                      for (final (icon, sel, label) in destinations)
-                        NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: Text(label)),
-                    ],
-                  ),
-                  const VerticalDivider(width: 1),
-                  Expanded(child: body),
-                ],
+                    const VerticalDivider(width: 1),
+                    Expanded(child: body),
+                  ],
+                ),
               ),
             ),
           );
         }
-        return Scaffold(
-          body: SafeArea(child: body),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _tab,
-            onDestinationSelected: (i) => setState(() => _tab = i),
-            destinations: [
-              for (final (icon, sel, label) in destinations)
-                NavigationDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: label),
-            ],
+        return VoltiBackground(
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: SafeArea(child: body),
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              destinations: [
+                for (final (icon, sel, label) in destinations)
+                  NavigationDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: label),
+              ],
+            ),
           ),
         );
       },
