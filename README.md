@@ -47,21 +47,23 @@ Beim Öffnen siehst du nur die Noten, im Vollbild. Die Leiste erscheint kurz und
 
 **Notenansicht – Bearbeiten**
 
-Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint die Werkzeug-Palette. Während du zeichnest, wird sie fast durchsichtig.
+Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugleiste mit Stift, Textmarker, Radierer und Text.
 
 | Aktion | So geht's |
 |---|---|
-| Stift-Vorlage wählen | Antippen oder Taste **1–9**. **P** wählt den ersten Stift, **H** den ersten Textmarker |
-| Vorlage anpassen | Die gewählte Vorlage nochmals antippen (oder lange drücken): Stift/Textmarker, Farbe, Breite und Deckkraft |
-| Neue Vorlage | **+** in der Palette |
-| Radierer | Symbol oder Taste **E**, dann eine von drei Grössen wählen |
-| Text-Notiz | Symbol **Tт** oder Taste **T**, dann auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen |
-| Rückgängig / Wiederholen | Pfeile in der Palette oder **Strg+Z** / **Strg+Y** |
-| Seite leeren | Papierkorb-Symbol in der Palette (lässt sich rückgängig machen) |
-| Palette auf die andere Seite | Doppelpfeil unten in der Palette |
-| Fertig | ✓ oben in der Palette oder **Esc** |
+| Werkzeug wählen | Antippen oder Taste **P** (Stift), **H** (Textmarker), **E** (Radierer), **T** (Text). Daneben öffnet sich das **Einstellungsfenster** |
+| Werkzeug abwählen | Das aktive Werkzeug nochmals antippen. Das Fenster verschwindet |
+| Fenster verschieben | An der Kopfzeile (⠿) ziehen. Wechselst du das Werkzeug, erscheint das neue Fenster an derselben Stelle |
+| Favoriten | Oben im Fenster. Antippen übernimmt die Einstellung, ☆ speichert die aktuelle als Favorit, lange drücken oder Rechtsklick entfernt einen. Tasten **1–9** wählen die Favoriten |
+| Stift und Textmarker | Farbe, Breite und Deckkraft, mit Vorschau |
+| Radierer | Drei Grössen. Löscht ganze Striche und Text-Notizen |
+| Text-Notiz | Auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen. Im Fenster stellst du Grösse, **Textfarbe** und **Hintergrund** ein (ohne, Weiss, Gelb, Grün, Blau, Rosa). Tippst du eine bestehende Notiz an, gelten Änderungen im Fenster für diese Notiz. Ziehen verschiebt sie |
+| Rückgängig / Wiederholen | Pfeile in der Leiste oder **Strg+Z** / **Strg+Y** |
+| Seite leeren | Papierkorb-Symbol (lässt sich rückgängig machen) |
+| Leiste auf die andere Seite | Doppelpfeil unten in der Leiste |
+| Fertig | ✓ oben in der Leiste oder **Esc** |
 
-Die Vorlage „Abdecken“ (weiss) eignet sich, um Teile der Noten zu überdecken, zum Beispiel bei Wiederholungen. Stift-Vorlagen werden mit deinen anderen Geräten abgeglichen.
+Beim Zeichnen werden Leiste und Fenster fast durchsichtig. Der Stift-Favorit „Abdecken“ (weiss) eignet sich, um Teile der Noten zu überdecken. Einstellungen und Favoriten werden mit deinen anderen Geräten abgeglichen.
 
 Mit dem Finger wird nie gezeichnet. So hinterlässt der Handballen beim Schreiben keine Spuren.
 

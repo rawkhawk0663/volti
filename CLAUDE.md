@@ -42,7 +42,10 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 7. **Beim Spielen nicht stören:** Die Notenansicht startet als Spielansicht, ohne Leisten und im Vollbild (Gerätevorliebe). Tippen links oder rechts blättert, in der Mitte blendet es die Leiste kurz ein (4 s).
    Mit dem Stift *ziehen* zeichnet sofort. Ein Antippen unterhalb von `kTouchSlop` bleibt ein Antippen und erzeugt keinen Strich. Wischen mit dem Stift blättert nie.
-   Die Werkzeug-Palette steht am Seitenrand und wird beim Zeichnen fast durchsichtig. Stift-Vorlagen liegen in `Bibliothek/.volti/presets.json` und werden synchronisiert (jüngste Fassung gewinnt).
+   Beim Bearbeiten steht eine feste Werkzeugleiste am Seitenrand (`ToolOverlay`). Jedes Werkzeug hat ein eigenes, frei verschiebbares Einstellungsfenster (`ToolPopover`) mit Favoriten. Beim Werkzeugwechsel erscheint es an derselben Stelle (`ToolController.popoverOffset`). Das aktive Werkzeug nochmals antippen wählt es ab (`ToolMode.none`).
+   Leiste und Fenster werden beim Zeichnen fast durchsichtig. Das Fenster steht in einer `TextFieldTapRegion`, damit Stiländerungen eine gerade getippte Notiz nicht beenden.
+   Einstellungen und Favoriten liegen in `Bibliothek/.volti/presets.json` (Format `volti-tools` v2; v1 `volti-presets` wird zu Favoriten) und werden synchronisiert (jüngste Fassung gewinnt).
+   Text-Notizen haben eine eigene Text- und Hintergrundfarbe (`bg`, 0 = durchsichtig). Ältere Notizen ohne `bg` behalten den hellen Hintergrund `0xC8FFFFFF`.
    Für das Vollbild wird `window_manager` in der Version **0.5.x** verwendet (0.6 baut auf einer neuen, ungeprüften Grundlage auf).
 
 ## Prüfen
@@ -55,10 +58,14 @@ flutter test
 - `future.whenComplete(() => map.remove(key))` wartet auf sich selbst, wenn die Map Futures enthält. Immer einen Block-Körper `{ map.remove(key); }` verwenden.
 - Beim Einlesen der Bibliothek werden die PDFs nicht geöffnet, weil Cloud-Ordner sonst alles herunterladen würden. Vorschaubilder entstehen erst, wenn eine Kachel sichtbar wird.
 
+## Offene Tests beim Besitzer
+- **iRig BlueTurn** mit Paket 1a/1b testen, auch im Vollbild. Er hatte das Pedal noch nicht dabei, also später nachfragen.
+
 ## Offene Ideen (noch nicht umsetzen)
 - **Hellmodus auf Weiss:** Der Besitzer findet den sehr sanften Seegrün-Ton im Hellmodus noch etwas komisch und überlegt, auf Weiss umzusteigen. Erst ändern, wenn er es bestätigt. Der Dunkelmodus gefällt ihm so, wie er ist.
 
 ## Vereinbarte Richtung für Bearbeitungsfunktionen (angelehnt an forScore, eigenes Design)
 - Zuschneiden und Seiten umordnen verändern das PDF nicht. Volti speichert nur, wie die Seiten angezeigt werden, und Anmerkungen bleiben an ihrem Platz.
 - Alles wird synchronisiert: Ebenen, Stempel, Vorlagen und Sprungmarken.
+- Doppelseiten-Ansicht (zwei Seiten nebeneinander) kommt mit Paket C. Danach prüfen, ob Werkzeugleiste und Fenster gut dazu passen.
 - Die App ist für alle Instrumente gedacht. Stempel deshalb in Gruppen (Streicher, Bläser/Gesang, Tasten, Gitarre …). Der Besitzer spielt Gitarre.

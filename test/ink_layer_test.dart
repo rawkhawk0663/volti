@@ -54,7 +54,7 @@ void main() {
 
   testWidgets('Beim Bearbeiten: Stift zeichnet, Finger nicht (Handballen)', (t) async {
     await pump(t);
-    tools.select(tools.presets.first);
+    tools.setMode(ToolMode.pen);
 
     await drawLine(t, PointerDeviceKind.touch);
     expect(c.annotations.visibleStrokesOn(1), isEmpty);
@@ -63,7 +63,7 @@ void main() {
     final strokes = c.annotations.visibleStrokesOn(1);
     expect(strokes.length, 1);
     expect(strokes.first.points.length, 6);
-    expect(strokes.first.color, tools.presets.first.color);
+    expect(strokes.first.color, tools.pen.color);
     // Normierte Koordinaten: Mitte der Seite ≈ 0.5 / 0.5
     expect(strokes.first.points.first.x, closeTo(0.5, 0.01));
     expect(strokes.first.points.first.y, closeTo(0.5, 0.01));
@@ -98,7 +98,7 @@ void main() {
 
   testWidgets('Radierer-Ende des Stifts löscht – auch in der Spielansicht', (t) async {
     await pump(t);
-    tools.select(tools.presets.first);
+    tools.setMode(ToolMode.pen);
     await drawLine(t, PointerDeviceKind.stylus);
     expect(c.annotations.visibleStrokesOn(1).length, 1);
 
@@ -108,9 +108,9 @@ void main() {
     c.dispose();
   });
 
-  testWidgets('Textmarker-Vorlage erzeugt einen Textmarker-Strich (auch mit Maus)', (t) async {
+  testWidgets('Textmarker erzeugt einen Textmarker-Strich (auch mit Maus)', (t) async {
     await pump(t);
-    tools.selectFirst(InkTool.highlighter);
+    tools.setMode(ToolMode.highlighter);
     await drawLine(t, PointerDeviceKind.mouse);
     expect(c.annotations.visibleStrokesOn(1).single.tool, InkTool.highlighter);
     c.dispose();

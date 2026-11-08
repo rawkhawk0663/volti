@@ -13,9 +13,16 @@ class TextNote {
     required this.size,
     required this.color,
     required this.createdAt,
+    this.background = legacyBackground,
     this.modifiedAt,
     this.deleted = false,
   });
+
+  /// Kein Hintergrund (durchsichtig).
+  static const noBackground = 0;
+
+  /// Heller Hintergrund, den Notizen vor dem Hintergrund-Wähler hatten.
+  static const legacyBackground = 0xC8FFFFFF;
 
   final String id;
   final int page;
@@ -30,6 +37,9 @@ class TextNote {
   final double size;
 
   final int color;
+
+  /// Hintergrundfarbe (ARGB); [noBackground] = durchsichtig.
+  final int background;
   final DateTime createdAt;
   final DateTime? modifiedAt;
   final bool deleted;
@@ -43,6 +53,7 @@ class TextNote {
     String? text,
     double? size,
     int? color,
+    int? background,
     DateTime? modifiedAt,
     bool? deleted,
   }) => TextNote(
@@ -53,6 +64,7 @@ class TextNote {
     text: text ?? this.text,
     size: size ?? this.size,
     color: color ?? this.color,
+    background: background ?? this.background,
     createdAt: createdAt,
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted ?? this.deleted,
@@ -68,6 +80,7 @@ class TextNote {
     'text': deleted ? '' : text,
     'size': size,
     'color': color,
+    'bg': background,
     'created': createdAt.toUtc().toIso8601String(),
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
@@ -81,6 +94,8 @@ class TextNote {
     text: json['text'] as String? ?? '',
     size: (json['size'] as num?)?.toDouble() ?? 0.022,
     color: json['color'] as int? ?? 0xFF1B1B1B,
+    // Ältere Notizen ohne Angabe behalten ihren hellen Hintergrund.
+    background: json['bg'] as int? ?? legacyBackground,
     createdAt: DateTime.parse(json['created'] as String),
     modifiedAt: json['modified'] == null ? null : DateTime.parse(json['modified'] as String),
     deleted: json['deleted'] == true,

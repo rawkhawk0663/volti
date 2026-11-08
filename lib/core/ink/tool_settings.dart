@@ -1,0 +1,205 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
+
+import 'stroke.dart';
+import 'text_note.dart';
+
+String _newId() => const Uuid().v4();
+
+/// Einstellung für Stift oder Textmarker: Farbe (inkl. Deckkraft) und Breite.
+class DrawingPreset {
+  const DrawingPreset({required this.id, required this.tool, required this.color, required this.width});
+
+  final String id;
+  final InkTool tool;
+
+  /// Farbe als ARGB; der Alphawert ist die Deckkraft.
+  final int color;
+
+  /// Breite relativ zur Seitenbreite.
+  final double width;
+
+  DrawingPreset copyWith({String? id, InkTool? tool, int? color, double? width}) =>
+      DrawingPreset(id: id ?? this.id, tool: tool ?? this.tool, color: color ?? this.color, width: width ?? this.width);
+
+  bool sameLook(DrawingPreset o) => o.tool == tool && o.color == color && (o.width - width).abs() < 1e-6;
+
+  Map<String, dynamic> toJson() => {'id': id, 'tool': tool.name, 'color': color, 'width': width};
+
+  static DrawingPreset fromJson(Map<String, dynamic> j) => DrawingPreset(
+    id: j['id'] as String? ?? _newId(),
+    tool: InkTool.fromName(j['tool'] as String?),
+    color: j['color'] as int,
+    width: (j['width'] as num).toDouble(),
+  );
+
+  static const minPenWidth = 0.0012, maxPenWidth = 0.008;
+  static const minMarkerWidth = 0.006, maxMarkerWidth = 0.03;
+
+  static double minWidth(InkTool t) => t == InkTool.highlighter ? minMarkerWidth : minPenWidth;
+  static double maxWidth(InkTool t) => t == InkTool.highlighter ? maxMarkerWidth : maxPenWidth;
+}
+
+/// Stil für neue Text-Notizen.
+class TextStyleSetting {
+  const TextStyleSetting({required this.id, required this.size, required this.color, required this.background});
+
+  final String id;
+
+  /// Schriftgrösse relativ zur Seitenbreite.
+  final double size;
+  final int color;
+
+  /// Hintergrund (ARGB), [TextNote.noBackground] = durchsichtig.
+  final int background;
+
+  TextStyleSetting copyWith({String? id, double? size, int? color, int? background}) => TextStyleSetting(
+    id: id ?? this.id,
+    size: size ?? this.size,
+    color: color ?? this.color,
+    background: background ?? this.background,
+  );
+
+  bool sameLook(TextStyleSetting o) => (o.size - size).abs() < 1e-6 && o.color == color && o.background == background;
+
+  Map<String, dynamic> toJson() => {'id': id, 'size': size, 'color': color, 'bg': background};
+
+  static TextStyleSetting fromJson(Map<String, dynamic> j) => TextStyleSetting(
+    id: j['id'] as String? ?? _newId(),
+    size: (j['size'] as num).toDouble(),
+    color: j['color'] as int,
+    background: j['bg'] as int? ?? TextNote.noBackground,
+  );
+
+  static const minSize = 0.012, maxSize = 0.045;
+}
+
+/// Alle Werkzeug-Einstellungen und Favoriten. Gilt für alle Stücke und wird
+/// zwischen Geräten abgeglichen (`.volti/presets.json`, jüngste Fassung gewinnt).
+class ToolSettings {
+  ToolSettings({
+    required this.pen,
+    required this.highlighter,
+    required this.text,
+    required this.eraserRadius,
+    required this.penFavorites,
+    required this.highlighterFavorites,
+    required this.textFavorites,
+  });
+
+  DrawingPreset pen;
+  DrawingPreset highlighter;
+  TextStyleSetting text;
+  double eraserRadius;
+  final List<DrawingPreset> penFavorites;
+  final List<DrawingPreset> highlighterFavorites;
+  final List<TextStyleSetting> textFavorites;
+
+  static ToolSettings defaults() => ToolSettings(
+    pen: const DrawingPreset(id: 'pen', tool: InkTool.pen, color: 0xFF1B1B1B, width: 0.003),
+    highlighter: const DrawingPreset(id: 'hl', tool: InkTool.highlighter, color: 0x99FFE066, width: 0.014),
+    text: const TextStyleSetting(id: 'text', size: 0.022, color: 0xFF1B1B1B, background: TextNote.noBackground),
+    eraserRadius: 14,
+    penFavorites: const [
+      DrawingPreset(id: 'std-schwarz', tool: InkTool.pen, color: 0xFF1B1B1B, width: 0.003),
+      DrawingPreset(id: 'std-rot', tool: InkTool.pen, color: 0xFFC62828, width: 0.003),
+      DrawingPreset(id: 'std-blau', tool: InkTool.pen, color: 0xFF1565C0, width: 0.003),
+      DrawingPreset(id: 'std-bleistift', tool: InkTool.pen, color: 0xB3555555, width: 0.0018),
+      // Weiss deckend: um Teile der Noten abzudecken (z. B. bei Wiederholungen).
+      DrawingPreset(id: 'std-abdecken', tool: InkTool.pen, color: 0xFFFFFFFF, width: 0.008),
+    ].toList(),
+    highlighterFavorites: const [
+      DrawingPreset(id: 'std-gelb', tool: InkTool.highlighter, color: 0x99FFE066, width: 0.014),
+      DrawingPreset(id: 'std-gruen', tool: InkTool.highlighter, color: 0x8077DD99, width: 0.014),
+      DrawingPreset(id: 'std-rosa', tool: InkTool.highlighter, color: 0x80FF9EC4, width: 0.014),
+    ].toList(),
+    textFavorites: const [
+      TextStyleSetting(id: 'std-text', size: 0.022, color: 0xFF1B1B1B, background: TextNote.noBackground),
+      TextStyleSetting(id: 'std-text-rot', size: 0.022, color: 0xFFC62828, background: TextNote.noBackground),
+      TextStyleSetting(id: 'std-text-gelb', size: 0.022, color: 0xFF1B1B1B, background: 0x99FFE066),
+    ].toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'format': 'volti-tools',
+    'version': 2,
+    // Für den Sync: die jüngste Fassung gewinnt.
+    'modified': DateTime.now().toUtc().toIso8601String(),
+    'pen': pen.toJson(),
+    'highlighter': highlighter.toJson(),
+    'text': text.toJson(),
+    'eraserRadius': eraserRadius,
+    'penFavorites': [for (final f in penFavorites) f.toJson()],
+    'highlighterFavorites': [for (final f in highlighterFavorites) f.toJson()],
+    'textFavorites': [for (final f in textFavorites) f.toJson()],
+  };
+
+  static ToolSettings fromJson(Map<String, dynamic> j) {
+    final d = defaults();
+    // Version 1 (Paket 1a): nur eine Liste von Stift-Vorlagen → zu Favoriten.
+    if (j['format'] == 'volti-presets') {
+      final old = [
+        for (final e in j['presets'] as List? ?? const []) DrawingPreset.fromJson(e as Map<String, dynamic>),
+      ];
+      final pens = old.where((p) => p.tool == InkTool.pen).toList();
+      final hls = old.where((p) => p.tool == InkTool.highlighter).toList();
+      return ToolSettings(
+        pen: pens.isEmpty ? d.pen : pens.first,
+        highlighter: hls.isEmpty ? d.highlighter : hls.first,
+        text: d.text,
+        eraserRadius: d.eraserRadius,
+        penFavorites: pens.isEmpty ? d.penFavorites : pens,
+        highlighterFavorites: hls.isEmpty ? d.highlighterFavorites : hls,
+        textFavorites: d.textFavorites,
+      );
+    }
+    List<DrawingPreset> drawList(String key, List<DrawingPreset> fallback) {
+      final l = j[key];
+      return l is List ? [for (final e in l) DrawingPreset.fromJson(e as Map<String, dynamic>)] : fallback;
+    }
+
+    return ToolSettings(
+      pen: j['pen'] is Map ? DrawingPreset.fromJson(j['pen'] as Map<String, dynamic>) : d.pen,
+      highlighter: j['highlighter'] is Map
+          ? DrawingPreset.fromJson(j['highlighter'] as Map<String, dynamic>)
+          : d.highlighter,
+      text: j['text'] is Map ? TextStyleSetting.fromJson(j['text'] as Map<String, dynamic>) : d.text,
+      eraserRadius: (j['eraserRadius'] as num?)?.toDouble() ?? d.eraserRadius,
+      penFavorites: drawList('penFavorites', d.penFavorites),
+      highlighterFavorites: drawList('highlighterFavorites', d.highlighterFavorites),
+      textFavorites: j['textFavorites'] is List
+          ? [for (final e in j['textFavorites'] as List) TextStyleSetting.fromJson(e as Map<String, dynamic>)]
+          : d.textFavorites,
+    );
+  }
+}
+
+/// Liest und speichert die Werkzeug-Einstellungen im Bibliotheksordner.
+class ToolStore {
+  ToolStore(this.libraryRoot);
+  final String libraryRoot;
+
+  static const relativePath = '.volti/presets.json';
+  File get _file => File(p.join(libraryRoot, '.volti', 'presets.json'));
+
+  Future<ToolSettings> load() async {
+    try {
+      if (!await _file.exists()) return ToolSettings.defaults();
+      return ToolSettings.fromJson(jsonDecode(await _file.readAsString()) as Map<String, dynamic>);
+    } catch (_) {
+      return ToolSettings.defaults();
+    }
+  }
+
+  Future<void> save(ToolSettings s) async {
+    await _file.parent.create(recursive: true);
+    final tmp = File('${_file.path}.tmp');
+    await tmp.writeAsString(const JsonEncoder.withIndent(' ').convert(s.toJson()), flush: true);
+    await tmp.rename(_file.path);
+  }
+
+  static String newId() => _newId();
+}

@@ -1,23 +1,52 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
-import '../../core/ink/drawing_preset.dart';
-import '../../core/ink/stroke.dart';
 import 'ink_controller.dart';
-import 'preset_editor.dart';
 import 'tool_controller.dart';
+import 'tool_popover.dart';
 
-/// Schmale Werkzeug-Palette am Seitenrand – dort, wo neben der Notenseite
-/// ohnehin Platz ist. Während gezeichnet wird, wird sie fast durchsichtig,
-/// damit sie nicht ablenkt.
-class ToolPalette extends StatelessWidget {
-  const ToolPalette({super.key, required this.tools, required this.ink, required this.page});
+/// Werkzeuge beim Bearbeiten: eine feste, schmale Leiste am Seitenrand und
+/// daneben das Einstellungsfenster des aktiven Werkzeugs.
+///
+/// * Werkzeug antippen → wählen, das Fenster erscheint.
+/// * Aktives Werkzeug nochmals antippen → abwählen, das Fenster verschwindet.
+/// * Das Fenster lässt sich frei verschieben; beim Werkzeugwechsel erscheint
+///   das neue Fenster an derselben Stelle.
+/// * Während gezeichnet wird, werden Leiste und Fenster fast durchsichtig.
+///
+/// Füllt den ganzen Bildschirm, fängt aber nur Berührungen auf Leiste und
+/// Fenster ab – alles andere geht an die Notenseite darunter.
+class ToolOverlay extends StatefulWidget {
+  const ToolOverlay({super.key, required this.tools, required this.ink, required this.page});
 
   final ToolController tools;
   final InkController ink;
   final int page;
 
-  Future<void> _confirmClear(BuildContext context) async {
+  @override
+  State<ToolOverlay> createState() => _ToolOverlayState();
+}
+
+class _ToolOverlayState extends State<ToolOverlay> {
+  static const _barWidth = 60.0, _margin = 10.0;
+
+  ToolController get tools => widget.tools;
+
+  Offset _defaultOffset(Size screen) {
+    final x = tools.paletteLeft
+        ? _margin + _barWidth + 12
+        : screen.width - _margin - _barWidth - 12 - ToolPopover.width;
+    return Offset(x, 64);
+  }
+
+  /// Fenster innerhalb des Bildschirms halten.
+  Offset _clamp(Offset o, Size screen) => Offset(
+    o.dx.clamp(0, (screen.width - ToolPopover.width).clamp(0, double.infinity)),
+    o.dy.clamp(0, (screen.height - 120).clamp(0, double.infinity)),
+  );
+
+  Future<void> _confirmClear() async {
+    final ink = widget.ink, page = widget.page;
     if (!ink.pageHasAnnotations(page)) return;
     final ok = await showDialog<bool>(
       context: context,
@@ -35,112 +64,121 @@ class ToolPalette extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final brightness = Theme.of(context).brightness;
-    return ValueListenableBuilder<bool>(
-      valueListenable: tools.isDrawing,
-      builder: (context, drawing, child) =>
-          AnimatedOpacity(duration: const Duration(milliseconds: 180), opacity: drawing ? 0.12 : 1, child: child),
-      child: ListenableBuilder(
-        listenable: Listenable.merge([tools, ink]),
-        builder: (context, _) {
-          final mode = tools.mode;
-          return Material(
-            elevation: 3,
-            borderRadius: BorderRadius.circular(20),
-            clipBehavior: Clip.antiAlias,
-            color: scheme.surface,
-            child: Ink(
-              width: 60,
-              decoration: BoxDecoration(gradient: VoltiColors.barGradient(brightness)),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Tooltip(
-                      message: 'Fertig (Esc)',
-                      child: IconButton.filled(
-                        onPressed: () => tools.setMode(ToolMode.read),
-                        icon: const Icon(Icons.check),
-                      ),
-                    ),
-                    const _Sep(),
-                    for (final (i, p) in tools.presets.indexed)
-                      _PresetButton(
-                        preset: p,
-                        selected: mode == ToolMode.draw && tools.current.id == p.id,
-                        shortcut: i < 9 ? '${i + 1}' : null,
-                        onTap: () => mode == ToolMode.draw && tools.current.id == p.id
-                            ? showPresetEditor(context, tools, p)
-                            : tools.select(p),
-                        onLongPress: () => showPresetEditor(context, tools, p),
-                      ),
-                    _PaletteIcon(
-                      icon: Icons.add,
-                      tooltip: 'Neue Vorlage',
-                      onTap: () => showPresetEditor(context, tools, tools.addPreset()),
-                    ),
-                    const _Sep(),
-                    _PaletteIcon(
-                      icon: Icons.auto_fix_normal,
-                      tooltip: 'Radierer (E)',
-                      selected: mode == ToolMode.eraser,
-                      onTap: () => tools.setMode(ToolMode.eraser),
-                    ),
-                    if (mode == ToolMode.eraser)
-                      for (final (i, r) in ToolController.eraserSizes.indexed)
-                        _SizeDot(
-                          tooltip: const ['Radierer klein', 'Radierer mittel', 'Radierer gross'][i],
-                          diameter: 6.0 + i * 5,
-                          selected: tools.eraserRadius == r,
-                          onTap: () => tools.setEraserRadius(r),
-                        ),
-                    _PaletteIcon(
-                      icon: Icons.text_fields,
-                      tooltip: 'Text-Notiz (T)',
-                      selected: mode == ToolMode.text,
-                      onTap: () => tools.setMode(ToolMode.text),
-                    ),
-                    if (mode == ToolMode.text)
-                      for (final (i, s) in ToolController.textSizes.indexed)
-                        _SizeLetter(
-                          tooltip: const ['Schrift klein', 'Schrift mittel', 'Schrift gross'][i],
-                          fontSize: 11.0 + i * 4,
-                          selected: tools.textSize == s,
-                          onTap: () => tools.setTextSize(s),
-                        ),
-                    const _Sep(),
-                    _PaletteIcon(
-                      icon: Icons.undo,
-                      tooltip: 'Rückgängig (Strg+Z)',
-                      onTap: ink.canUndo ? ink.undo : null,
-                    ),
-                    _PaletteIcon(
-                      icon: Icons.redo,
-                      tooltip: 'Wiederholen (Strg+Y)',
-                      onTap: ink.canRedo ? ink.redo : null,
-                    ),
-                    _PaletteIcon(
-                      icon: Icons.delete_sweep_outlined,
-                      tooltip: 'Seite leeren',
-                      onTap: ink.pageHasAnnotations(page) ? () => _confirmClear(context) : null,
-                    ),
-                    const _Sep(),
-                    _PaletteIcon(
-                      icon: tools.paletteLeft ? Icons.keyboard_double_arrow_right : Icons.keyboard_double_arrow_left,
-                      tooltip: 'Palette auf die andere Seite',
-                      onTap: tools.togglePaletteSide,
-                    ),
-                  ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screen = constraints.biggest;
+        return ListenableBuilder(
+          listenable: Listenable.merge([tools, widget.ink]),
+          builder: (context, _) {
+            final mode = tools.mode;
+            final hasPopover =
+                mode == ToolMode.pen ||
+                mode == ToolMode.highlighter ||
+                mode == ToolMode.eraser ||
+                mode == ToolMode.text;
+            final offset = _clamp(tools.popoverOffset ?? _defaultOffset(screen), screen);
+            return Stack(
+              children: [
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  left: tools.paletteLeft ? _margin : null,
+                  right: tools.paletteLeft ? null : _margin,
+                  child: Center(
+                    child: _FadeWhileDrawing(tools: tools, child: _buildBar(context)),
+                  ),
                 ),
+                if (hasPopover)
+                  Positioned(
+                    left: offset.dx,
+                    top: offset.dy,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: (screen.height - offset.dy - 12).clamp(160, 640)),
+                      child: _FadeWhileDrawing(
+                        tools: tools,
+                        child: ToolPopover(
+                          key: ValueKey(mode),
+                          tools: tools,
+                          onDrag: (delta) => setState(() => tools.popoverOffset = _clamp(offset + delta, screen)),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildBar(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final ink = widget.ink;
+    final mode = tools.mode;
+    Widget tool(ToolMode m, IconData icon, String tip, {Color? dot}) =>
+        _BarButton(icon: icon, tooltip: tip, selected: mode == m, dot: dot, onTap: () => tools.tapTool(m));
+    return Material(
+      elevation: 3,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      color: scheme.surface,
+      child: Ink(
+        width: _barWidth,
+        decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Tooltip(
+                message: 'Fertig (Esc)',
+                child: IconButton.filled(onPressed: tools.finishEditing, icon: const Icon(Icons.check)),
               ),
-            ),
-          );
-        },
+              const _Sep(),
+              tool(ToolMode.pen, Icons.edit, 'Stift (P)', dot: Color(tools.pen.color | 0xFF000000)),
+              tool(
+                ToolMode.highlighter,
+                Icons.border_color,
+                'Textmarker (H)',
+                dot: Color(tools.highlighter.color | 0xFF000000),
+              ),
+              tool(ToolMode.eraser, Icons.auto_fix_normal, 'Radierer (E)'),
+              tool(ToolMode.text, Icons.text_fields, 'Text (T)'),
+              const _Sep(),
+              _BarButton(icon: Icons.undo, tooltip: 'Rückgängig (Strg+Z)', onTap: ink.canUndo ? ink.undo : null),
+              _BarButton(icon: Icons.redo, tooltip: 'Wiederholen (Strg+Y)', onTap: ink.canRedo ? ink.redo : null),
+              _BarButton(
+                icon: Icons.delete_sweep_outlined,
+                tooltip: 'Seite leeren',
+                onTap: ink.pageHasAnnotations(widget.page) ? _confirmClear : null,
+              ),
+              const _Sep(),
+              _BarButton(
+                icon: tools.paletteLeft ? Icons.keyboard_double_arrow_right : Icons.keyboard_double_arrow_left,
+                tooltip: 'Leiste auf die andere Seite',
+                onTap: tools.togglePaletteSide,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+class _FadeWhileDrawing extends StatelessWidget {
+  const _FadeWhileDrawing({required this.tools, required this.child});
+  final ToolController tools;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: tools.isDrawing,
+    builder: (context, drawing, child) =>
+        AnimatedOpacity(duration: const Duration(milliseconds: 180), opacity: drawing ? 0.12 : 1, child: child),
+    child: child,
+  );
 }
 
 class _Sep extends StatelessWidget {
@@ -154,17 +192,19 @@ class _Sep extends StatelessWidget {
   );
 }
 
-class _PaletteIcon extends StatelessWidget {
-  const _PaletteIcon({required this.icon, required this.tooltip, this.onTap, this.selected = false});
+/// Knopf in der Leiste; [dot] zeigt die aktuelle Farbe des Werkzeugs.
+class _BarButton extends StatelessWidget {
+  const _BarButton({required this.icon, required this.tooltip, this.onTap, this.selected = false, this.dot});
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
   final bool selected;
+  final Color? dot;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return IconButton(
+    final button = IconButton(
       tooltip: tooltip,
       onPressed: onTap,
       isSelected: selected,
@@ -174,138 +214,27 @@ class _PaletteIcon extends StatelessWidget {
         foregroundColor: selected ? scheme.onPrimaryContainer : null,
       ),
     );
-  }
-}
-
-/// Eine Stift-Vorlage: zeigt Farbe und Dicke. Nochmals antippen öffnet den Editor.
-class _PresetButton extends StatelessWidget {
-  const _PresetButton({
-    required this.preset,
-    required this.selected,
-    required this.onTap,
-    required this.onLongPress,
-    this.shortcut,
-  });
-
-  final DrawingPreset preset;
-  final bool selected;
-  final String? shortcut;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final hl = preset.tool == InkTool.highlighter;
-    final min = hl ? DrawingPreset.minMarkerWidth : DrawingPreset.minPenWidth;
-    final max = hl ? DrawingPreset.maxMarkerWidth : DrawingPreset.maxPenWidth;
-    final t = ((preset.width - min) / (max - min)).clamp(0.0, 1.0);
-    final color = Color(preset.color);
-    final isWhite = (preset.color & 0xFFFFFF) == 0xFFFFFF;
-    final tip =
-        '${presetLabel(preset)}${shortcut == null ? '' : ' (Taste $shortcut)'}'
-        '${selected ? ' – nochmals tippen zum Bearbeiten' : ''}';
-    return Tooltip(
-      message: tip,
-      child: InkResponse(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        radius: 24,
-        child: Container(
-          width: 44,
-          height: 40,
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? scheme.primaryContainer : null,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: hl
-              ? Container(
-                  width: 28,
-                  height: 8 + 10 * t,
-                  decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
-                )
-              : Container(
-                  width: 10 + 16 * t,
-                  height: 10 + 16 * t,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: isWhite ? Border.all(color: scheme.outline) : null,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SizeDot extends StatelessWidget {
-  const _SizeDot({required this.tooltip, required this.diameter, required this.selected, required this.onTap});
-  final String tooltip;
-  final double diameter;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: tooltip,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 16,
-        child: SizedBox(
-          width: 40,
-          height: 28,
-          child: Center(
+    if (dot == null) return button;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        button,
+        Positioned(
+          right: 6,
+          bottom: 6,
+          child: IgnorePointer(
             child: Container(
-              width: diameter,
-              height: diameter,
+              width: 10,
+              height: 10,
               decoration: BoxDecoration(
+                color: dot,
                 shape: BoxShape.circle,
-                color: selected ? scheme.primary : null,
-                border: Border.all(color: selected ? scheme.primary : scheme.outline, width: 1.5),
+                border: Border.all(color: scheme.surface, width: 1.5),
               ),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SizeLetter extends StatelessWidget {
-  const _SizeLetter({required this.tooltip, required this.fontSize, required this.selected, required this.onTap});
-  final String tooltip;
-  final double fontSize;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: tooltip,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 16,
-        child: SizedBox(
-          width: 40,
-          height: 28,
-          child: Center(
-            child: Text(
-              'A',
-              style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: FontWeight.w700,
-                color: selected ? scheme.primary : scheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ),
-      ),
+      ],
     );
   }
 }

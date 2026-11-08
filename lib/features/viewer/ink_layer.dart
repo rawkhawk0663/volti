@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/ink/stroke.dart';
 import '../../app/theme.dart';
-import '../../core/ink/drawing_preset.dart';
+import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
 import 'tool_controller.dart';
 import 'text_layer.dart';
@@ -82,12 +82,13 @@ class _InkLayerState extends State<InkLayer> {
     final eraserEvent = isEraserEvent(e);
     final mode = tools.mode;
     final instant = mode == ToolMode.read && e.kind == PointerDeviceKind.stylus && tools.instantPen;
-    if (!eraserEvent && mode != ToolMode.draw && mode != ToolMode.eraser && !instant) return;
+    final drawing = mode == ToolMode.pen || mode == ToolMode.highlighter;
+    if (!eraserEvent && !drawing && mode != ToolMode.eraser && !instant) return;
     _pointer = e.pointer;
     _erasing = eraserEvent || mode == ToolMode.eraser;
     _provisional = instant && !eraserEvent;
     _start = e.localPosition;
-    _preset = tools.current;
+    _preset = tools.strokeStyle;
     _points.clear();
     if (!_provisional) tools.isDrawing.value = true;
     _handle(e, size);

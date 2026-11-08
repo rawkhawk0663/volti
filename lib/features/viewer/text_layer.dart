@@ -80,13 +80,21 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     // Ungespeicherten Text noch übernehmen – erst nach dem Abbau, weil die
     // Anzeige währenddessen nicht verändert werden darf.
     final at = _editAt, id = _editId, text = _text.text, page = widget.page, ctrl = c;
-    final size = tools.textSize, color = tools.textColor;
+    final st = tools.textStyle;
     if (at != null) {
       Future.microtask(() {
         if (ctrl.isDisposed) return;
         id == null
-            ? ctrl.addText(page: page, x: at.dx, y: at.dy, text: text, size: size, color: color)
-            : ctrl.updateText(id, text: text);
+            ? ctrl.addText(
+                page: page,
+                x: at.dx,
+                y: at.dy,
+                text: text,
+                size: st.size,
+                color: st.color,
+                background: st.background,
+              )
+            : ctrl.updateText(id, text: text, size: st.size, color: st.color, background: st.background);
       });
     }
     _text.dispose();
@@ -95,6 +103,14 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
   }
 
   void _startEditing(Offset normalized, {TextNote? existing}) {
+    // Das Einstellungsfenster zeigt den Stil der angetippten Notiz; Änderungen
+    // dort gelten dann für diese Notiz.
+    if (existing != null) {
+      tools.setTextStyle(
+        tools.textStyle.copyWith(size: existing.size, color: existing.color, background: existing.background),
+        save: false,
+      );
+    }
     setState(() {
       _editAt = existing == null ? normalized : Offset(existing.x, existing.y);
       _editId = existing?.id;
@@ -114,10 +130,19 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
       _editAt = null;
       _editId = null;
     });
+    final st = tools.textStyle;
     if (id == null) {
-      c.addText(page: widget.page, x: at.dx, y: at.dy, text: text, size: tools.textSize, color: tools.textColor);
+      c.addText(
+        page: widget.page,
+        x: at.dx,
+        y: at.dy,
+        text: text,
+        size: st.size,
+        color: st.color,
+        background: st.background,
+      );
     } else {
-      c.updateText(id, text: text);
+      c.updateText(id, text: text, size: st.size, color: st.color, background: st.background);
     }
     widget.onEditingChanged(false);
   }
@@ -193,9 +218,8 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
               c.updateText(n.id, x: nx, y: ny);
             },
             child: DecoratedBox(
-              // Leicht heller Hintergrund, damit der Text über Notenlinien lesbar bleibt.
               decoration: BoxDecoration(
-                color: const Color(0xC8FFFFFF),
+                color: n.background == TextNote.noBackground ? null : Color(n.background),
                 border: active ? Border.all(color: VoltiColors.seafoam.withValues(alpha: 0.35)) : null,
                 borderRadius: BorderRadius.circular(3),
               ),
@@ -209,10 +233,11 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
 
   Widget _buildEditor(Size size) {
     final at = _editAt!;
-    final existing = _editId == null ? null : c.annotations.text(_editId!);
+    // Stil aus dem Text-Werkzeug – Änderungen im Fenster sieht man sofort.
+    final st = tools.textStyle;
     final style = TextStyle(
-      fontSize: (existing?.size ?? tools.textSize) * size.width,
-      color: Color(existing?.color ?? tools.textColor),
+      fontSize: st.size * size.width,
+      color: Color(st.color),
       height: 1.2,
       fontWeight: FontWeight.w500,
     );
@@ -240,7 +265,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
               decoration: InputDecoration(
                 isDense: true,
                 filled: true,
-                fillColor: const Color(0xE6FFFFFF),
+                fillColor: st.background == TextNote.noBackground ? const Color(0xE6FFFFFF) : Color(st.background),
                 hintText: 'Notiz …',
                 hintStyle: style.copyWith(color: const Color(0x66000000)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),

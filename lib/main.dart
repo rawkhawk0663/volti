@@ -5,7 +5,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import 'app/theme.dart';
 import 'core/app_settings.dart';
-import 'core/ink/drawing_preset.dart';
+import 'core/ink/tool_settings.dart';
 import 'features/library/library_controller.dart';
 import 'features/library/library_screen.dart';
 import 'features/library/sync_controller.dart';
@@ -21,9 +21,9 @@ Future<void> main() async {
   final settings = await AppSettings.load();
   final library = LibraryController(settings, root: p.join(support, 'Bibliothek'));
   final sync = SyncController(library: library, settings: settings, deviceDataDir: support);
-  final tools = ToolController(settings: settings, store: PresetStore(library.root));
+  final tools = ToolController(settings: settings, store: ToolStore(library.root));
   // Geänderte Stift-Vorlagen abgleichen; neue vom anderen Gerät übernehmen.
-  tools.onPresetsChanged = sync.scheduleSoon;
+  tools.onSettingsChanged = sync.scheduleSoon;
   sync.afterDownload = tools.load;
   // Bibliothek im Hintergrund einlesen, danach abgleichen.
   library.init().then((_) async {

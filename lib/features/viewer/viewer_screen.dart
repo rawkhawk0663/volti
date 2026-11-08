@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../../app/theme.dart';
-import '../../core/ink/stroke.dart';
 import '../../core/pdf/page_image_cache.dart';
 import 'fullscreen.dart';
 import 'ink_controller.dart';
@@ -86,7 +85,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
     tools.addListener(_onToolsChanged);
     _ink = InkController(pdfPath: _item.path);
     _openPiece(_index);
-    if (tools.fullscreen) _setFullscreen(true);
+    // Vollbild erst nach dem Aufbau der Ansicht einschalten – während der
+    // Übergangsanimation kommt der Befehl unter Windows sonst nicht an.
+    _fullscreen = tools.fullscreen;
+    if (_fullscreen) WidgetsBinding.instance.addPostFrameCallback((_) => _enterFullscreenReliably());
     _restartHideTimer();
   }
 
@@ -195,6 +197,15 @@ class _ViewerScreenState extends State<ViewerScreen> {
     await setAppFullscreen(on);
   }
 
+  /// Schaltet das Vollbild ein und prüft kurz danach, ob es geklappt hat
+  /// (sonst ein zweiter Versuch).
+  Future<void> _enterFullscreenReliably() async {
+    if (!mounted || !_fullscreen) return;
+    await setAppFullscreen(true);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (mounted && _fullscreen && !await isAppFullscreen()) await setAppFullscreen(true);
+  }
+
   Future<void> _toggleFullscreen() async {
     final on = !_fullscreen;
     await tools.setFullscreen(on);
@@ -247,18 +258,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
     } else if (down && key == LogicalKeyboardKey.f11) {
       _toggleFullscreen();
     } else if (down && key == LogicalKeyboardKey.keyP) {
-      tools.selectFirst(InkTool.pen);
+      tools.setMode(ToolMode.pen);
     } else if (down && key == LogicalKeyboardKey.keyH) {
-      tools.selectFirst(InkTool.highlighter);
+      tools.setMode(ToolMode.highlighter);
     } else if (down && key == LogicalKeyboardKey.keyE) {
       tools.setMode(ToolMode.eraser);
     } else if (down && key == LogicalKeyboardKey.keyT) {
       tools.setMode(ToolMode.text);
     } else if (down && _digits.contains(key)) {
-      tools.selectIndex(_digits.indexOf(key));
+      tools.applyFavoriteIndex(_digits.indexOf(key));
     } else if (key == LogicalKeyboardKey.escape) {
-      if (tools.mode != ToolMode.read) {
-        tools.setMode(ToolMode.read);
+      if (tools.editing) {
+        tools.finishEditing();
       } else if (_fullscreen) {
         _toggleFullscreen();
       } else {
@@ -273,9 +284,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
   // ---------------------------------------------------------------- Aufbau
   @override
   Widget build(BuildContext context) {
-    final editing = tools.mode != ToolMode.read;
+    final editing = tools.editing;
     final showBars = _controlsVisible && !editing;
-    final paletteLeft = tools.paletteLeft;
     return Focus(
       autofocus: true,
       onKeyEvent: _onKey,
@@ -320,18 +330,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 ),
               ),
             if (editing && _cache != null)
-              Positioned(
-                top: 0,
-                bottom: 0,
-                left: paletteLeft ? 0 : null,
-                right: paletteLeft ? null : 0,
+              Positioned.fill(
                 child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Center(
-                      child: ExcludeFocus(
-                        child: ToolPalette(tools: tools, ink: _ink, page: _page),
-                      ),
+                  // TextFieldTapRegion: Antippen des Einstellungsfensters beendet
+                  // das Schreiben einer Text-Notiz nicht.
+                  child: ExcludeFocus(
+                    child: TextFieldTapRegion(
+                      child: ToolOverlay(tools: tools, ink: _ink, page: _page),
                     ),
                   ),
                 ),
@@ -531,7 +536,7 @@ class _TopBar extends StatelessWidget {
                       ),
                     ),
                   FilledButton.tonalIcon(
-                    onPressed: () => tools.select(tools.current),
+                    onPressed: tools.startEditing,
                     icon: const Icon(Icons.edit),
                     label: const Text('Bearbeiten'),
                   ),

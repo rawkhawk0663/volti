@@ -106,6 +106,7 @@ class InkController extends ChangeNotifier {
     required String text,
     required double size,
     required int color,
+    int background = TextNote.legacyBackground,
   }) {
     if (text.trim().isEmpty) return null;
     final note = TextNote(
@@ -116,6 +117,7 @@ class InkController extends ChangeNotifier {
       text: text.trimRight(),
       size: size,
       color: color,
+      background: background,
       createdAt: DateTime.now().toUtc(),
     );
     _annotations.putText(note);
@@ -123,16 +125,31 @@ class InkController extends ChangeNotifier {
     return note.id;
   }
 
-  /// Text ändern und/oder verschieben. Leerer Text löscht die Notiz.
-  void updateText(String id, {String? text, double? x, double? y}) {
+  /// Text, Stil und/oder Position ändern. Leerer Text löscht die Notiz.
+  void updateText(String id, {String? text, double? x, double? y, double? size, int? color, int? background}) {
     final before = _annotations.text(id);
     if (before == null || before.deleted) return;
     if (text != null && text.trim().isEmpty) {
       deleteTexts([before]);
       return;
     }
-    final after = before.copyWith(text: text?.trimRight(), x: x, y: y, modifiedAt: DateTime.now().toUtc());
-    if (after.text == before.text && after.x == before.x && after.y == before.y) return;
+    final after = before.copyWith(
+      text: text?.trimRight(),
+      x: x,
+      y: y,
+      size: size,
+      color: color,
+      background: background,
+      modifiedAt: DateTime.now().toUtc(),
+    );
+    if (after.text == before.text &&
+        after.x == before.x &&
+        after.y == before.y &&
+        after.size == before.size &&
+        after.color == before.color &&
+        after.background == before.background) {
+      return;
+    }
     _annotations.putText(after);
     _push(_UndoEntry(textsBefore: [before]));
   }

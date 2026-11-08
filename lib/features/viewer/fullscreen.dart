@@ -28,3 +28,12 @@ Future<void> setAppFullscreen(bool on) async {
     // Vollbild ist eine Annehmlichkeit – Fehler hier dürfen nichts blockieren.
   }
 }
+
+/// Ist das Fenster gerade im Vollbild? (Nur am Computer zuverlässig.)
+Future<bool> isAppFullscreen() async {
+  try {
+    return _isDesktop ? await windowManager.isFullScreen() : true;
+  } catch (_) {
+    return true;
+  }
+}
