@@ -58,12 +58,26 @@ Bibliothek/
 
 Die PDFs selbst werden nie verändert. Nur auf dem jeweiligen Gerät gespeichert werden „zuletzt geöffnet“ und die Vorschaubilder.
 
+## Sync zwischen deinen Geräten
+
+Wenn du Volti auf mehreren Geräten nutzt, etwa auf dem Surface und am Desktop-PC, kannst du alles abgleichen lassen:
+
+1. Tippe auf das **Wolken-Symbol** oben oder auf ⚙ → **Sync einrichten …**
+2. Wähle einen Ordner in **Proton Drive**, zum Beispiel einfach „Proton Drive“ selbst. Volti legt darin einen Unterordner **Volti** an.
+3. Auf dem zweiten Gerät wählst du denselben Ordner beziehungsweise den Ordner „Volti“ darin.
+
+Ab dann gleicht Volti beim Start, alle zwei Minuten und kurz nach jeder Änderung ab:
+- Neue Noten, Infos, Anmerkungen und Setlists kommen auf alle Geräte.
+- Anmerkungen von zwei Geräten werden **zusammengeführt**, nie überschrieben.
+- Löschst du ein Stück auf einem Gerät, verschwindet es auch auf den anderen.
+- Ist der Sync-Ordner nicht erreichbar, zum Beispiel weil Proton Drive nicht läuft, oder würde ein Abgleich mehr als die Hälfte deiner Noten löschen, bricht Volti zur Sicherheit ab. Das Wolken-Symbol wird dann rot.
+
 ## Fahrplan
 
 - [x] **0** – Repository und automatischer Build
 - [x] **1** – Stift-Prototyp: PDF, Blättern, Pedal, Stift, Radierer
 - [x] **2** – Bibliothek mit Import, Metadaten (Komponist, Genre, Tags), Suche und Setlists *(zum Testen bereit)*
-- [ ] **3** – Sync des Datenordners zwischen Geräten
+- [x] **3** – Sync zwischen Geräten über einen Ordner (z. B. Proton Drive) *(zum Testen bereit)*
 - [ ] **4** – Android
 - [ ] **5** – Halbe Seitenwechsel, Sprünge bei Wiederholungen, Metronom, Audio und mehr
 

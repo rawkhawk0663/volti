@@ -12,11 +12,13 @@ import 'library_controller.dart';
 import 'open_scores.dart';
 import 'score_card.dart';
 import 'setlists_view.dart';
+import 'sync_controller.dart';
 
 /// Hauptbildschirm: Bibliothek mit Noten und Setlists.
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key, required this.library});
+  const LibraryScreen({super.key, required this.library, required this.sync});
   final LibraryController library;
+  final SyncController sync;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -33,7 +35,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       listenable: lib,
       builder: (context, _) {
         final wide = MediaQuery.sizeOf(context).width >= 720;
-        final body = _tab == 0 ? _ScoresView(library: lib) : SetlistsView(library: lib);
+        final body = _tab == 0 ? _ScoresView(library: lib, sync: widget.sync) : SetlistsView(library: lib);
         const destinations = [
           (Icons.library_music_outlined, Icons.library_music, 'Noten'),
           (Icons.queue_music_outlined, Icons.queue_music, 'Setlists'),
@@ -139,8 +141,9 @@ class _EmptyLibrary extends StatelessWidget {
 }
 
 class _ScoresView extends StatefulWidget {
-  const _ScoresView({required this.library});
+  const _ScoresView({required this.library, required this.sync});
   final LibraryController library;
+  final SyncController sync;
 
   @override
   State<_ScoresView> createState() => _ScoresViewState();
@@ -186,6 +189,51 @@ class _ScoresViewState extends State<_ScoresView> {
       if (r.failed.isNotEmpty) '${r.failed.length} fehlgeschlagen',
     ];
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(parts.join(' · '))));
+  }
+
+  /// Sync über einen Ordner gibt es vorerst nur am Computer.
+  bool get _canSync => _canImportFolder;
+
+  Future<void> _setupSync() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Sync einrichten'),
+        content: const SizedBox(
+          width: 460,
+          child: Text(
+            'Volti gleicht deine Noten, Infos, Anmerkungen und Setlists mit einem Ordner ab, '
+            'zum Beispiel in Proton Drive. Wähle auf jedem Gerät denselben Ordner, dann sind alle '
+            'Geräte auf dem gleichen Stand.\n\n'
+            'Volti legt im gewählten Ordner einen Unterordner „Volti“ an. Wählst du einen Ordner, '
+            'der schon eine Volti-Bibliothek enthält (vom anderen Gerät), wird diese verwendet.\n\n'
+            'Beim ersten Abgleich wird nichts gelöscht: Die Noten beider Seiten werden zusammengelegt.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(c, true),
+            icon: const Icon(Icons.folder_open),
+            label: const Text('Ordner wählen …'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final dir = await getDirectoryPath(confirmButtonText: 'Für Sync verwenden');
+    if (dir == null) return;
+    await widget.sync.configure(dir);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _stopSync() async {
+    await widget.sync.disconnect();
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sync beendet. Deine Noten bleiben auf diesem Gerät und im Sync-Ordner erhalten.')),
+    );
   }
 
   Future<void> _delete(ScoreEntry e) async {
@@ -297,6 +345,7 @@ class _ScoresViewState extends State<_ScoresView> {
                 onPressed: lib.loading ? null : lib.rescan,
                 icon: const Icon(Icons.refresh),
               ),
+              if (_canSync) SyncButton(sync: widget.sync, onSetup: _setupSync),
               PopupMenuButton<VoidCallback>(
                 tooltip: 'Einstellungen',
                 icon: const Icon(Icons.settings_outlined),
@@ -311,6 +360,38 @@ class _ScoresViewState extends State<_ScoresView> {
                       value: lib.revealDataFolder,
                       child: const ListTile(leading: Icon(Icons.folder_open), title: Text('Datenordner öffnen')),
                     ),
+                  if (_canSync) ...[
+                    const PopupMenuDivider(),
+                    if (widget.sync.folder == null)
+                      PopupMenuItem(
+                        value: _setupSync,
+                        child: const ListTile(
+                          leading: Icon(Icons.cloud_sync_outlined),
+                          title: Text('Sync einrichten …'),
+                        ),
+                      )
+                    else ...[
+                      PopupMenuItem(
+                        enabled: false,
+                        child: Text('Sync-Ordner:\n${widget.sync.folder}', style: theme.textTheme.bodySmall),
+                      ),
+                      PopupMenuItem(
+                        value: widget.sync.syncNow,
+                        child: const ListTile(leading: Icon(Icons.sync), title: Text('Jetzt abgleichen')),
+                      ),
+                      PopupMenuItem(
+                        value: _setupSync,
+                        child: const ListTile(
+                          leading: Icon(Icons.drive_file_move_outline),
+                          title: Text('Anderen Sync-Ordner …'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _stopSync,
+                        child: const ListTile(leading: Icon(Icons.cloud_off_outlined), title: Text('Sync beenden')),
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ],
@@ -437,6 +518,65 @@ class _MenuChip<T> extends StatelessWidget {
             onSelected: (_) => controller.isOpen ? controller.close() : controller.open(),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Wolken-Symbol mit dem Sync-Zustand. Antippen gleicht sofort ab.
+class SyncButton extends StatelessWidget {
+  const SyncButton({super.key, required this.sync, required this.onSetup});
+  final SyncController sync;
+  final VoidCallback onSetup;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: sync,
+      builder: (context, _) {
+        final scheme = Theme.of(context).colorScheme;
+        String two(int n) => n.toString().padLeft(2, '0');
+        final last = sync.lastSync == null ? null : '${two(sync.lastSync!.hour)}:${two(sync.lastSync!.minute)}';
+        final (icon, color, tip) = switch (sync.status) {
+          SyncStatus.off => (Icons.cloud_off_outlined, scheme.outline, 'Sync ist aus – antippen zum Einrichten'),
+          SyncStatus.syncing => (Icons.cloud_sync, scheme.primary, 'Wird abgeglichen …'),
+          SyncStatus.error => (Icons.cloud_off, scheme.error, sync.error ?? 'Fehler beim Abgleich'),
+          SyncStatus.idle => (
+            Icons.cloud_done_outlined,
+            scheme.onSurfaceVariant,
+            last == null ? 'Sync aktiv' : 'Zuletzt abgeglichen um $last – antippen zum Abgleichen',
+          ),
+        };
+        return IconButton(
+          tooltip: tip,
+          icon: Icon(icon, color: color),
+          onPressed: switch (sync.status) {
+            SyncStatus.off => onSetup,
+            SyncStatus.syncing => null,
+            SyncStatus.error => () => _showError(context),
+            SyncStatus.idle => sync.syncNow,
+          },
+        );
+      },
+    );
+  }
+
+  void _showError(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Abgleich nicht möglich'),
+        content: SizedBox(width: 460, child: Text(sync.error ?? '')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Schliessen')),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(c);
+              sync.syncNow();
+            },
+            child: const Text('Nochmals versuchen'),
+          ),
+        ],
       ),
     );
   }

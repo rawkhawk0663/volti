@@ -36,6 +36,18 @@ class AppSettings {
     await _write();
   }
 
+  /// Ordner, mit dem Volti seinen Datenordner abgleicht (z. B. in Proton Drive).
+  String? get syncFolder => _data['syncFolder'] as String?;
+
+  Future<void> setSyncFolder(String? path) async {
+    if (path == null) {
+      _data.remove('syncFolder');
+    } else {
+      _data['syncFolder'] = path;
+    }
+    await _write();
+  }
+
   Map<String, dynamic> get _usage => (_data['usage'] ??= <String, dynamic>{}) as Map<String, dynamic>;
 
   /// Wann das Stück zuletzt geöffnet wurde (null = nie).

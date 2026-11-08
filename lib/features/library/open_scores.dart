@@ -26,4 +26,5 @@ Future<void> openScores(
   for (final i in items.map((i) => i.path).toSet()) {
     await library.refreshEntry(i);
   }
+  library.onLocalChange?.call(); // Anmerkungen abgleichen
 }

@@ -40,6 +40,9 @@ class LibraryController extends ChangeNotifier {
 
   String? error;
 
+  /// Wird nach jeder Änderung an der Bibliothek aufgerufen (für den Sync).
+  VoidCallback? onLocalChange;
+
   Future<void> init() async {
     await Directory(_importer.notesDir).create(recursive: true);
     await _migrateFromVersion012();
@@ -89,6 +92,7 @@ class LibraryController extends ChangeNotifier {
     } finally {
       importing = false;
       await rescan();
+      onLocalChange?.call();
     }
   }
 
@@ -108,6 +112,7 @@ class LibraryController extends ChangeNotifier {
     }
     _scores = _scores.where((e) => e.path != entry.path).toList();
     notifyListeners();
+    onLocalChange?.call();
   }
 
   /// Öffnet den Datenordner im Datei-Explorer (nur Windows/Linux).
@@ -125,6 +130,7 @@ class LibraryController extends ChangeNotifier {
     final saved = await _sidecars.save(entry.path, meta: meta);
     entry.meta = saved.meta;
     notifyListeners();
+    onLocalChange?.call();
   }
 
   /// Nach dem Schliessen eines Stücks: Infos/Anmerkungs-Status neu lesen.
@@ -145,6 +151,7 @@ class LibraryController extends ChangeNotifier {
     await _setlistStore.save(s);
     _setlists = [..._setlists, s]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     notifyListeners();
+    onLocalChange?.call();
     return s;
   }
 
@@ -153,12 +160,14 @@ class LibraryController extends ChangeNotifier {
     await _setlistStore.save(s);
     _setlists = [..._setlists]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     notifyListeners();
+    onLocalChange?.call();
   }
 
   Future<void> deleteSetlist(Setlist s) async {
     await _setlistStore.delete(s);
     _setlists = _setlists.where((x) => x.id != s.id).toList();
     notifyListeners();
+    onLocalChange?.call();
   }
 
   Future<void> addToSetlist(Setlist s, Iterable<ScoreEntry> entries) async {
