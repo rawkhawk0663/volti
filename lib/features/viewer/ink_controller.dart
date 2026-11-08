@@ -8,9 +8,6 @@ import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
 import '../../core/library/sidecar_store.dart';
 
-/// Was der Stift gerade tut.
-enum ToolMode { read, pen, highlighter, eraser, text }
-
 /// Eine rückgängig machbare Aktion: was dazukam, was entfernt und was
 /// geändert wurde.
 class _UndoEntry {
@@ -47,14 +44,6 @@ class InkController extends ChangeNotifier {
   ScoreAnnotations _annotations = ScoreAnnotations();
   ScoreAnnotations get annotations => _annotations;
 
-  ToolMode mode = ToolMode.read;
-  int penColor = 0xFF1B1B1B;
-  static const int highlighterColor = 0x99FFE066;
-
-  /// Grundbreiten relativ zur Seitenbreite.
-  static const double penWidth = 0.003;
-  static const double highlighterWidth = 0.014;
-
   final List<_UndoEntry> _undo = [];
   final List<_UndoEntry> _redo = [];
   bool get canUndo => _undo.isNotEmpty;
@@ -71,26 +60,21 @@ class InkController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setMode(ToolMode m) {
-    mode = m;
-    notifyListeners();
-  }
-
-  void setPenColor(int color) {
-    penColor = color;
-    if (mode != ToolMode.pen && mode != ToolMode.text) mode = ToolMode.pen;
-    notifyListeners();
-  }
-
   /// Fügt einen fertig gezeichneten Strich hinzu.
-  void addStroke({required int page, required InkTool tool, required List<InkPoint> points}) {
+  void addStroke({
+    required int page,
+    required InkTool tool,
+    required int color,
+    required double width,
+    required List<InkPoint> points,
+  }) {
     if (points.isEmpty) return;
     final stroke = Stroke(
       id: _uuid.v4(),
       page: page,
       tool: tool,
-      color: tool == InkTool.highlighter ? highlighterColor : penColor,
-      width: tool == InkTool.highlighter ? highlighterWidth : penWidth,
+      color: color,
+      width: width,
       points: List.unmodifiable(points),
       createdAt: DateTime.now().toUtc(),
     );
@@ -113,17 +97,16 @@ class InkController extends ChangeNotifier {
 
   // ------------------------------------------------------------ Text-Notizen
 
-  /// Schriftgrösse für neue Text-Notizen (relativ zur Seitenbreite).
-  double textSize = textSizes[1];
-  static const textSizes = [0.016, 0.022, 0.032];
-
-  void setTextSize(double size) {
-    textSize = size;
-    notifyListeners();
-  }
-
   /// Neue Text-Notiz. Gibt ihre ID zurück (null bei leerem Text).
-  String? addText({required int page, required double x, required double y, required String text}) {
+  /// [size] ist relativ zur Seitenbreite.
+  String? addText({
+    required int page,
+    required double x,
+    required double y,
+    required String text,
+    required double size,
+    required int color,
+  }) {
     if (text.trim().isEmpty) return null;
     final note = TextNote(
       id: _uuid.v4(),
@@ -131,8 +114,8 @@ class InkController extends ChangeNotifier {
       x: x,
       y: y,
       text: text.trimRight(),
-      size: textSize,
-      color: penColor,
+      size: size,
+      color: color,
       createdAt: DateTime.now().toUtc(),
     );
     _annotations.putText(note);
@@ -165,6 +148,24 @@ class InkController extends ChangeNotifier {
     if (removed.isEmpty) return;
     _push(_UndoEntry(removedTexts: removed));
   }
+
+  /// Entfernt alle Striche und Text-Notizen einer Seite (rückgängig machbar).
+  void clearPage(int page) {
+    final now = DateTime.now().toUtc();
+    final strokes = _annotations.visibleStrokesOn(page);
+    final texts = _annotations.visibleTextsOn(page);
+    if (strokes.isEmpty && texts.isEmpty) return;
+    for (final s in strokes) {
+      _annotations.put(s.markDeleted(now));
+    }
+    for (final t in texts) {
+      _annotations.putText(t.copyWith(deleted: true, modifiedAt: now));
+    }
+    _push(_UndoEntry(removed: strokes, removedTexts: texts));
+  }
+
+  bool pageHasAnnotations(int page) =>
+      _annotations.visibleStrokesOn(page).isNotEmpty || _annotations.visibleTextsOn(page).isNotEmpty;
 
   // ------------------------------------------------- Rückgängig/Wiederholen
 

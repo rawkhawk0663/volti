@@ -31,6 +31,9 @@ class SyncController extends ChangeNotifier {
 
   String? get folder => settings.syncFolder;
 
+  /// Wird aufgerufen, wenn der Abgleich etwas auf dieses Gerät geholt hat.
+  Future<void> Function()? afterDownload;
+
   Timer? _periodic;
   Timer? _debounce;
   bool _running = false;
@@ -90,7 +93,10 @@ class SyncController extends ChangeNotifier {
       lastSync = DateTime.now();
       error = null;
       _status = SyncStatus.idle;
-      if (report.changedLocally) await library.rescan();
+      if (report.changedLocally) {
+        await library.rescan();
+        await afterDownload?.call();
+      }
     } catch (e) {
       error = e is SyncException ? e.message : 'Abgleich fehlgeschlagen: $e';
       _status = SyncStatus.error;

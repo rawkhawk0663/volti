@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/ink/text_note.dart';
 import '../../app/theme.dart';
 import 'ink_controller.dart';
+import 'tool_controller.dart';
 
 /// Schriftstil einer Text-Notiz auf einer Seite der Breite [pageWidth].
 TextStyle noteStyle(TextNote t, double pageWidth) =>
@@ -24,10 +25,17 @@ Rect textNoteBounds(TextNote t, Size size) {
 /// Notiz zu schreiben, eine vorhandene antippen, um sie zu ändern, oder sie
 /// mit dem Finger, Stift oder der Maus verschieben.
 class TextNotesLayer extends StatefulWidget {
-  const TextNotesLayer({super.key, required this.page, required this.controller, required this.onEditingChanged});
+  const TextNotesLayer({
+    super.key,
+    required this.page,
+    required this.controller,
+    required this.tools,
+    required this.onEditingChanged,
+  });
 
   final int page;
   final InkController controller;
+  final ToolController tools;
 
   /// Meldet, ob gerade getippt wird (dann blättern Tasten nicht um).
   final ValueChanged<bool> onEditingChanged;
@@ -51,6 +59,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
   Offset _dragDelta = Offset.zero;
 
   InkController get c => widget.controller;
+  ToolController get tools => widget.tools;
 
   @override
   void initState() {
@@ -71,10 +80,13 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     // Ungespeicherten Text noch übernehmen – erst nach dem Abbau, weil die
     // Anzeige währenddessen nicht verändert werden darf.
     final at = _editAt, id = _editId, text = _text.text, page = widget.page, ctrl = c;
+    final size = tools.textSize, color = tools.textColor;
     if (at != null) {
       Future.microtask(() {
         if (ctrl.isDisposed) return;
-        id == null ? ctrl.addText(page: page, x: at.dx, y: at.dy, text: text) : ctrl.updateText(id, text: text);
+        id == null
+            ? ctrl.addText(page: page, x: at.dx, y: at.dy, text: text, size: size, color: color)
+            : ctrl.updateText(id, text: text);
       });
     }
     _text.dispose();
@@ -103,7 +115,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
       _editId = null;
     });
     if (id == null) {
-      c.addText(page: widget.page, x: at.dx, y: at.dy, text: text);
+      c.addText(page: widget.page, x: at.dx, y: at.dy, text: text, size: tools.textSize, color: tools.textColor);
     } else {
       c.updateText(id, text: text);
     }
@@ -124,9 +136,9 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
       builder: (context, constraints) {
         final size = constraints.biggest;
         return ListenableBuilder(
-          listenable: c,
+          listenable: Listenable.merge([c, tools]),
           builder: (context, _) {
-            final active = c.mode == ToolMode.text;
+            final active = tools.mode == ToolMode.text;
             final notes = c.annotations.visibleTextsOn(widget.page);
             return Stack(
               fit: StackFit.expand,
@@ -199,8 +211,8 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     final at = _editAt!;
     final existing = _editId == null ? null : c.annotations.text(_editId!);
     final style = TextStyle(
-      fontSize: (existing?.size ?? c.textSize) * size.width,
-      color: Color(existing?.color ?? c.penColor),
+      fontSize: (existing?.size ?? tools.textSize) * size.width,
+      color: Color(existing?.color ?? tools.textColor),
       height: 1.2,
       fontWeight: FontWeight.w500,
     );

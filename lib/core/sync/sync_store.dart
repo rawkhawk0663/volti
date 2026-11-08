@@ -30,7 +30,7 @@ bool isSyncedPath(String rel) {
     return name.endsWith('.pdf') || name.endsWith('.json');
   }
   if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'setlists') return parts[2].endsWith('.json');
-  return rel == '.volti/library.json';
+  return rel == '.volti/library.json' || rel == '.volti/presets.json';
 }
 
 /// Ein gewöhnlicher Ordner als Sync-Ziel.

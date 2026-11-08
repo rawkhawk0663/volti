@@ -32,16 +32,36 @@ Volti legt dabei eine **Kopie** in seinem eigenen Datenordner ab. Deine Original
 - Lege eine Setlist an, füge Stücke hinzu und ändere die Reihenfolge, indem du ein Stück am Griff ☰ ziehst.
 - Mit **Spielen** geht es nach der letzten Seite eines Stücks direkt zum nächsten Stück, rückwärts genauso. Oben links springst du über „Stück 2/5 ▾“ direkt zu einem anderen Stück.
 
-**Notenansicht**
+**Notenansicht – Spielansicht**
+
+Beim Öffnen siehst du nur die Noten, im Vollbild. Die Leiste erscheint kurz und verschwindet dann wieder.
 
 | Aktion | So geht's |
 |---|---|
-| Umblättern | Pedal (iRig BlueTurn in jedem Modus), Pfeiltasten, Bild ↑/↓, Leertaste, rechts/links tippen oder wischen |
-| Stift / Textmarker / Radierer | Symbole oben oder Tasten **P** / **H** / **E**; zurück zum Lesen mit **Esc** |
-| Text-Notiz | Symbol **Tт** oder Taste **T**, dann auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen. Eine Notiz antippen = ändern, ziehen = verschieben. Grösse (A A A) und Farbe wählst du oben |
-| Radieren mit dem Surface Pen | Radierer-Ende des Stifts benutzen oder Seitentaste gedrückt halten, auch im Lese-Modus |
-| Rückgängig / Wiederholen | Pfeil-Symbole oder **Strg+Z** / **Strg+Y** |
-| Stift-Test | Symbol ((•)) oben zeigt Druck, Gerätetyp, Tasten und Ereignisrate |
+| Umblättern | Pedal (iRig BlueTurn in jedem Modus), Pfeiltasten, Bild ↑/↓, Leertaste, im **rechten oder linken Drittel** tippen oder wischen |
+| Leiste ein-/ausblenden | **In die Mitte tippen**. Am Computer genügt es auch, die Maus an den oberen Rand zu bewegen |
+| Vollbild ein/aus | Symbol in der Leiste oder **F11**. Volti merkt sich die Einstellung |
+| Sofort zeichnen | Mit dem **Stift aufsetzen und ziehen**. Kurz antippen blättert weiterhin. Ausschalten über ⋮ → „Mit dem Stift sofort zeichnen“ |
+| Radieren mit dem Surface Pen | Radierer-Ende des Stifts benutzen oder Seitentaste gedrückt halten, auch in der Spielansicht |
+| Seite springen | Leiste einblenden, dann den Regler unten ziehen |
+
+**Notenansicht – Bearbeiten**
+
+Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint die Werkzeug-Palette. Während du zeichnest, wird sie fast durchsichtig.
+
+| Aktion | So geht's |
+|---|---|
+| Stift-Vorlage wählen | Antippen oder Taste **1–9**. **P** wählt den ersten Stift, **H** den ersten Textmarker |
+| Vorlage anpassen | Die gewählte Vorlage nochmals antippen (oder lange drücken): Stift/Textmarker, Farbe, Breite und Deckkraft |
+| Neue Vorlage | **+** in der Palette |
+| Radierer | Symbol oder Taste **E**, dann eine von drei Grössen wählen |
+| Text-Notiz | Symbol **Tт** oder Taste **T**, dann auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen |
+| Rückgängig / Wiederholen | Pfeile in der Palette oder **Strg+Z** / **Strg+Y** |
+| Seite leeren | Papierkorb-Symbol in der Palette (lässt sich rückgängig machen) |
+| Palette auf die andere Seite | Doppelpfeil unten in der Palette |
+| Fertig | ✓ oben in der Palette oder **Esc** |
+
+Die Vorlage „Abdecken“ (weiss) eignet sich, um Teile der Noten zu überdecken, zum Beispiel bei Wiederholungen. Stift-Vorlagen werden mit deinen anderen Geräten abgeglichen.
 
 Mit dem Finger wird nie gezeichnet. So hinterlässt der Handballen beim Schreiben keine Spuren.
 

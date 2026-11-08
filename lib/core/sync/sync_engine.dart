@@ -79,7 +79,8 @@ class SyncEngine {
     final base = await _loadBase();
 
     bool isPdf(String rel) => rel.startsWith('Noten/') && rel.toLowerCase().endsWith('.pdf');
-    bool isSetlist(String rel) => rel.startsWith('.volti/setlists/');
+    // Setlists und Stift-Vorlagen: ganze Datei, die jüngste Fassung gewinnt.
+    bool isSetlist(String rel) => rel.startsWith('.volti/setlists/') || rel == '.volti/presets.json';
 
     // ---------------------------------------------------- Sicherheitsbremse
     final localPdfs = localFiles.where(isPdf).toSet();
@@ -184,18 +185,28 @@ class SyncEngine {
 
   static String _encode(ScoreSidecar s) => const JsonEncoder.withIndent(' ').convert(s.toJson());
 
-  /// Setlist: die zuletzt geänderte Fassung gewinnt.
+  /// Setlist oder Stift-Vorlagen: die zuletzt geänderte Fassung gewinnt
+  /// (Feld `modified` in der Datei).
   Future<void> _syncSetlist(String rel, SyncReport report) async {
     final lj = await _local.readString(rel), rj = await remote.readString(rel);
     if (lj == rj) return;
-    final ls = _tryParseSetlist(lj), rs = _tryParseSetlist(rj);
-    if (rs == null) {
+    final lm = _modifiedOf(lj), rm = _modifiedOf(rj);
+    if (rm == null) {
       await remote.writeString(rel, lj);
-    } else if (ls == null || rs.modified.isAfter(ls.modified)) {
+    } else if (lm == null || rm.isAfter(lm)) {
       await _local.writeString(rel, rj);
       report.merged++;
-    } else if (ls.modified.isAfter(rs.modified)) {
+    } else if (lm.isAfter(rm)) {
       await remote.writeString(rel, lj);
+    }
+  }
+
+  static DateTime? _modifiedOf(String json) {
+    try {
+      final m = (jsonDecode(json) as Map<String, dynamic>)['modified'];
+      return m is String ? DateTime.parse(m) : null;
+    } catch (_) {
+      return null;
     }
   }
 

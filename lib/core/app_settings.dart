@@ -48,6 +48,15 @@ class AppSettings {
     await _write();
   }
 
+  /// Einfache Ja/Nein-Einstellungen dieses Geräts (z. B. Vollbild).
+  bool flag(String name, {required bool orElse}) => (_data['flags'] as Map?)?[name] as bool? ?? orElse;
+
+  Future<void> setFlag(String name, bool value) async {
+    final flags = (_data['flags'] ??= <String, dynamic>{}) as Map<String, dynamic>;
+    flags[name] = value;
+    await _write();
+  }
+
   Map<String, dynamic> get _usage => (_data['usage'] ??= <String, dynamic>{}) as Map<String, dynamic>;
 
   /// Wann das Stück zuletzt geöffnet wurde (null = nie).

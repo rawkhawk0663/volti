@@ -10,6 +10,9 @@ import 'package:volti/core/library/sidecar_store.dart';
 import 'package:volti/features/viewer/ink_controller.dart';
 import 'package:volti/features/viewer/ink_layer.dart';
 import 'package:volti/features/viewer/text_layer.dart';
+import 'package:volti/features/viewer/tool_controller.dart';
+
+import 'helpers/tools.dart';
 
 TextNote note(String id, String text, {DateTime? modified, bool deleted = false}) => TextNote(
   id: id,
@@ -53,7 +56,7 @@ void main() {
   group('Bearbeiten und Rückgängig', () {
     test('Hinzufügen, ändern, verschieben, löschen – alles rückgängig machbar', () {
       final c = InkController(pdfPath: '${dir.path}/x.pdf');
-      final id = c.addText(page: 1, x: 0.5, y: 0.5, text: 'Atmen')!;
+      final id = c.addText(page: 1, x: 0.5, y: 0.5, text: 'Atmen', size: 0.022, color: 0xFF000000)!;
       c.updateText(id, text: 'Atmen!');
       c.updateText(id, x: 0.6, y: 0.7);
       expect(c.annotations.text(id)!.x, 0.6);
@@ -72,17 +75,19 @@ void main() {
 
       c.updateText(c.annotations.visibleTextsOn(1).single.id, text: '   ');
       expect(c.annotations.visibleTextsOn(1), isEmpty, reason: 'leerer Text löscht die Notiz');
-      expect(c.addText(page: 1, x: 0, y: 0, text: ''), isNull);
+      expect(c.addText(page: 1, x: 0, y: 0, text: '', size: 0.022, color: 0xFF000000), isNull);
       c.dispose();
     });
   });
 
   group('Bedienung', () {
     late InkController c;
+    late ToolController tools;
     var editing = false;
 
     Future<void> pump(WidgetTester t) async {
       c = InkController(pdfPath: '${dir.path}/x.pdf');
+      tools = await t.runAsync(() => makeTools(dir)) as ToolController;
       await t.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -93,8 +98,8 @@ void main() {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    InkLayer(page: 1, controller: c),
-                    TextNotesLayer(page: 1, controller: c, onEditingChanged: (v) => editing = v),
+                    InkLayer(page: 1, controller: c, tools: tools),
+                    TextNotesLayer(page: 1, controller: c, tools: tools, onEditingChanged: (v) => editing = v),
                   ],
                 ),
               ),
@@ -106,7 +111,7 @@ void main() {
 
     testWidgets('Tippen, schreiben, Enter → Notiz an der getippten Stelle', (t) async {
       await pump(t);
-      c.setMode(ToolMode.text);
+      tools.setMode(ToolMode.text);
       await t.pump();
       final topLeft = t.getTopLeft(find.byType(TextNotesLayer));
       await t.tapAt(topLeft + const Offset(100, 300));
@@ -128,7 +133,7 @@ void main() {
 
     testWidgets('Esc bricht ab, ohne etwas anzulegen', (t) async {
       await pump(t);
-      c.setMode(ToolMode.text);
+      tools.setMode(ToolMode.text);
       await t.pump();
       await t.tapAt(t.getCenter(find.byType(TextNotesLayer)));
       await t.pumpAndSettle();
@@ -141,11 +146,11 @@ void main() {
 
     testWidgets('Notizen sind im Lese-Modus sichtbar; der Radierer löscht sie', (t) async {
       await pump(t);
-      c.addText(page: 1, x: 0.4, y: 0.4, text: 'cresc.');
+      c.addText(page: 1, x: 0.4, y: 0.4, text: 'cresc.', size: 0.022, color: 0xFF000000);
       await t.pump();
       expect(find.text('cresc.'), findsOneWidget);
 
-      c.setMode(ToolMode.eraser);
+      tools.setMode(ToolMode.eraser);
       await t.pump();
       final pos = t.getTopLeft(find.byType(TextNotesLayer)) + const Offset(400 * 0.4 + 5, 600 * 0.4 + 5);
       final g = await t.startGesture(pos, kind: PointerDeviceKind.stylus);

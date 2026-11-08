@@ -23,7 +23,8 @@ lib/
     app_settings.dart  Nur geräteeigene Einstellungen (zuletzt geöffnet)
   features/
     library/      Bibliothek, Infos-Dialog, Setlists (LibraryController hält den Zustand)
-    viewer/       Notenansicht, Stift-Ebene, Stift-Test
+    viewer/       Notenansicht (Spielansicht + Bearbeiten), Stift-Ebene, Text-Ebene, Werkzeug-Palette,
+                  ToolController (Werkzeuge + Stift-Vorlagen app-weit, via ToolScope), Vollbild, Stift-Test
 assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 ```
 
@@ -38,6 +39,11 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Pedale senden Tastendrücke. Alle Pfeiltasten, Bild auf/ab und die Leertaste blättern. Buttons in der Werkzeugleiste stehen in `ExcludeFocus`, damit sie keine Tastendrücke abfangen.
 
 6. **Sync:** Ob eine fehlende Datei neu ist oder gelöscht wurde, entscheidet die gerätespezifische Basis (`sync_base.json`, Stand des letzten Abgleichs). `.volti.json` wird immer zusammengeführt. Die Sicherheitsbremse (Markierungsdatei `.volti/library.json` fehlt, oder mehr als die Hälfte der Noten würde gelöscht) darf nicht entfernt werden.
+
+7. **Beim Spielen nicht stören:** Die Notenansicht startet als Spielansicht, ohne Leisten und im Vollbild (Gerätevorliebe). Tippen links oder rechts blättert, in der Mitte blendet es die Leiste kurz ein (4 s).
+   Mit dem Stift *ziehen* zeichnet sofort. Ein Antippen unterhalb von `kTouchSlop` bleibt ein Antippen und erzeugt keinen Strich. Wischen mit dem Stift blättert nie.
+   Die Werkzeug-Palette steht am Seitenrand und wird beim Zeichnen fast durchsichtig. Stift-Vorlagen liegen in `Bibliothek/.volti/presets.json` und werden synchronisiert (jüngste Fassung gewinnt).
+   Für das Vollbild wird `window_manager` in der Version **0.5.x** verwendet (0.6 baut auf einer neuen, ungeprüften Grundlage auf).
 
 ## Prüfen
 ```bash

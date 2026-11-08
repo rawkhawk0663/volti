@@ -82,7 +82,7 @@ void main() {
     test('Zeichnen, Radieren, Rückgängig, Wiederholen', () async {
       final c = InkController(pdfPath: '${dir.path}/x.pdf');
       const pts = [InkPoint(0.5, 0.5, 0.5)];
-      c.addStroke(page: 1, tool: InkTool.pen, points: pts);
+      c.addStroke(page: 1, tool: InkTool.pen, color: 0xFF000000, width: 0.003, points: pts);
       expect(c.annotations.visibleStrokesOn(1).length, 1);
 
       c.eraseStrokes(c.annotations.visibleStrokesOn(1));

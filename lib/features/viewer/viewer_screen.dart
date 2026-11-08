@@ -1,14 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../../app/theme.dart';
+import '../../core/ink/stroke.dart';
 import '../../core/pdf/page_image_cache.dart';
+import 'fullscreen.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
 import 'pen_diagnostics.dart';
 import 'text_layer.dart';
+import 'tool_controller.dart';
+import 'tool_palette.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
 class ViewerItem {
@@ -17,15 +23,28 @@ class ViewerItem {
   final String title;
 }
 
-/// Zeigt Noten seitenweise an – mit Umblättern per Pedal, Tastatur oder
-/// Antippen und mit Stift-Anmerkungen.
+/// Die Notenansicht.
+///
+/// **Spielansicht** (Standard): nur die Noten, bildschirmfüllend, auf Wunsch
+/// im Vollbild. Rechts tippen oder Pedal = weiter, links = zurück, Mitte =
+/// Leiste kurz einblenden. Mit dem Stift ziehen zeichnet sofort.
+///
+/// **Bearbeiten**: Werkzeug-Palette am Seitenrand.
 ///
 /// Mit mehreren [items] (Setlist) geht es nach der letzten Seite eines
 /// Stücks direkt zur ersten Seite des nächsten – und rückwärts genauso.
 class ViewerScreen extends StatefulWidget {
-  const ViewerScreen({super.key, required this.items, this.startIndex = 0, this.setlistName, this.onOpened});
+  const ViewerScreen({
+    super.key,
+    required this.items,
+    required this.tools,
+    this.startIndex = 0,
+    this.setlistName,
+    this.onOpened,
+  });
 
   final List<ViewerItem> items;
+  final ToolController tools;
   final int startIndex;
   final String? setlistName;
 
@@ -50,14 +69,29 @@ class _ViewerScreenState extends State<ViewerScreen> {
   late int _index = widget.startIndex.clamp(0, widget.items.length - 1);
   int _loadToken = 0;
 
+  /// Leiste oben/unten sichtbar (in der Spielansicht nur kurz).
+  bool _controlsVisible = true;
+  Timer? _hideTimer;
+  bool _fullscreen = false;
+  PointerDeviceKind? _dragKind;
+
   ViewerItem get _item => widget.items[_index];
   bool get _isSetlist => widget.items.length > 1;
+  ToolController get tools => widget.tools;
 
   @override
   void initState() {
     super.initState();
+    tools.setMode(ToolMode.read);
+    tools.addListener(_onToolsChanged);
     _ink = InkController(pdfPath: _item.path);
     _openPiece(_index);
+    if (tools.fullscreen) _setFullscreen(true);
+    _restartHideTimer();
+  }
+
+  void _onToolsChanged() {
+    if (mounted) setState(() {});
   }
 
   /// Öffnet ein Stück der Liste. [atEnd]: auf der letzten Seite beginnen
@@ -65,9 +99,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   Future<void> _openPiece(int index, {bool atEnd = false}) async {
     final token = ++_loadToken;
     final item = widget.items[index];
-    final ink = InkController(pdfPath: item.path)
-      ..mode = _ink.mode
-      ..penColor = _ink.penColor;
+    final ink = InkController(pdfPath: item.path);
     PdfDocument? doc;
     String? error;
     try {
@@ -101,6 +133,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   @override
   void dispose() {
+    _hideTimer?.cancel();
+    tools.removeListener(_onToolsChanged);
+    tools.setMode(ToolMode.read);
+    if (_fullscreen) setAppFullscreen(false);
     _ink.dispose(); // speichert offene Änderungen
     _cache?.dispose();
     _doc?.dispose();
@@ -115,8 +151,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final target = page.clamp(1, _pageCount);
     if (target != _page) setState(() => _page = target);
   }
-
-  void _toggleDiagnostics() => setState(() => _showDiagnostics = !_showDiagnostics);
 
   void _next() {
     if (_page < _pageCount) {
@@ -134,6 +168,41 @@ class _ViewerScreenState extends State<ViewerScreen> {
     }
   }
 
+  // --------------------------------------------------- Leiste und Vollbild
+  void _showControlsBriefly() {
+    setState(() => _controlsVisible = true);
+    _restartHideTimer();
+  }
+
+  void _restartHideTimer() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _toggleControls() {
+    if (_controlsVisible) {
+      _hideTimer?.cancel();
+      setState(() => _controlsVisible = false);
+    } else {
+      _showControlsBriefly();
+    }
+  }
+
+  Future<void> _setFullscreen(bool on) async {
+    setState(() => _fullscreen = on);
+    await setAppFullscreen(on);
+  }
+
+  Future<void> _toggleFullscreen() async {
+    final on = !_fullscreen;
+    await tools.setFullscreen(on);
+    await _setFullscreen(on);
+  }
+
+  void _toggleDiagnostics() => setState(() => _showDiagnostics = !_showDiagnostics);
+
   // ---------------------------------------------------------------- Tastatur
   // Bluetooth-Pedale wie das iRig BlueTurn senden je nach Modus Pfeiltasten
   // oder "Bild auf/ab". Alle Varianten blättern.
@@ -144,12 +213,24 @@ class _ViewerScreenState extends State<ViewerScreen> {
     LogicalKeyboardKey.space,
   };
   static final _prevKeys = {LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.pageUp};
+  static final _digits = [
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.digit5,
+    LogicalKeyboardKey.digit6,
+    LogicalKeyboardKey.digit7,
+    LogicalKeyboardKey.digit8,
+    LogicalKeyboardKey.digit9,
+  ];
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent || _editingText) return KeyEventResult.ignored;
     final key = event.logicalKey;
     final ctrl = HardwareKeyboard.instance.isControlPressed;
     final shift = HardwareKeyboard.instance.isShiftPressed;
+    final down = event is KeyDownEvent;
 
     if (_nextKeys.contains(key)) {
       _next();
@@ -163,17 +244,23 @@ class _ViewerScreenState extends State<ViewerScreen> {
       shift ? _ink.redo() : _ink.undo();
     } else if (ctrl && key == LogicalKeyboardKey.keyY) {
       _ink.redo();
-    } else if (event is KeyDownEvent && key == LogicalKeyboardKey.keyP) {
-      _ink.setMode(ToolMode.pen);
-    } else if (event is KeyDownEvent && key == LogicalKeyboardKey.keyH) {
-      _ink.setMode(ToolMode.highlighter);
-    } else if (event is KeyDownEvent && key == LogicalKeyboardKey.keyE) {
-      _ink.setMode(ToolMode.eraser);
-    } else if (event is KeyDownEvent && key == LogicalKeyboardKey.keyT) {
-      _ink.setMode(ToolMode.text);
+    } else if (down && key == LogicalKeyboardKey.f11) {
+      _toggleFullscreen();
+    } else if (down && key == LogicalKeyboardKey.keyP) {
+      tools.selectFirst(InkTool.pen);
+    } else if (down && key == LogicalKeyboardKey.keyH) {
+      tools.selectFirst(InkTool.highlighter);
+    } else if (down && key == LogicalKeyboardKey.keyE) {
+      tools.setMode(ToolMode.eraser);
+    } else if (down && key == LogicalKeyboardKey.keyT) {
+      tools.setMode(ToolMode.text);
+    } else if (down && _digits.contains(key)) {
+      tools.selectIndex(_digits.indexOf(key));
     } else if (key == LogicalKeyboardKey.escape) {
-      if (_ink.mode != ToolMode.read) {
-        _ink.setMode(ToolMode.read);
+      if (tools.mode != ToolMode.read) {
+        tools.setMode(ToolMode.read);
+      } else if (_fullscreen) {
+        _toggleFullscreen();
       } else {
         Navigator.of(context).maybePop();
       }
@@ -186,20 +273,86 @@ class _ViewerScreenState extends State<ViewerScreen> {
   // ---------------------------------------------------------------- Aufbau
   @override
   Widget build(BuildContext context) {
+    final editing = tools.mode != ToolMode.read;
+    final showBars = _controlsVisible && !editing;
+    final paletteLeft = tools.paletteLeft;
     return Focus(
       autofocus: true,
       onKeyEvent: _onKey,
       child: Scaffold(
         backgroundColor: VoltiColors.pageSurround(context),
-        body: SafeArea(
-          child: Column(
-            children: [
-              // ExcludeFocus: Buttons sollen nie den Tastatur-Fokus "stehlen",
-              // sonst würde z. B. die Leertaste eines Pedals einen Button auslösen.
-              ExcludeFocus(child: _Toolbar(state: this)),
-              Expanded(child: _buildPageArea()),
-            ],
-          ),
+        body: Stack(
+          children: [
+            Positioned.fill(child: _buildPageArea()),
+            // Am Computer: Maus an den oberen Rand → Leiste erscheint.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 10,
+              child: MouseRegion(opaque: false, onEnter: (_) => editing ? null : _showControlsBriefly()),
+            ),
+            // ExcludeFocus: Buttons sollen nie den Tastatur-Fokus "stehlen",
+            // sonst würde z. B. die Leertaste eines Pedals einen Button auslösen.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: ExcludeFocus(
+                child: _Slide(
+                  visible: showBars,
+                  fromTop: true,
+                  child: _TopBar(state: this),
+                ),
+              ),
+            ),
+            if (_pageCount > 1)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: ExcludeFocus(
+                  child: _Slide(
+                    visible: showBars,
+                    fromTop: false,
+                    child: _PageBar(state: this),
+                  ),
+                ),
+              ),
+            if (editing && _cache != null)
+              Positioned(
+                top: 0,
+                bottom: 0,
+                left: paletteLeft ? 0 : null,
+                right: paletteLeft ? null : 0,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Center(
+                      child: ExcludeFocus(
+                        child: ToolPalette(tools: tools, ink: _ink, page: _page),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (_showDiagnostics)
+              Positioned(
+                right: 12,
+                bottom: 72,
+                child: IgnorePointer(child: PenDiagnosticsPanel(diagnostics: _diagnostics)),
+              ),
+            if (_ink.saveError != null)
+              Positioned(
+                left: 12,
+                bottom: 12,
+                child: Material(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(padding: const EdgeInsets.all(8), child: Text(_ink.saveError!)),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -207,15 +360,25 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   Widget _buildPageArea() {
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(_error!, textAlign: TextAlign.center),
+      return SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_error!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Zurück')),
+              ],
+            ),
+          ),
         ),
       );
     }
     final cache = _cache;
     if (cache == null) return const Center(child: CircularProgressIndicator());
+    final reading = tools.mode == ToolMode.read;
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -223,58 +386,42 @@ class _ViewerScreenState extends State<ViewerScreen> {
       onPointerMove: _diagnostics.record,
       onPointerHover: _showDiagnostics ? _diagnostics.record : null,
       onPointerUp: _diagnostics.record,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: ListenableBuilder(
-              listenable: _ink,
-              builder: (context, _) => GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                // Antippen blättert nur im Lese-Modus. Beim Zeichnen würde ein
-                // Punkt mit dem Stift sonst ungewollt umblättern.
-                onTapUp: _ink.mode == ToolMode.read ? _onTap : null,
-                onHorizontalDragEnd: _ink.mode == ToolMode.read ? _onSwipe : null,
-                child: LayoutBuilder(builder: (context, box) => _buildPage(cache, box)),
-              ),
-            ),
-          ),
-          if (_showDiagnostics)
-            Positioned(
-              right: 12,
-              bottom: 12,
-              child: IgnorePointer(child: PenDiagnosticsPanel(diagnostics: _diagnostics)),
-            ),
-          if (_ink.saveError != null)
-            Positioned(
-              left: 12,
-              bottom: 12,
-              child: Material(
-                color: Theme.of(context).colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(padding: const EdgeInsets.all(8), child: Text(_ink.saveError!)),
-              ),
-            ),
-        ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // Antippen und Wischen gelten nur in der Spielansicht. Beim Bearbeiten
+        // würde ein Punkt mit dem Stift sonst ungewollt umblättern.
+        onTapUp: reading ? _onTap : null,
+        onHorizontalDragStart: reading ? (d) => _dragKind = d.kind : null,
+        onHorizontalDragEnd: reading ? _onSwipe : null,
+        child: SafeArea(child: LayoutBuilder(builder: (context, box) => _buildPage(cache, box))),
       ),
     );
   }
 
+  /// Linkes Drittel: zurück. Rechtes Drittel: weiter. Mitte: Leiste ein/aus.
   void _onTap(TapUpDetails d) {
     if (d.kind == PointerDeviceKind.invertedStylus) return;
-    final box = context.findRenderObject() as RenderBox?;
-    final width = box?.size.width ?? 1;
-    // Linkes Drittel: zurück. Rest: vorwärts.
-    d.globalPosition.dx < width * 0.33 ? _prev() : _next();
+    final width = MediaQuery.sizeOf(context).width;
+    final x = d.globalPosition.dx / width;
+    if (x < 0.3) {
+      _prev();
+    } else if (x > 0.7) {
+      _next();
+    } else {
+      _toggleControls();
+    }
   }
 
   void _onSwipe(DragEndDetails d) {
+    // Mit dem Stift wird gezeichnet, nicht geblättert.
+    if (_dragKind == PointerDeviceKind.stylus || _dragKind == PointerDeviceKind.invertedStylus) return;
     final v = d.primaryVelocity ?? 0;
     if (v < -300) _next();
     if (v > 300) _prev();
   }
 
   Widget _buildPage(PageImageCache cache, BoxConstraints box) {
-    const margin = 8.0;
+    const margin = 6.0;
     final availW = box.maxWidth - 2 * margin;
     final availH = box.maxHeight - 2 * margin;
     final aspect = cache.aspectRatio(_page);
@@ -310,12 +457,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
                       : RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
                 },
               ),
-              // Im Lese-Modus reagiert die Stift-Ebene nur auf das Radierer-Ende.
-              InkLayer(key: ValueKey('$_index/$_page'), page: _page, controller: _ink),
+              InkLayer(key: ValueKey('$_index/$_page'), page: _page, controller: _ink, tools: tools),
               TextNotesLayer(
                 key: ValueKey('text/$_index/$_page'),
                 page: _page,
                 controller: _ink,
+                tools: tools,
                 onEditingChanged: (v) => setState(() => _editingText = v),
               ),
             ],
@@ -326,121 +473,149 @@ class _ViewerScreenState extends State<ViewerScreen> {
   }
 }
 
-class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.state});
-  final _ViewerScreenState state;
-
-  static const _penColors = <(int, String)>[
-    (0xFF1B1B1B, 'Schwarz'),
-    (0xFFC62828, 'Rot'),
-    (0xFF1565C0, 'Blau'),
-    (0xFF2E7D32, 'Grün'),
-  ];
+/// Blendet eine Leiste weich ein und aus (gleitet vom Rand herein).
+class _Slide extends StatelessWidget {
+  const _Slide({required this.visible, required this.fromTop, required this.child});
+  final bool visible;
+  final bool fromTop;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final ink = state._ink;
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        offset: visible ? Offset.zero : Offset(0, fromTop ? -1 : 1),
+        child: AnimatedOpacity(duration: const Duration(milliseconds: 220), opacity: visible ? 1 : 0, child: child),
+      ),
+    );
+  }
+}
+
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.state});
+  final _ViewerScreenState state;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surface,
-      elevation: 1,
-      child: Ink(
-        height: 52,
-        decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
-        child: ListenableBuilder(
-          listenable: ink,
-          builder: (context, _) {
-            Widget tool(ToolMode m, IconData icon, String tip) => IconButton(
-              tooltip: tip,
-              isSelected: ink.mode == m,
-              icon: Icon(icon),
-              style: IconButton.styleFrom(
-                backgroundColor: ink.mode == m ? scheme.primaryContainer : null,
-                foregroundColor: ink.mode == m ? scheme.onPrimaryContainer : null,
-              ),
-              onPressed: () => ink.setMode(m),
-            );
-            return Row(
-              children: [
-                IconButton(
-                  tooltip: 'Zurück zur Bibliothek',
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                ),
-                Expanded(child: _TitleArea(state: state)),
-                Flexible(
-                  flex: 3,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    reverse: true,
-                    child: Row(
-                      children: [
-                        tool(ToolMode.read, Icons.chrome_reader_mode_outlined, 'Lesen (Esc)'),
-                        tool(ToolMode.pen, Icons.edit, 'Stift (P)'),
-                        tool(ToolMode.highlighter, Icons.border_color, 'Textmarker (H)'),
-                        tool(ToolMode.eraser, Icons.auto_fix_normal, 'Radierer (E)'),
-                        tool(ToolMode.text, Icons.text_fields, 'Text-Notiz (T)'),
-                        if (ink.mode == ToolMode.text) ...[
-                          const SizedBox(width: 4),
-                          for (final (i, size) in InkController.textSizes.indexed)
-                            _SizeButton(
-                              label: const ['Klein', 'Mittel', 'Gross'][i],
-                              fontSize: 12.0 + i * 4,
-                              selected: ink.textSize == size,
-                              onTap: () => ink.setTextSize(size),
-                            ),
-                        ],
-                        if (ink.mode == ToolMode.pen || ink.mode == ToolMode.text) ...[
-                          const SizedBox(width: 4),
-                          for (final (color, name) in _penColors)
-                            _ColorDot(
-                              color: Color(color),
-                              name: name,
-                              selected: ink.penColor == color,
-                              onTap: () => ink.setPenColor(color),
-                            ),
-                        ],
-                        const _Divider(),
-                        IconButton(
-                          tooltip: 'Rückgängig (Strg+Z)',
-                          icon: const Icon(Icons.undo),
-                          onPressed: ink.canUndo ? ink.undo : null,
-                        ),
-                        IconButton(
-                          tooltip: 'Wiederholen (Strg+Y)',
-                          icon: const Icon(Icons.redo),
-                          onPressed: ink.canRedo ? ink.redo : null,
-                        ),
-                        const _Divider(),
-                        IconButton(
-                          tooltip: 'Stift-Test anzeigen',
-                          isSelected: state._showDiagnostics,
-                          icon: const Icon(Icons.sensors),
-                          onPressed: state._toggleDiagnostics,
-                        ),
-                        const _Divider(),
-                        IconButton(
-                          tooltip: 'Vorherige Seite',
-                          icon: const Icon(Icons.chevron_left),
-                          onPressed: state._prev,
-                        ),
-                        Text(
-                          state._pageCount == 0 ? '–' : '${state._page} / ${state._pageCount}',
-                          style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
-                        ),
-                        IconButton(
-                          tooltip: 'Nächste Seite',
-                          icon: const Icon(Icons.chevron_right),
-                          onPressed: state._next,
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                    ),
+    final tools = state.tools;
+    return Listener(
+      // Jede Berührung der Leiste hält sie offen.
+      onPointerDown: (_) => state._restartHideTimer(),
+      child: Material(
+        color: scheme.surface,
+        elevation: 2,
+        child: Ink(
+          decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
+          child: SafeArea(
+            bottom: false,
+            child: SizedBox(
+              height: 52,
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Zurück zur Bibliothek',
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.of(context).maybePop(),
                   ),
+                  Expanded(child: _TitleArea(state: state)),
+                  if (state._pageCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        'Seite ${state._page} von ${state._pageCount}',
+                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                      ),
+                    ),
+                  FilledButton.tonalIcon(
+                    onPressed: () => tools.select(tools.current),
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Bearbeiten'),
+                  ),
+                  IconButton(
+                    tooltip: state._fullscreen ? 'Vollbild beenden (F11)' : 'Vollbild (F11)',
+                    icon: Icon(state._fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+                    onPressed: state._toggleFullscreen,
+                  ),
+                  PopupMenuButton<VoidCallback>(
+                    tooltip: 'Mehr',
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (a) => a(),
+                    itemBuilder: (_) => [
+                      CheckedPopupMenuItem(
+                        value: () => tools.setInstantPen(!tools.instantPen),
+                        checked: tools.instantPen,
+                        child: const Text('Mit dem Stift sofort zeichnen'),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: state._toggleDiagnostics,
+                        checked: state._showDiagnostics,
+                        child: const Text('Stift-Test anzeigen'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Unten: Seitenregler zum schnellen Springen.
+class _PageBar extends StatelessWidget {
+  const _PageBar({required this.state});
+  final _ViewerScreenState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final count = state._pageCount;
+    return Listener(
+      onPointerDown: (_) => state._restartHideTimer(),
+      child: SafeArea(
+        top: false,
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 620),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: Material(
+              elevation: 2,
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(28),
+              clipBehavior: Clip.antiAlias,
+              child: Ink(
+                decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Vorherige Seite',
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: state._prev,
+                    ),
+                    Expanded(
+                      child: Slider(
+                        min: 1,
+                        max: count.toDouble(),
+                        divisions: count - 1,
+                        value: state._page.toDouble().clamp(1, count.toDouble()),
+                        label: 'Seite ${state._page}',
+                        onChanged: (v) => state._goTo(v.round()),
+                      ),
+                    ),
+                    IconButton(tooltip: 'Nächste Seite', icon: const Icon(Icons.chevron_right), onPressed: state._next),
+                  ],
                 ),
-              ],
-            );
-          },
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -480,83 +655,4 @@ class _TitleArea extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ColorDot extends StatelessWidget {
-  const _ColorDot({required this.color, required this.name, required this.selected, required this.onTap});
-  final Color color;
-  final String name;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: name,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 18,
-        child: Container(
-          width: 26,
-          height: 26,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
-              width: 3,
-              strokeAlign: BorderSide.strokeAlignOutside,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Auswahl der Schriftgrösse für Text-Notizen.
-class _SizeButton extends StatelessWidget {
-  const _SizeButton({required this.label, required this.fontSize, required this.selected, required this.onTap});
-  final String label;
-  final double fontSize;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: 'Schrift: $label',
-      child: InkResponse(
-        onTap: onTap,
-        radius: 18,
-        child: Container(
-          width: 30,
-          height: 30,
-          alignment: Alignment.center,
-          margin: const EdgeInsets.symmetric(horizontal: 1),
-          decoration: BoxDecoration(
-            color: selected ? scheme.primaryContainer : null,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            'A',
-            style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  const _Divider();
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 1,
-    height: 24,
-    margin: const EdgeInsets.symmetric(horizontal: 6),
-    color: Theme.of(context).dividerColor,
-  );
 }

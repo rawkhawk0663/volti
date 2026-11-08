@@ -5,7 +5,9 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/ink/stroke.dart';
 import '../../app/theme.dart';
+import '../../core/ink/drawing_preset.dart';
 import 'ink_controller.dart';
+import 'tool_controller.dart';
 import 'text_layer.dart';
 
 /// Rechnet den rohen Stiftdruck des Geräts auf 0..1 um.
@@ -26,11 +28,16 @@ bool isEraserEvent(PointerEvent e) =>
 ///
 /// Fingereingaben werden hier bewusst ignoriert (Handballenerkennung):
 /// Gezeichnet wird nur mit Stift oder Maus.
+///
+/// In der Spielansicht zeichnet der Stift sofort, sobald er gezogen wird.
+/// Ein kurzes Antippen mit dem Stift bleibt ein Antippen (blättert um) und
+/// hinterlässt keinen Punkt.
 class InkLayer extends StatefulWidget {
-  const InkLayer({super.key, required this.page, required this.controller});
+  const InkLayer({super.key, required this.page, required this.controller, required this.tools});
 
   final int page;
   final InkController controller;
+  final ToolController tools;
 
   @override
   State<InkLayer> createState() => _InkLayerState();
@@ -39,12 +46,18 @@ class InkLayer extends StatefulWidget {
 class _InkLayerState extends State<InkLayer> {
   int? _pointer;
   bool _erasing = false;
-  InkTool _tool = InkTool.pen;
+
+  /// Strich aus der Spielansicht: zählt erst, wenn der Stift weit genug
+  /// gezogen wurde (sonst war es ein Antippen).
+  bool _provisional = false;
+  Offset _start = Offset.zero;
+  DrawingPreset? _preset;
   final List<InkPoint> _points = [];
   Offset? _eraserPos;
   final _activeRepaint = ValueNotifier<int>(0);
 
   InkController get c => widget.controller;
+  ToolController get tools => widget.tools;
 
   @override
   void dispose() {
@@ -67,27 +80,45 @@ class _InkLayerState extends State<InkLayer> {
   void _down(PointerDownEvent e, Size size) {
     if (_pointer != null || !_accepts(e)) return;
     final eraserEvent = isEraserEvent(e);
-    if ((c.mode == ToolMode.read || c.mode == ToolMode.text) && !eraserEvent) return;
+    final mode = tools.mode;
+    final instant = mode == ToolMode.read && e.kind == PointerDeviceKind.stylus && tools.instantPen;
+    if (!eraserEvent && mode != ToolMode.draw && mode != ToolMode.eraser && !instant) return;
     _pointer = e.pointer;
-    _erasing = eraserEvent || c.mode == ToolMode.eraser;
-    _tool = c.mode == ToolMode.highlighter ? InkTool.highlighter : InkTool.pen;
+    _erasing = eraserEvent || mode == ToolMode.eraser;
+    _provisional = instant && !eraserEvent;
+    _start = e.localPosition;
+    _preset = tools.current;
     _points.clear();
+    if (!_provisional) tools.isDrawing.value = true;
     _handle(e, size);
   }
 
   void _move(PointerEvent e, Size size) {
     if (e.pointer != _pointer) return;
+    if (_provisional && (e.localPosition - _start).distance > kTouchSlop) {
+      _provisional = false;
+      tools.isDrawing.value = true;
+    }
     _handle(e, size);
   }
 
   void _up(PointerEvent e, Size size) {
     if (e.pointer != _pointer) return;
-    if (!_erasing && _points.isNotEmpty) {
-      c.addStroke(page: widget.page, tool: _tool, points: List.of(_points));
+    final preset = _preset;
+    if (!_erasing && !_provisional && _points.isNotEmpty && preset != null) {
+      c.addStroke(
+        page: widget.page,
+        tool: preset.tool,
+        color: preset.color,
+        width: preset.width,
+        points: List.of(_points),
+      );
     }
     _pointer = null;
+    _provisional = false;
     _points.clear();
     _eraserPos = null;
+    tools.isDrawing.value = false;
     _activeRepaint.value++;
   }
 
@@ -102,7 +133,7 @@ class _InkLayerState extends State<InkLayer> {
     _activeRepaint.value++;
   }
 
-  static const double eraserRadius = 14;
+  double get eraserRadius => tools.eraserRadius;
 
   void _eraseAt(Offset pos, Size size) {
     final hits = c.annotations.visibleStrokesOn(widget.page).where((s) {
@@ -182,13 +213,12 @@ class _ActivePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = state.c;
     if (state._erasing) {
       final pos = state._eraserPos;
       if (pos != null) {
         canvas.drawCircle(
           pos,
-          _InkLayerState.eraserRadius,
+          state.eraserRadius,
           Paint()
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.5
@@ -197,16 +227,9 @@ class _ActivePainter extends CustomPainter {
       }
       return;
     }
-    if (state._points.isEmpty) return;
-    final hl = state._tool == InkTool.highlighter;
-    paintStroke(
-      canvas,
-      size,
-      state._tool,
-      Color(hl ? InkController.highlighterColor : c.penColor),
-      hl ? InkController.highlighterWidth : InkController.penWidth,
-      state._points,
-    );
+    final preset = state._preset;
+    if (state._points.isEmpty || preset == null || state._provisional) return;
+    paintStroke(canvas, size, preset.tool, Color(preset.color), preset.width, state._points);
   }
 
   @override
@@ -240,16 +263,21 @@ void paintStroke(Canvas canvas, Size size, InkTool tool, Color color, double wid
 
   // Stift: Breite folgt dem Druck (0.35x bis 1.65x der Grundbreite).
   double widthFor(double pressure) => w * (0.35 + 1.3 * pressure);
+  // Halbtransparente Stifte (z. B. Bleistift) als Ganzes durchsichtig machen,
+  // sonst werden die Übergänge zwischen den Teilstücken dunkler.
+  final translucent = color.a < 1.0;
+  if (translucent) canvas.saveLayer(null, Paint()..color = Color.fromRGBO(0, 0, 0, color.a));
   final paint = Paint()
-    ..color = color
+    ..color = translucent ? color.withValues(alpha: 1) : color
     ..strokeCap = StrokeCap.round
     ..isAntiAlias = true;
   if (pts.length == 1) {
     canvas.drawCircle(at(pts.first), widthFor(pts.first.pressure) / 2, paint);
-    return;
+  } else {
+    for (var i = 1; i < pts.length; i++) {
+      paint.strokeWidth = math.max(0.5, widthFor((pts[i - 1].pressure + pts[i].pressure) / 2));
+      canvas.drawLine(at(pts[i - 1]), at(pts[i]), paint);
+    }
   }
-  for (var i = 1; i < pts.length; i++) {
-    paint.strokeWidth = math.max(0.5, widthFor((pts[i - 1].pressure + pts[i].pressure) / 2));
-    canvas.drawLine(at(pts[i - 1]), at(pts[i]), paint);
-  }
+  if (translucent) canvas.restore();
 }

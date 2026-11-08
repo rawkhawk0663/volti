@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../viewer/tool_controller.dart';
 import '../viewer/viewer_screen.dart';
 import 'library_controller.dart';
 
@@ -17,6 +18,7 @@ Future<void> openScores(
     MaterialPageRoute(
       builder: (_) => ViewerScreen(
         items: items,
+        tools: ToolScope.read(context),
         startIndex: start,
         setlistName: setlistName,
         onOpened: library.settings.recordOpened,
