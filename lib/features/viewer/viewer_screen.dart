@@ -8,6 +8,7 @@ import '../../core/pdf/page_image_cache.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
 import 'pen_diagnostics.dart';
+import 'text_layer.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
 class ViewerItem {
@@ -41,6 +42,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
   late InkController _ink;
   final _diagnostics = PenDiagnostics();
   bool _showDiagnostics = false;
+
+  /// Wird gerade eine Text-Notiz getippt? Dann blättern Tasten nicht um.
+  bool _editingText = false;
   String? _error;
   int _page = 1;
   late int _index = widget.startIndex.clamp(0, widget.items.length - 1);
@@ -142,7 +146,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   static final _prevKeys = {LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.pageUp};
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    if (event is KeyUpEvent || _editingText) return KeyEventResult.ignored;
     final key = event.logicalKey;
     final ctrl = HardwareKeyboard.instance.isControlPressed;
     final shift = HardwareKeyboard.instance.isShiftPressed;
@@ -165,6 +169,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
       _ink.setMode(ToolMode.highlighter);
     } else if (event is KeyDownEvent && key == LogicalKeyboardKey.keyE) {
       _ink.setMode(ToolMode.eraser);
+    } else if (event is KeyDownEvent && key == LogicalKeyboardKey.keyT) {
+      _ink.setMode(ToolMode.text);
     } else if (key == LogicalKeyboardKey.escape) {
       if (_ink.mode != ToolMode.read) {
         _ink.setMode(ToolMode.read);
@@ -306,6 +312,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
               ),
               // Im Lese-Modus reagiert die Stift-Ebene nur auf das Radierer-Ende.
               InkLayer(key: ValueKey('$_index/$_page'), page: _page, controller: _ink),
+              TextNotesLayer(
+                key: ValueKey('text/$_index/$_page'),
+                page: _page,
+                controller: _ink,
+                onEditingChanged: (v) => setState(() => _editingText = v),
+              ),
             ],
           ),
         ),
@@ -366,7 +378,18 @@ class _Toolbar extends StatelessWidget {
                         tool(ToolMode.pen, Icons.edit, 'Stift (P)'),
                         tool(ToolMode.highlighter, Icons.border_color, 'Textmarker (H)'),
                         tool(ToolMode.eraser, Icons.auto_fix_normal, 'Radierer (E)'),
-                        if (ink.mode == ToolMode.pen) ...[
+                        tool(ToolMode.text, Icons.text_fields, 'Text-Notiz (T)'),
+                        if (ink.mode == ToolMode.text) ...[
+                          const SizedBox(width: 4),
+                          for (final (i, size) in InkController.textSizes.indexed)
+                            _SizeButton(
+                              label: const ['Klein', 'Mittel', 'Gross'][i],
+                              fontSize: 12.0 + i * 4,
+                              selected: ink.textSize == size,
+                              onTap: () => ink.setTextSize(size),
+                            ),
+                        ],
+                        if (ink.mode == ToolMode.pen || ink.mode == ToolMode.text) ...[
                           const SizedBox(width: 4),
                           for (final (color, name) in _penColors)
                             _ColorDot(
@@ -484,6 +507,41 @@ class _ColorDot extends StatelessWidget {
               width: 3,
               strokeAlign: BorderSide.strokeAlignOutside,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Auswahl der Schriftgrösse für Text-Notizen.
+class _SizeButton extends StatelessWidget {
+  const _SizeButton({required this.label, required this.fontSize, required this.selected, required this.onTap});
+  final String label;
+  final double fontSize;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: 'Schrift: $label',
+      child: InkResponse(
+        onTap: onTap,
+        radius: 18,
+        child: Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            color: selected ? scheme.primaryContainer : null,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            'A',
+            style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600),
           ),
         ),
       ),

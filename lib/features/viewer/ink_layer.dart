@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/ink/stroke.dart';
 import 'ink_controller.dart';
+import 'text_layer.dart';
 
 /// Rechnet den rohen Stiftdruck des Geräts auf 0..1 um.
 /// Geräte ohne Drucksensor (Maus) liefern 0.5.
@@ -65,7 +66,7 @@ class _InkLayerState extends State<InkLayer> {
   void _down(PointerDownEvent e, Size size) {
     if (_pointer != null || !_accepts(e)) return;
     final eraserEvent = isEraserEvent(e);
-    if (c.mode == ToolMode.read && !eraserEvent) return;
+    if ((c.mode == ToolMode.read || c.mode == ToolMode.text) && !eraserEvent) return;
     _pointer = e.pointer;
     _erasing = eraserEvent || c.mode == ToolMode.eraser;
     _tool = c.mode == ToolMode.highlighter ? InkTool.highlighter : InkTool.pen;
@@ -115,6 +116,9 @@ class _InkLayerState extends State<InkLayer> {
       return false;
     }).toList();
     if (hits.isNotEmpty) c.eraseStrokes(hits);
+    final eraser = Rect.fromCircle(center: pos, radius: eraserRadius);
+    final textHits = c.annotations.visibleTextsOn(widget.page).where((t) => textNoteBounds(t, size).overlaps(eraser));
+    if (textHits.isNotEmpty) c.deleteTexts(textHits.toList());
   }
 
   static double _distToSegment(Offset p, Offset a, Offset b) {

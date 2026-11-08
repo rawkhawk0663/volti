@@ -30,6 +30,7 @@ class ScoreSidecar {
     'version': formatVersion,
     'meta': meta.toJson(),
     'strokes': annotations.toJson()['strokes'],
+    if (annotations.allTexts.isNotEmpty) 'texts': annotations.toJson()['texts'],
   };
 
   /// Liest auch das alte Format aus Meilenstein 1 (nur Anmerkungen).

@@ -38,6 +38,7 @@ Volti legt dabei eine **Kopie** in seinem eigenen Datenordner ab. Deine Original
 |---|---|
 | Umblättern | Pedal (iRig BlueTurn in jedem Modus), Pfeiltasten, Bild ↑/↓, Leertaste, rechts/links tippen oder wischen |
 | Stift / Textmarker / Radierer | Symbole oben oder Tasten **P** / **H** / **E**; zurück zum Lesen mit **Esc** |
+| Text-Notiz | Symbol **Tт** oder Taste **T**, dann auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen. Eine Notiz antippen = ändern, ziehen = verschieben. Grösse (A A A) und Farbe wählst du oben |
 | Radieren mit dem Surface Pen | Radierer-Ende des Stifts benutzen oder Seitentaste gedrückt halten, auch im Lese-Modus |
 | Rückgängig / Wiederholen | Pfeil-Symbole oder **Strg+Z** / **Strg+Y** |
 | Stift-Test | Symbol ((•)) oben zeigt Druck, Gerätetyp, Tasten und Ereignisrate |

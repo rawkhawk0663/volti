@@ -31,10 +31,11 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 1. **Volti verwaltet seine Noten selbst.** Es gibt keinen frei wählbaren Bibliotheksordner, das wollte der Besitzer ausdrücklich so. PDFs kommen über den Import (`ScoreImporter`) als Kopie in den Datenordner `<ApplicationSupport>/Bibliothek/Noten/`. Die Originale bleiben unangetastet.
    Infos und Anmerkungen liegen in `<datei>.pdf.volti.json` neben der Kopie (Format `volti-score` v2; v1 `volti-annotations` muss lesbar bleiben). Setlists liegen in `Bibliothek/.volti/setlists/<id>.json` und verweisen auf Stücke über den Pfad relativ zu `Bibliothek` (z. B. `Noten/x.pdf`).
    Die PDFs werden nie verändert. Ein alter Bibliotheksordner aus v0.1.2 (`libraryRoot` in den Einstellungen) wird beim Start einmalig übernommen (`migrateLegacyLibrary`).
-2. **Koordinaten sind normiert** (0..1 relativ zur Seite).
+2. **Koordinaten sind normiert** (0..1 relativ zur Seite). Das gilt für Striche und für Text-Notizen (`TextNote`, im Feld `texts` der Zusatzdatei; Textgrösse relativ zur Seitenbreite).
 3. **Sync-taugliches Datenmodell:** Infos werden pro Feld zusammengeführt (jüngste Änderung gewinnt). Jeder Strich hat eine UUID. Gelöschte Striche werden als Grabstein (`deleted: true`) behalten. Beim Speichern wird mit dem Stand auf der Festplatte zusammengeführt (`ScoreAnnotations.merge`). „Rückgängig“ beim Löschen erzeugt eine Kopie mit neuer ID.
 4. **Mit dem Finger wird nie gezeichnet** (Handballenerkennung). Das Radierer-Ende und die Seitentaste des Stifts radieren.
-5. Pedale senden Tastendrücke. Alle Pfeiltasten, Bild auf/ab und die Leertaste blättern. Buttons in der Werkzeugleiste stehen in `ExcludeFocus`, damit sie keine Tastendrücke abfangen.
+5. Während eine Text-Notiz getippt wird (`_editingText`), ignoriert die Notenansicht alle Tasten. Sonst würden z. B. „p“ oder die Leertaste Werkzeuge wechseln oder umblättern.
+   Pedale senden Tastendrücke. Alle Pfeiltasten, Bild auf/ab und die Leertaste blättern. Buttons in der Werkzeugleiste stehen in `ExcludeFocus`, damit sie keine Tastendrücke abfangen.
 
 6. **Sync:** Ob eine fehlende Datei neu ist oder gelöscht wurde, entscheidet die gerätespezifische Basis (`sync_base.json`, Stand des letzten Abgleichs). `.volti.json` wird immer zusammengeführt. Die Sicherheitsbremse (Markierungsdatei `.volti/library.json` fehlt, oder mehr als die Hälfte der Noten würde gelöscht) darf nicht entfernt werden.
 
