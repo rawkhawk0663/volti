@@ -46,7 +46,10 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Leiste und Fenster werden beim Zeichnen fast durchsichtig. Das Fenster steht in einer `TextFieldTapRegion`, damit Stiländerungen eine gerade getippte Notiz nicht beenden.
    Einstellungen und Favoriten liegen in `Bibliothek/.volti/presets.json` (Format `volti-tools` v2; v1 `volti-presets` wird zu Favoriten) und werden synchronisiert (jüngste Fassung gewinnt).
    Text-Notizen haben eine eigene Text- und Hintergrundfarbe (`bg`, 0 = durchsichtig). Ältere Notizen ohne `bg` behalten den hellen Hintergrund `0xC8FFFFFF`.
-   Für das Vollbild wird `window_manager` in der Version **0.5.x** verwendet (0.6 baut auf einer neuen, ungeprüften Grundlage auf).
+   Für das Vollbild wird `window_manager` in der Version **0.5.x** verwendet (0.6 baut auf einer neuen, ungeprüften Grundlage auf). „Noten im Vollbild öffnen“ ist eine eigene Einstellung (⋮-Menü). F11, Esc und das Symbol schalten nur für den Moment um. Ein maximiertes Fenster wird vor dem Vollbild auf normale Grösse gesetzt, weil Windows sonst die Titelleiste stehen lässt, und danach wieder maximiert.
+   Text-Notizen: Schriften `VoltiSans` (Roboto), `VoltiSerif` (Noto Serif) und `VoltiMono` (Roboto Mono) liegen in `assets/fonts` (OFL). Es sind variable Schriften: Fett wird über `FontVariation.weight` eingestellt. Felder `font`, `b` und `i` in der Zusatzdatei.
+8. **Flüssigkeit:** Notenseite, Schatten, Strich-Ebenen, Text-Ebene, Leisten und Einstellungsfenster stehen jeweils in einer eigenen `RepaintBoundary`. Ohne diese malt jede Stiftbewegung die ganze Seite samt Schatten neu, und alles ruckelt.
+   Beim Ziehen des Einstellungsfensters ändert sich nur die Position (`ValueListenableBuilder`), nicht der Inhalt. Die Notenansicht baut sich bei Werkzeug-Änderungen nur neu auf, wenn sich das Werkzeug selbst ändert.
 
 ## Prüfen
 ```bash

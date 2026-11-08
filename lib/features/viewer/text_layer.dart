@@ -6,9 +6,34 @@ import '../../app/theme.dart';
 import 'ink_controller.dart';
 import 'tool_controller.dart';
 
+/// Schriftfamilie zu einer Schriftart (Schriften liegen in der App).
+String fontFamilyOf(TextFont f) => switch (f) {
+  TextFont.sans => 'VoltiSans',
+  TextFont.serif => 'VoltiSerif',
+  TextFont.mono => 'VoltiMono',
+};
+
+/// Gemeinsamer Schriftstil für Notizen, Editor und Vorschau.
+TextStyle voltiTextStyle({
+  required TextFont font,
+  required bool bold,
+  required bool italic,
+  required double fontSize,
+  required Color color,
+}) => TextStyle(
+  fontFamily: fontFamilyOf(font),
+  fontSize: fontSize,
+  color: color,
+  height: 1.2,
+  fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+  fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+  // Die Schriften sind "variabel": die Dicke wird hier eingestellt.
+  fontVariations: [FontVariation.weight(bold ? 700 : 400)],
+);
+
 /// Schriftstil einer Text-Notiz auf einer Seite der Breite [pageWidth].
 TextStyle noteStyle(TextNote t, double pageWidth) =>
-    TextStyle(fontSize: t.size * pageWidth, color: Color(t.color), height: 1.2, fontWeight: FontWeight.w500);
+    voltiTextStyle(font: t.font, bold: t.bold, italic: t.italic, fontSize: t.size * pageWidth, color: Color(t.color));
 
 /// Fläche einer Text-Notiz auf der Seite (für den Radierer).
 Rect textNoteBounds(TextNote t, Size size) {
@@ -93,8 +118,20 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
                 size: st.size,
                 color: st.color,
                 background: st.background,
+                font: st.font,
+                bold: st.bold,
+                italic: st.italic,
               )
-            : ctrl.updateText(id, text: text, size: st.size, color: st.color, background: st.background);
+            : ctrl.updateText(
+                id,
+                text: text,
+                size: st.size,
+                color: st.color,
+                background: st.background,
+                font: st.font,
+                bold: st.bold,
+                italic: st.italic,
+              );
       });
     }
     _text.dispose();
@@ -107,7 +144,14 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     // dort gelten dann für diese Notiz.
     if (existing != null) {
       tools.setTextStyle(
-        tools.textStyle.copyWith(size: existing.size, color: existing.color, background: existing.background),
+        tools.textStyle.copyWith(
+          size: existing.size,
+          color: existing.color,
+          background: existing.background,
+          font: existing.font,
+          bold: existing.bold,
+          italic: existing.italic,
+        ),
         save: false,
       );
     }
@@ -140,9 +184,21 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
         size: st.size,
         color: st.color,
         background: st.background,
+        font: st.font,
+        bold: st.bold,
+        italic: st.italic,
       );
     } else {
-      c.updateText(id, text: text, size: st.size, color: st.color, background: st.background);
+      c.updateText(
+        id,
+        text: text,
+        size: st.size,
+        color: st.color,
+        background: st.background,
+        font: st.font,
+        bold: st.bold,
+        italic: st.italic,
+      );
     }
     widget.onEditingChanged(false);
   }
@@ -235,11 +291,12 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     final at = _editAt!;
     // Stil aus dem Text-Werkzeug – Änderungen im Fenster sieht man sofort.
     final st = tools.textStyle;
-    final style = TextStyle(
+    final style = voltiTextStyle(
+      font: st.font,
+      bold: st.bold,
+      italic: st.italic,
       fontSize: st.size * size.width,
       color: Color(st.color),
-      height: 1.2,
-      fontWeight: FontWeight.w500,
     );
     final left = at.dx * size.width;
     return Positioned(

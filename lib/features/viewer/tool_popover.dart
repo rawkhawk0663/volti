@@ -7,6 +7,7 @@ import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
 import '../../core/ink/tool_settings.dart';
 import 'ink_layer.dart';
+import 'text_layer.dart';
 import 'tool_controller.dart';
 
 /// Farben für Stift und Text (deckend) und Textmarker (hell).
@@ -339,6 +340,53 @@ class _TextSettings extends StatelessWidget {
           ),
           child: _TextSample(style: s, fontSize: (s.size * 900).clamp(11, 36), text: 'Bogen ab'),
         ),
+        const _Label('Schrift'),
+        Row(
+          children: [
+            for (final f in TextFont.values) ...[
+              Expanded(
+                child: _ToggleBox(
+                  selected: s.font == f,
+                  tooltip: const {
+                    TextFont.sans: 'Roboto',
+                    TextFont.serif: 'Noto Serif',
+                    TextFont.mono: 'Roboto Mono',
+                  }[f]!,
+                  onTap: () => tools.setTextStyle(s.copyWith(font: f)),
+                  child: Text(
+                    'Aa',
+                    style: voltiTextStyle(font: f, bold: false, italic: false, fontSize: 17, color: Colors.black87),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            _ToggleBox(
+              selected: s.bold,
+              tooltip: 'Fett',
+              onTap: () => tools.setTextStyle(s.copyWith(bold: !s.bold)),
+              child: const Text(
+                'F',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87),
+              ),
+            ),
+            const SizedBox(width: 6),
+            _ToggleBox(
+              selected: s.italic,
+              tooltip: 'Kursiv',
+              onTap: () => tools.setTextStyle(s.copyWith(italic: !s.italic)),
+              child: const Text(
+                'K',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontStyle: FontStyle.italic,
+                  fontFamily: 'VoltiSerif',
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
         const _Label('Grösse'),
         Slider(
           min: TextStyleSetting.minSize,
@@ -394,13 +442,50 @@ class _TextSample extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Text(
         text,
-        style: TextStyle(fontSize: fontSize, color: Color(style.color), fontWeight: FontWeight.w500),
+        style: voltiTextStyle(
+          font: style.font,
+          bold: style.bold,
+          italic: style.italic,
+          fontSize: fontSize,
+          color: Color(style.color),
+        ),
       ),
     ),
   );
 }
 
 // ------------------------------------------------------------------ Bausteine
+class _ToggleBox extends StatelessWidget {
+  const _ToggleBox({required this.selected, required this.tooltip, required this.onTap, required this.child});
+  final bool selected;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 40,
+          constraints: const BoxConstraints(minWidth: 40),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? scheme.primaryContainer : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: selected ? scheme.primary : scheme.outlineVariant, width: selected ? 2 : 1),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 class _FavoriteChip extends StatelessWidget {
   const _FavoriteChip({
     required this.selected,

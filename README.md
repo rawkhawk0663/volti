@@ -40,7 +40,7 @@ Beim Öffnen siehst du nur die Noten, im Vollbild. Die Leiste erscheint kurz und
 |---|---|
 | Umblättern | Pedal (iRig BlueTurn in jedem Modus), Pfeiltasten, Bild ↑/↓, Leertaste, im **rechten oder linken Drittel** tippen oder wischen |
 | Leiste ein-/ausblenden | **In die Mitte tippen**. Am Computer genügt es auch, die Maus an den oberen Rand zu bewegen |
-| Vollbild ein/aus | Symbol in der Leiste oder **F11**. Volti merkt sich die Einstellung |
+| Vollbild ein/aus | Symbol in der Leiste oder **F11** (gilt für den Moment). Ob Stücke im Vollbild öffnen, stellst du unter ⋮ → „Noten im Vollbild öffnen“ ein |
 | Sofort zeichnen | Mit dem **Stift aufsetzen und ziehen**. Kurz antippen blättert weiterhin. Ausschalten über ⋮ → „Mit dem Stift sofort zeichnen“ |
 | Radieren mit dem Surface Pen | Radierer-Ende des Stifts benutzen oder Seitentaste gedrückt halten, auch in der Spielansicht |
 | Seite springen | Leiste einblenden, dann den Regler unten ziehen |
@@ -57,7 +57,7 @@ Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugl
 | Favoriten | Oben im Fenster. Antippen übernimmt die Einstellung, ☆ speichert die aktuelle als Favorit, lange drücken oder Rechtsklick entfernt einen. Tasten **1–9** wählen die Favoriten |
 | Stift und Textmarker | Farbe, Breite und Deckkraft, mit Vorschau |
 | Radierer | Drei Grössen. Löscht ganze Striche und Text-Notizen |
-| Text-Notiz | Auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen. Im Fenster stellst du Grösse, **Textfarbe** und **Hintergrund** ein (ohne, Weiss, Gelb, Grün, Blau, Rosa). Tippst du eine bestehende Notiz an, gelten Änderungen im Fenster für diese Notiz. Ziehen verschiebt sie |
+| Text-Notiz | Auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen. Im Fenster stellst du **Schrift** (Roboto, Noto Serif, Roboto Mono), **Fett** (F), **Kursiv** (K), Grösse, **Textfarbe** und **Hintergrund** ein (ohne, Weiss, Gelb, Grün, Blau, Rosa). Tippst du eine bestehende Notiz an, gelten Änderungen im Fenster für diese Notiz. Ziehen verschiebt sie |
 | Rückgängig / Wiederholen | Pfeile in der Leiste oder **Strg+Z** / **Strg+Y** |
 | Seite leeren | Papierkorb-Symbol (lässt sich rückgängig machen) |
 | Leiste auf die andere Seite | Doppelpfeil unten in der Leiste |

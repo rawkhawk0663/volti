@@ -70,15 +70,25 @@ void main() {
       expect(again.favoritesFor(InkTool.pen).length, before);
     });
 
-    test('Text-Stil mit Hintergrund und Text-Favoriten', () async {
+    test('Text-Stil mit Schrift, fett, kursiv, Hintergrund und Text-Favoriten', () async {
       final tools = await makeTools(dir);
       await tools.load();
-      tools.setTextStyle(tools.textStyle.copyWith(color: 0xFF1565C0, background: 0x99FFE066));
+      tools.setTextStyle(
+        tools.textStyle.copyWith(
+          color: 0xFF1565C0,
+          background: 0x99FFE066,
+          font: TextFont.serif,
+          bold: true,
+          italic: true,
+        ),
+      );
       tools.addCurrentTextFavorite();
       await tools.flush();
       final again = await makeTools(dir);
       await again.load();
       expect(again.textStyle.background, 0x99FFE066);
+      expect(again.textStyle.font, TextFont.serif);
+      expect(again.textStyle.bold && again.textStyle.italic, isTrue);
       expect(again.textFavorites.any((f) => f.color == 0xFF1565C0 && f.background == 0x99FFE066), isTrue);
     });
 
@@ -168,8 +178,11 @@ void main() {
         color: 0xFF000000,
         background: TextNote.noBackground,
       )!;
-      c.updateText(id, background: 0x99FFE066, color: 0xFFC62828);
+      c.updateText(id, background: 0x99FFE066, color: 0xFFC62828, font: TextFont.mono, italic: true);
       expect(c.annotations.text(id)!.background, 0x99FFE066);
+      expect(c.annotations.text(id)!.font, TextFont.mono);
+      final roundTrip = TextNote.fromJson(c.annotations.text(id)!.toJson());
+      expect([roundTrip.font, roundTrip.italic, roundTrip.bold], [TextFont.mono, true, false]);
       expect(c.annotations.text(id)!.color, 0xFFC62828);
       c.undo();
       expect(c.annotations.text(id)!.background, TextNote.noBackground);
@@ -185,6 +198,8 @@ void main() {
         'created': '2026-11-08T10:00:00Z',
       });
       expect(legacy.background, TextNote.legacyBackground);
+      expect(legacy.font, TextFont.sans);
+      expect(legacy.bold, isFalse);
       c.dispose();
     });
   });

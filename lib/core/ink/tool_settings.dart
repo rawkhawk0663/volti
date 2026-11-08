@@ -45,7 +45,15 @@ class DrawingPreset {
 
 /// Stil für neue Text-Notizen.
 class TextStyleSetting {
-  const TextStyleSetting({required this.id, required this.size, required this.color, required this.background});
+  const TextStyleSetting({
+    required this.id,
+    required this.size,
+    required this.color,
+    required this.background,
+    this.font = TextFont.sans,
+    this.bold = false,
+    this.italic = false,
+  });
 
   final String id;
 
@@ -55,23 +63,54 @@ class TextStyleSetting {
 
   /// Hintergrund (ARGB), [TextNote.noBackground] = durchsichtig.
   final int background;
+  final TextFont font;
+  final bool bold;
+  final bool italic;
 
-  TextStyleSetting copyWith({String? id, double? size, int? color, int? background}) => TextStyleSetting(
+  TextStyleSetting copyWith({
+    String? id,
+    double? size,
+    int? color,
+    int? background,
+    TextFont? font,
+    bool? bold,
+    bool? italic,
+  }) => TextStyleSetting(
     id: id ?? this.id,
     size: size ?? this.size,
     color: color ?? this.color,
     background: background ?? this.background,
+    font: font ?? this.font,
+    bold: bold ?? this.bold,
+    italic: italic ?? this.italic,
   );
 
-  bool sameLook(TextStyleSetting o) => (o.size - size).abs() < 1e-6 && o.color == color && o.background == background;
+  bool sameLook(TextStyleSetting o) =>
+      (o.size - size).abs() < 1e-6 &&
+      o.color == color &&
+      o.background == background &&
+      o.font == font &&
+      o.bold == bold &&
+      o.italic == italic;
 
-  Map<String, dynamic> toJson() => {'id': id, 'size': size, 'color': color, 'bg': background};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'size': size,
+    'color': color,
+    'bg': background,
+    'font': font.name,
+    'b': bold,
+    'i': italic,
+  };
 
   static TextStyleSetting fromJson(Map<String, dynamic> j) => TextStyleSetting(
     id: j['id'] as String? ?? _newId(),
     size: (j['size'] as num).toDouble(),
     color: j['color'] as int,
     background: j['bg'] as int? ?? TextNote.noBackground,
+    font: TextFont.fromName(j['font'] as String?),
+    bold: j['b'] == true,
+    italic: j['i'] == true,
   );
 
   static const minSize = 0.012, maxSize = 0.045;

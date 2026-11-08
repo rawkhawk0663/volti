@@ -92,8 +92,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
     _restartHideTimer();
   }
 
+  ToolMode? _lastMode;
+  bool? _lastPaletteLeft;
+
+  /// Die ganze Ansicht nur neu aufbauen, wenn sich das Werkzeug wechselt –
+  /// nicht bei jeder Bewegung eines Reglers im Einstellungsfenster.
   void _onToolsChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    if (tools.mode != _lastMode || tools.paletteLeft != _lastPaletteLeft) {
+      _lastMode = tools.mode;
+      _lastPaletteLeft = tools.paletteLeft;
+      setState(() {});
+    }
   }
 
   /// Öffnet ein Stück der Liste. [atEnd]: auf der letzten Seite beginnen
@@ -197,20 +207,15 @@ class _ViewerScreenState extends State<ViewerScreen> {
     await setAppFullscreen(on);
   }
 
-  /// Schaltet das Vollbild ein und prüft kurz danach, ob es geklappt hat
-  /// (sonst ein zweiter Versuch).
+  /// Schaltet das Vollbild nach dem Aufbau der Ansicht ein.
   Future<void> _enterFullscreenReliably() async {
     if (!mounted || !_fullscreen) return;
     await setAppFullscreen(true);
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    if (mounted && _fullscreen && !await isAppFullscreen()) await setAppFullscreen(true);
   }
 
-  Future<void> _toggleFullscreen() async {
-    final on = !_fullscreen;
-    await tools.setFullscreen(on);
-    await _setFullscreen(on);
-  }
+  /// F11, Esc oder Symbol: nur für den Moment. Ob Stücke im Vollbild
+  /// öffnen, ist eine eigene Einstellung (⋮-Menü).
+  Future<void> _toggleFullscreen() => _setFullscreen(!_fullscreen);
 
   void _toggleDiagnostics() => setState(() => _showDiagnostics = !_showDiagnostics);
 
@@ -441,34 +446,45 @@ class _ViewerScreenState extends State<ViewerScreen> {
     cache.setVisiblePages({_page});
     cache.preload([_page + 1, _page + 2, _page - 1], pixelWidth);
 
+    // RepaintBoundary: Jede Ebene wird nur neu gemalt, wenn sie sich selbst
+    // ändert. Sonst würde z. B. jede Stiftbewegung auch die grosse Notenseite
+    // samt Schatten neu malen – das macht das Zeichnen träge.
     return Center(
-      child: SizedBox(
-        width: w,
-        height: h,
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))],
-          ),
+      child: RepaintBoundary(
+        child: SizedBox(
+          width: w,
+          height: h,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              ListenableBuilder(
-                listenable: cache,
-                builder: (context, _) {
-                  final img = cache.imageFor(_page, pixelWidth);
-                  return img == null
-                      ? const SizedBox.shrink()
-                      : RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
-                },
+              const RepaintBoundary(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))],
+                  ),
+                ),
+              ),
+              RepaintBoundary(
+                child: ListenableBuilder(
+                  listenable: cache,
+                  builder: (context, _) {
+                    final img = cache.imageFor(_page, pixelWidth);
+                    return img == null
+                        ? const SizedBox.shrink()
+                        : RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
+                  },
+                ),
               ),
               InkLayer(key: ValueKey('$_index/$_page'), page: _page, controller: _ink, tools: tools),
-              TextNotesLayer(
-                key: ValueKey('text/$_index/$_page'),
-                page: _page,
-                controller: _ink,
-                tools: tools,
-                onEditingChanged: (v) => setState(() => _editingText = v),
+              RepaintBoundary(
+                child: TextNotesLayer(
+                  key: ValueKey('text/$_index/$_page'),
+                  page: _page,
+                  controller: _ink,
+                  tools: tools,
+                  onEditingChanged: (v) => setState(() => _editingText = v),
+                ),
               ),
             ],
           ),
@@ -550,6 +566,11 @@ class _TopBar extends StatelessWidget {
                     icon: const Icon(Icons.more_vert),
                     onSelected: (a) => a(),
                     itemBuilder: (_) => [
+                      CheckedPopupMenuItem(
+                        value: () => tools.setFullscreen(!tools.fullscreen),
+                        checked: tools.fullscreen,
+                        child: const Text('Noten im Vollbild öffnen'),
+                      ),
                       CheckedPopupMenuItem(
                         value: () => tools.setInstantPen(!tools.instantPen),
                         checked: tools.instantPen,

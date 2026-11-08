@@ -26,3 +26,20 @@ flutter:
   assets:
     - assets/brand/volti_mark.png
     - assets/brand/volti_wordmark.png
+  # Schriften für Text-Notizen (SIL Open Font License, siehe assets/fonts/OFL-*.txt)
+  fonts:
+    - family: VoltiSans
+      fonts:
+        - asset: assets/fonts/Roboto.ttf
+        - asset: assets/fonts/Roboto-Italic.ttf
+          style: italic
+    - family: VoltiSerif
+      fonts:
+        - asset: assets/fonts/NotoSerif.ttf
+        - asset: assets/fonts/NotoSerif-Italic.ttf
+          style: italic
+    - family: VoltiMono
+      fonts:
+        - asset: assets/fonts/RobotoMono.ttf
+        - asset: assets/fonts/RobotoMono-Italic.ttf
+          style: italic

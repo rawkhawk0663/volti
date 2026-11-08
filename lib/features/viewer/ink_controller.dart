@@ -107,6 +107,9 @@ class InkController extends ChangeNotifier {
     required double size,
     required int color,
     int background = TextNote.legacyBackground,
+    TextFont font = TextFont.sans,
+    bool bold = false,
+    bool italic = false,
   }) {
     if (text.trim().isEmpty) return null;
     final note = TextNote(
@@ -118,6 +121,9 @@ class InkController extends ChangeNotifier {
       size: size,
       color: color,
       background: background,
+      font: font,
+      bold: bold,
+      italic: italic,
       createdAt: DateTime.now().toUtc(),
     );
     _annotations.putText(note);
@@ -126,7 +132,18 @@ class InkController extends ChangeNotifier {
   }
 
   /// Text, Stil und/oder Position ändern. Leerer Text löscht die Notiz.
-  void updateText(String id, {String? text, double? x, double? y, double? size, int? color, int? background}) {
+  void updateText(
+    String id, {
+    String? text,
+    double? x,
+    double? y,
+    double? size,
+    int? color,
+    int? background,
+    TextFont? font,
+    bool? bold,
+    bool? italic,
+  }) {
     final before = _annotations.text(id);
     if (before == null || before.deleted) return;
     if (text != null && text.trim().isEmpty) {
@@ -140,6 +157,9 @@ class InkController extends ChangeNotifier {
       size: size,
       color: color,
       background: background,
+      font: font,
+      bold: bold,
+      italic: italic,
       modifiedAt: DateTime.now().toUtc(),
     );
     if (after.text == before.text &&
@@ -147,7 +167,10 @@ class InkController extends ChangeNotifier {
         after.y == before.y &&
         after.size == before.size &&
         after.color == before.color &&
-        after.background == before.background) {
+        after.background == before.background &&
+        after.font == before.font &&
+        after.bold == before.bold &&
+        after.italic == before.italic) {
       return;
     }
     _annotations.putText(after);

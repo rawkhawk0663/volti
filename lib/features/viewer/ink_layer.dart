@@ -183,7 +183,11 @@ class _InkLayerState extends State<InkLayer> {
                       CustomPaint(painter: StrokesPainter(c.annotations.visibleStrokesOn(widget.page))),
                 ),
               ),
-              CustomPaint(painter: _ActivePainter(this, repaint: _activeRepaint)),
+              // Eigene Ebene: Der entstehende Strich wird bei jeder Bewegung
+              // neu gemalt, ohne alles andere mitzumalen.
+              RepaintBoundary(
+                child: CustomPaint(painter: _ActivePainter(this, repaint: _activeRepaint)),
+              ),
             ],
           ),
         );

@@ -3,6 +3,15 @@
 /// Wie bei Strichen: normierte Position (0..1), eindeutige ID, gelöschte
 /// Notizen bleiben als Grabstein erhalten. Wird der Text geändert, gewinnt
 /// beim Zusammenführen die jüngste Fassung.
+/// Schriftart einer Text-Notiz.
+enum TextFont {
+  sans,
+  serif,
+  mono;
+
+  static TextFont fromName(String? n) => TextFont.values.firstWhere((f) => f.name == n, orElse: () => TextFont.sans);
+}
+
 class TextNote {
   TextNote({
     required this.id,
@@ -14,6 +23,9 @@ class TextNote {
     required this.color,
     required this.createdAt,
     this.background = legacyBackground,
+    this.font = TextFont.sans,
+    this.bold = false,
+    this.italic = false,
     this.modifiedAt,
     this.deleted = false,
   });
@@ -40,6 +52,10 @@ class TextNote {
 
   /// Hintergrundfarbe (ARGB); [noBackground] = durchsichtig.
   final int background;
+
+  final TextFont font;
+  final bool bold;
+  final bool italic;
   final DateTime createdAt;
   final DateTime? modifiedAt;
   final bool deleted;
@@ -54,6 +70,9 @@ class TextNote {
     double? size,
     int? color,
     int? background,
+    TextFont? font,
+    bool? bold,
+    bool? italic,
     DateTime? modifiedAt,
     bool? deleted,
   }) => TextNote(
@@ -65,6 +84,9 @@ class TextNote {
     size: size ?? this.size,
     color: color ?? this.color,
     background: background ?? this.background,
+    font: font ?? this.font,
+    bold: bold ?? this.bold,
+    italic: italic ?? this.italic,
     createdAt: createdAt,
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted ?? this.deleted,
@@ -81,6 +103,9 @@ class TextNote {
     'size': size,
     'color': color,
     'bg': background,
+    'font': font.name,
+    if (bold) 'b': true,
+    if (italic) 'i': true,
     'created': createdAt.toUtc().toIso8601String(),
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
@@ -96,6 +121,9 @@ class TextNote {
     color: json['color'] as int? ?? 0xFF1B1B1B,
     // Ältere Notizen ohne Angabe behalten ihren hellen Hintergrund.
     background: json['bg'] as int? ?? legacyBackground,
+    font: TextFont.fromName(json['font'] as String?),
+    bold: json['b'] == true,
+    italic: json['i'] == true,
     createdAt: DateTime.parse(json['created'] as String),
     modifiedAt: json['modified'] == null ? null : DateTime.parse(json['modified'] as String),
     deleted: json['deleted'] == true,

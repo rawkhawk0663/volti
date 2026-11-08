@@ -32,6 +32,22 @@ class _ToolOverlayState extends State<ToolOverlay> {
 
   ToolController get tools => widget.tools;
 
+  /// Position während des Ziehens (danach in tools.popoverOffset gemerkt).
+  final _dragOffset = ValueNotifier<Offset?>(null);
+
+  void _drag(Offset delta, Size screen) {
+    final from = _dragOffset.value ?? tools.popoverOffset ?? _defaultOffset(screen);
+    final to = _clamp(from + delta, screen);
+    _dragOffset.value = to;
+    tools.popoverOffset = to;
+  }
+
+  @override
+  void dispose() {
+    _dragOffset.dispose();
+    super.dispose();
+  }
+
   Offset _defaultOffset(Size screen) {
     final x = tools.paletteLeft
         ? _margin + _barWidth + 12
@@ -85,24 +101,34 @@ class _ToolOverlayState extends State<ToolOverlay> {
                   left: tools.paletteLeft ? _margin : null,
                   right: tools.paletteLeft ? null : _margin,
                   child: Center(
-                    child: _FadeWhileDrawing(tools: tools, child: _buildBar(context)),
+                    child: RepaintBoundary(
+                      child: _FadeWhileDrawing(tools: tools, child: _buildBar(context)),
+                    ),
                   ),
                 ),
                 if (hasPopover)
-                  Positioned(
-                    left: offset.dx,
-                    top: offset.dy,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: (screen.height - offset.dy - 12).clamp(160, 640)),
+                  // Beim Ziehen ändert sich nur die Position (_dragOffset) – der
+                  // Fensterinhalt wird dabei nicht jedes Mal neu aufgebaut.
+                  ValueListenableBuilder<Offset?>(
+                    valueListenable: _dragOffset,
+                    child: RepaintBoundary(
                       child: _FadeWhileDrawing(
                         tools: tools,
-                        child: ToolPopover(
-                          key: ValueKey(mode),
-                          tools: tools,
-                          onDrag: (delta) => setState(() => tools.popoverOffset = _clamp(offset + delta, screen)),
-                        ),
+                        child: ToolPopover(key: ValueKey(mode), tools: tools, onDrag: (d) => _drag(d, screen)),
                       ),
                     ),
+                    builder: (context, dragged, child) {
+                      // dragged löst nur das Neuzeichnen aus; massgeblich ist die gemerkte Position.
+                      final o = _clamp(tools.popoverOffset ?? offset, screen);
+                      return Positioned(
+                        left: o.dx,
+                        top: o.dy,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxHeight: (screen.height - o.dy - 12).clamp(160, 640)),
+                          child: child,
+                        ),
+                      );
+                    },
                   ),
               ],
             );
