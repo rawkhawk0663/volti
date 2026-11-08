@@ -120,12 +120,22 @@ void main() {
       expect(tools.pen.color, 0xFF123456);
     });
 
-    test('Geräte-Vorlieben: Vollbild und "sofort zeichnen" sind anfangs an', () async {
+    test('Geräte-Vorliebe "sofort zeichnen" ist anfangs an und bleibt gespeichert', () async {
       final tools = await makeTools(dir);
-      expect(tools.fullscreen, isTrue);
       expect(tools.instantPen, isTrue);
-      await tools.setFullscreen(false);
-      expect((await makeTools(dir)).fullscreen, isFalse);
+      await tools.setInstantPen(false);
+      expect((await makeTools(dir)).instantPen, isFalse);
+    });
+
+    test('Radierer: ganze Elemente ist Standard, teilweise bleibt gespeichert', () async {
+      final tools = await makeTools(dir);
+      await tools.load();
+      expect(tools.eraserPartial, isFalse);
+      tools.setEraserPartial(true);
+      await tools.flush();
+      final again = await makeTools(dir);
+      await again.load();
+      expect(again.eraserPartial, isTrue);
     });
   });
 
@@ -152,6 +162,37 @@ void main() {
   });
 
   group('Anmerkungen', () {
+    test('Teilweise radieren ersetzt einen Strich durch seine Reste; ein Zug = ein Rückgängig', () {
+      final c = InkController(pdfPath: p.join(dir.path, 'x.pdf'));
+      c.addStroke(
+        page: 1,
+        tool: InkTool.pen,
+        color: 0xFF000000,
+        width: 0.003,
+        points: [for (var i = 0; i <= 10; i++) InkPoint(i / 10, 0.5, 0.5)],
+      );
+      final original = c.annotations.visibleStrokesOn(1).single;
+
+      c.beginBatch();
+      c.replaceStroke(original, [
+        [for (var i = 0; i <= 3; i++) InkPoint(i / 10, 0.5, 0.5)],
+        [for (var i = 6; i <= 10; i++) InkPoint(i / 10, 0.5, 0.5)],
+      ]);
+      // Im selben Zug wird ein Rest nochmals verkürzt.
+      final piece = c.annotations.visibleStrokesOn(1).firstWhere((s) => s.points.first.x == 0.6);
+      c.replaceStroke(piece, [
+        [for (var i = 8; i <= 10; i++) InkPoint(i / 10, 0.5, 0.5)],
+      ]);
+      c.endBatch();
+      expect(c.annotations.visibleStrokesOn(1).length, 2);
+
+      c.undo(); // ganzer Zug rückgängig → wieder genau ein Strich
+      final back = c.annotations.visibleStrokesOn(1);
+      expect(back.length, 1);
+      expect(back.single.points.length, 11);
+      c.dispose();
+    });
+
     test('Seite leeren entfernt Striche und Texte – und lässt sich rückgängig machen', () {
       final c = InkController(pdfPath: p.join(dir.path, 'x.pdf'));
       c.addStroke(page: 1, tool: InkTool.pen, color: 0xFF000000, width: 0.003, points: const [InkPoint(0.1, 0.1, 0.5)]);

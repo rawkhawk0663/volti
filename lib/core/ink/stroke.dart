@@ -81,6 +81,19 @@ class Stroke {
 
   DateTime get lastChange => modifiedAt ?? createdAt;
 
+  /// Umgebendes Rechteck (normiert) – für schnelle Vorprüfungen beim Radieren.
+  late final ({double left, double top, double right, double bottom}) bounds = () {
+    if (points.isEmpty) return (left: 0.0, top: 0.0, right: 0.0, bottom: 0.0);
+    var l = points.first.x, t = points.first.y, r = l, b = t;
+    for (final p in points) {
+      if (p.x < l) l = p.x;
+      if (p.x > r) r = p.x;
+      if (p.y < t) t = p.y;
+      if (p.y > b) b = p.y;
+    }
+    return (left: l, top: t, right: r, bottom: b);
+  }();
+
   Stroke markDeleted(DateTime when) => Stroke(
     id: id,
     page: page,

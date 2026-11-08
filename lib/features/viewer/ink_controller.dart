@@ -95,6 +95,54 @@ class InkController extends ChangeNotifier {
     _push(_UndoEntry(removed: removed));
   }
 
+  /// Teilweise radieren: [original] wird durch die übrig gebliebenen Stücke
+  /// ersetzt (neue Striche mit neuen IDs, das Original wird zum Grabstein).
+  void replaceStroke(Stroke original, List<List<InkPoint>> pieces) {
+    if (original.deleted) return;
+    final now = DateTime.now().toUtc();
+    _annotations.put(original.markDeleted(now));
+    final ids = <String>[];
+    for (final piece in pieces) {
+      final s = Stroke(
+        id: _uuid.v4(),
+        page: original.page,
+        tool: original.tool,
+        color: original.color,
+        width: original.width,
+        points: List.unmodifiable(piece),
+        createdAt: original.createdAt,
+        modifiedAt: now,
+      );
+      _annotations.put(s);
+      ids.add(s.id);
+    }
+    _push(_UndoEntry(added: ids, removed: [original]));
+  }
+
+  // ---------------------------------------------- mehrere Schritte bündeln
+  _UndoEntry? _batch;
+
+  /// Alles bis [endBatch] wird ein einziger Schritt für "Rückgängig"
+  /// (z. B. ein ganzer Radier-Zug).
+  void beginBatch() => _batch ??= _UndoEntry();
+
+  void endBatch() {
+    final b = _batch;
+    _batch = null;
+    if (b == null) return;
+    if (b.added.isEmpty &&
+        b.removed.isEmpty &&
+        b.addedTexts.isEmpty &&
+        b.removedTexts.isEmpty &&
+        b.textsBefore.isEmpty) {
+      return;
+    }
+    _undo.add(b);
+    if (_undo.length > 200) _undo.removeAt(0);
+    _redo.clear();
+    notifyListeners();
+  }
+
   // ------------------------------------------------------------ Text-Notizen
 
   /// Neue Text-Notiz. Gibt ihre ID zurück (null bei leerem Text).
@@ -281,6 +329,22 @@ class InkController extends ChangeNotifier {
   }
 
   void _push(_UndoEntry e) {
+    final b = _batch;
+    if (b != null) {
+      // Innerhalb eines Bündels: Was im selben Bündel erst entstanden ist und
+      // gleich wieder entfernt wird, taucht im Verlauf gar nicht auf.
+      for (final r in e.removed) {
+        if (!b.added.remove(r.id)) b.removed.add(r);
+      }
+      b.added.addAll(e.added);
+      for (final r in e.removedTexts) {
+        if (!b.addedTexts.remove(r.id)) b.removedTexts.add(r);
+      }
+      b.addedTexts.addAll(e.addedTexts);
+      b.textsBefore.addAll(e.textsBefore);
+      _changed();
+      return;
+    }
     _undo.add(e);
     if (_undo.length > 200) _undo.removeAt(0);
     _redo.clear();

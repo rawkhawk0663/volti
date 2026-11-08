@@ -11,10 +11,11 @@ class VoltiColors {
   /// Helles Türkis für den Dunkelmodus.
   static const light = Color(0xFF5CC8B4);
 
-  /// Hintergrund rund um die Notenseite – ruhig und leicht kühl, damit die
-  /// Noten im Vordergrund stehen.
-  static Color pageSurround(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1A201F) : const Color(0xFFE6ECEA);
+  /// Hintergrund rund um die Notenseite: Anthrazit. Die weisse Seite und die
+  /// hellen Werkzeugleisten heben sich davon klar ab.
+  static const anthracite = Color(0xFF2B2F2E);
+
+  static Color pageSurround(BuildContext context) => anthracite;
 
   /// Ganz sanfter Verlauf als Hintergrund der Bibliothek.
   static LinearGradient backgroundGradient(Brightness b) => b == Brightness.dark

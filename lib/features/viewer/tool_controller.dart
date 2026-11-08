@@ -64,16 +64,15 @@ class ToolController extends ChangeNotifier {
   DrawingPreset get highlighter => _s.highlighter;
   TextStyleSetting get textStyle => _s.text;
   double get eraserRadius => _s.eraserRadius;
+  bool get eraserPartial => _s.eraserPartial;
 
   /// Womit ein Strich gezeichnet wird (Textmarker oder Stift).
   DrawingPreset get strokeStyle => _mode == ToolMode.highlighter ? _s.highlighter : _s.pen;
 
   // -------------------------------------------------------- Geräte-Vorlieben
-  bool get fullscreen => settings.flag('viewerFullscreen', orElse: true);
   bool get instantPen => settings.flag('instantPen', orElse: true);
   bool get paletteLeft => settings.flag('paletteLeft', orElse: true);
 
-  Future<void> setFullscreen(bool v) => _setFlag('viewerFullscreen', v);
   Future<void> setInstantPen(bool v) => _setFlag('instantPen', v);
   Future<void> togglePaletteSide() async {
     popoverOffset = null; // Fenster wieder neben die Palette
@@ -120,6 +119,11 @@ class ToolController extends ChangeNotifier {
 
   void setEraserRadius(double r) {
     _s.eraserRadius = r;
+    _changed();
+  }
+
+  void setEraserPartial(bool partial) {
+    _s.eraserPartial = partial;
     _changed();
   }
 

@@ -251,44 +251,64 @@ class _EraserSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final partial = tools.eraserPartial;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Label('Grösse'),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            for (final (i, r) in ToolController.eraserSizes.indexed)
-              Tooltip(
-                message: const ['Klein', 'Mittel', 'Gross'][i],
-                child: InkResponse(
-                  onTap: () => tools.setEraserRadius(r),
-                  radius: 28,
-                  child: SizedBox(
-                    width: 56,
-                    height: 56,
-                    child: Center(
-                      child: Container(
-                        width: r * 1.6,
-                        height: r * 1.6,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: tools.eraserRadius == r ? scheme.primaryContainer : null,
-                          border: Border.all(
-                            color: tools.eraserRadius == r ? scheme.primary : scheme.outline,
-                            width: 2,
+        const SizedBox(height: 6),
+        SegmentedButton<bool>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: false, label: Text('Ganze Elemente')),
+            ButtonSegment(value: true, label: Text('Teilweise')),
+          ],
+          selected: {partial},
+          onSelectionChanged: (v) => tools.setEraserPartial(v.first),
+        ),
+        if (partial) ...[
+          const _Label('Grösse'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              for (final (i, r) in ToolController.eraserSizes.indexed)
+                Tooltip(
+                  message: const ['Klein', 'Mittel', 'Gross'][i],
+                  child: InkResponse(
+                    onTap: () => tools.setEraserRadius(r),
+                    radius: 28,
+                    child: SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: Center(
+                        child: Container(
+                          width: r * 1.6,
+                          height: r * 1.6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: tools.eraserRadius == r ? scheme.primaryContainer : null,
+                            border: Border.all(
+                              color: tools.eraserRadius == r ? scheme.primary : scheme.outline,
+                              width: 2,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 6),
+            ],
+          ),
+        ],
+        const SizedBox(height: 10),
         Text(
-          'Löscht ganze Striche und Text-Notizen, die du berührst.',
+          partial
+              ? 'Löscht nur die Stellen, über die du fährst – wie ein Radiergummi. Text-Notizen werden ganz gelöscht.'
+              : 'Löscht ganze Striche und Text-Notizen, die du berührst.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Das Radierer-Ende des Stifts radiert genauso.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
@@ -342,41 +362,31 @@ class _TextSettings extends StatelessWidget {
         ),
         const _Label('Schrift'),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final f in TextFont.values) ...[
-              Expanded(
-                child: _ToggleBox(
-                  selected: s.font == f,
-                  tooltip: const {
-                    TextFont.sans: 'Roboto',
-                    TextFont.serif: 'Noto Serif',
-                    TextFont.mono: 'Roboto Mono',
-                  }[f]!,
-                  onTap: () => tools.setTextStyle(s.copyWith(font: f)),
-                  child: Text(
-                    'Aa',
-                    style: voltiTextStyle(font: f, bold: false, italic: false, fontSize: 17, color: Colors.black87),
-                  ),
-                ),
+            Expanded(
+              child: _FontPicker(
+                selected: s.font,
+                onSelected: (f) => tools.setTextStyle(s.copyWith(font: f)),
               ),
-              const SizedBox(width: 6),
-            ],
+            ),
+            const SizedBox(width: 6),
             _ToggleBox(
               selected: s.bold,
-              tooltip: 'Fett',
+              tooltip: 'Bold',
               onTap: () => tools.setTextStyle(s.copyWith(bold: !s.bold)),
               child: const Text(
-                'F',
+                'B',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87),
               ),
             ),
             const SizedBox(width: 6),
             _ToggleBox(
               selected: s.italic,
-              tooltip: 'Kursiv',
+              tooltip: 'Italic',
               onTap: () => tools.setTextStyle(s.copyWith(italic: !s.italic)),
               child: const Text(
-                'K',
+                'I',
                 style: TextStyle(
                   fontSize: 17,
                   fontStyle: FontStyle.italic,
@@ -455,6 +465,71 @@ class _TextSample extends StatelessWidget {
 }
 
 // ------------------------------------------------------------------ Bausteine
+const fontNames = {TextFont.sans: 'Roboto', TextFont.serif: 'Noto Serif', TextFont.mono: 'Roboto Mono'};
+
+/// Schriftauswahl als aufklappbare Liste. Bewusst ohne eigenes Menü-Fenster:
+/// So bleibt eine gerade getippte Notiz beim Auswählen offen.
+class _FontPicker extends StatefulWidget {
+  const _FontPicker({required this.selected, required this.onSelected});
+  final TextFont selected;
+  final ValueChanged<TextFont> onSelected;
+
+  @override
+  State<_FontPicker> createState() => _FontPickerState();
+}
+
+class _FontPickerState extends State<_FontPicker> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget row(TextFont f, {bool header = false}) => InkWell(
+      onTap: () {
+        if (header) {
+          setState(() => _open = !_open);
+        } else {
+          setState(() => _open = false);
+          widget.onSelected(f);
+        }
+      },
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.centerLeft,
+        color: !header && f == widget.selected ? scheme.primaryContainer : null,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                fontNames[f]!,
+                overflow: TextOverflow.ellipsis,
+                style: voltiTextStyle(font: f, bold: false, italic: false, fontSize: 15, color: Colors.black87),
+              ),
+            ),
+            if (header) Icon(_open ? Icons.arrow_drop_up : Icons.arrow_drop_down, color: Colors.black54),
+          ],
+        ),
+      ),
+    );
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _open ? scheme.primary : scheme.outlineVariant),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          row(widget.selected, header: true),
+          if (_open) ...[Divider(height: 1, color: scheme.outlineVariant), for (final f in TextFont.values) row(f)],
+        ],
+      ),
+    );
+  }
+}
+
 class _ToggleBox extends StatelessWidget {
   const _ToggleBox({required this.selected, required this.tooltip, required this.onTap, required this.child});
   final bool selected;

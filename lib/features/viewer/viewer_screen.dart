@@ -85,10 +85,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
     tools.addListener(_onToolsChanged);
     _ink = InkController(pdfPath: _item.path);
     _openPiece(_index);
-    // Vollbild erst nach dem Aufbau der Ansicht einschalten – während der
-    // Übergangsanimation kommt der Befehl unter Windows sonst nicht an.
-    _fullscreen = tools.fullscreen;
-    if (_fullscreen) WidgetsBinding.instance.addPostFrameCallback((_) => _enterFullscreenReliably());
     _restartHideTimer();
   }
 
@@ -207,14 +203,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     await setAppFullscreen(on);
   }
 
-  /// Schaltet das Vollbild nach dem Aufbau der Ansicht ein.
-  Future<void> _enterFullscreenReliably() async {
-    if (!mounted || !_fullscreen) return;
-    await setAppFullscreen(true);
-  }
-
-  /// F11, Esc oder Symbol: nur für den Moment. Ob Stücke im Vollbild
-  /// öffnen, ist eine eigene Einstellung (⋮-Menü).
+  /// Vollbild von Hand: F11, Esc oder das Symbol in der Leiste.
   Future<void> _toggleFullscreen() => _setFullscreen(!_fullscreen);
 
   void _toggleDiagnostics() => setState(() => _showDiagnostics = !_showDiagnostics);
@@ -448,7 +437,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
     // RepaintBoundary: Jede Ebene wird nur neu gemalt, wenn sie sich selbst
     // ändert. Sonst würde z. B. jede Stiftbewegung auch die grosse Notenseite
-    // samt Schatten neu malen – das macht das Zeichnen träge.
+    // neu malen – das macht das Zeichnen träge.
     return Center(
       child: RepaintBoundary(
         child: SizedBox(
@@ -457,14 +446,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              const RepaintBoundary(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))],
-                  ),
-                ),
-              ),
+              // Weisse Seite ohne Schatten (ein weicher Schatten kostet beim Malen viel Zeit).
+              const ColoredBox(color: Colors.white),
               RepaintBoundary(
                 child: ListenableBuilder(
                   listenable: cache,
@@ -566,11 +549,6 @@ class _TopBar extends StatelessWidget {
                     icon: const Icon(Icons.more_vert),
                     onSelected: (a) => a(),
                     itemBuilder: (_) => [
-                      CheckedPopupMenuItem(
-                        value: () => tools.setFullscreen(!tools.fullscreen),
-                        checked: tools.fullscreen,
-                        child: const Text('Noten im Vollbild öffnen'),
-                      ),
                       CheckedPopupMenuItem(
                         value: () => tools.setInstantPen(!tools.instantPen),
                         checked: tools.instantPen,

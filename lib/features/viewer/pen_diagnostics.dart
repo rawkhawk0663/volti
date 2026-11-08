@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'ink_layer.dart';
+import 'perf_meter.dart';
 
 /// Sammelt Daten über die letzten Zeigereingaben (Stift, Finger, Maus).
 ///
@@ -43,8 +44,9 @@ class PenDiagnosticsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final perf = PerfMeter.instance..start();
     return ListenableBuilder(
-      listenable: diagnostics,
+      listenable: Listenable.merge([diagnostics, perf.latencyMs, perf.frames]),
       builder: (context, _) {
         final e = diagnostics.last;
         final rows = <(String, String)>[
@@ -57,6 +59,13 @@ class PenDiagnosticsPanel extends StatelessWidget {
             ('Tasten', '0b${e.buttons.toRadixString(2)}${isEraserEvent(e) ? '  → radiert' : ''}'),
             ('Neigung', '${(e.tilt * 57.2958).toStringAsFixed(0)}°'),
             ('Ereignisse/s', '${diagnostics.eventsPerSecond}'),
+            (
+              'Verzögerung',
+              perf.latencyMs.value == null
+                  ? 'mit dem Stift zeichnen'
+                  : '${perf.latencyMs.value!.toStringAsFixed(0)} ms',
+            ),
+            ('Bilder', perf.frames.value),
           ],
         ];
         return Card(

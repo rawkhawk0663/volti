@@ -124,6 +124,7 @@ class ToolSettings {
     required this.highlighter,
     required this.text,
     required this.eraserRadius,
+    this.eraserPartial = false,
     required this.penFavorites,
     required this.highlighterFavorites,
     required this.textFavorites,
@@ -133,6 +134,9 @@ class ToolSettings {
   DrawingPreset highlighter;
   TextStyleSetting text;
   double eraserRadius;
+
+  /// Radierer: false = ganze Elemente löschen, true = nur berührte Teile.
+  bool eraserPartial;
   final List<DrawingPreset> penFavorites;
   final List<DrawingPreset> highlighterFavorites;
   final List<TextStyleSetting> textFavorites;
@@ -171,6 +175,7 @@ class ToolSettings {
     'highlighter': highlighter.toJson(),
     'text': text.toJson(),
     'eraserRadius': eraserRadius,
+    'eraserPartial': eraserPartial,
     'penFavorites': [for (final f in penFavorites) f.toJson()],
     'highlighterFavorites': [for (final f in highlighterFavorites) f.toJson()],
     'textFavorites': [for (final f in textFavorites) f.toJson()],
@@ -207,6 +212,7 @@ class ToolSettings {
           : d.highlighter,
       text: j['text'] is Map ? TextStyleSetting.fromJson(j['text'] as Map<String, dynamic>) : d.text,
       eraserRadius: (j['eraserRadius'] as num?)?.toDouble() ?? d.eraserRadius,
+      eraserPartial: j['eraserPartial'] == true,
       penFavorites: drawList('penFavorites', d.penFavorites),
       highlighterFavorites: drawList('highlighterFavorites', d.highlighterFavorites),
       textFavorites: j['textFavorites'] is List

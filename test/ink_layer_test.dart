@@ -115,4 +115,37 @@ void main() {
     expect(c.annotations.visibleStrokesOn(1).single.tool, InkTool.highlighter);
     c.dispose();
   });
+
+  testWidgets('Radierer "teilweise" trennt einen Strich, "ganze Elemente" löscht ihn', (t) async {
+    await pump(t);
+    final topLeft = t.getTopLeft(find.byType(InkLayer));
+    // waagrechter Strich quer über die Seite
+    c.addStroke(
+      page: 1,
+      tool: InkTool.pen,
+      color: 0xFF000000,
+      width: 0.003,
+      points: [for (var i = 1; i <= 9; i++) InkPoint(i / 10, 0.5, 0.5)],
+    );
+    await t.pump();
+
+    tools.setEraserPartial(true);
+    tools.setMode(ToolMode.eraser);
+    final g = await t.startGesture(topLeft + const Offset(200, 290), kind: PointerDeviceKind.stylus);
+    await g.moveTo(topLeft + const Offset(200, 310));
+    await g.up();
+    await t.pump();
+    final pieces = c.annotations.visibleStrokesOn(1);
+    expect(pieces.length, 2, reason: 'Strich in der Mitte getrennt');
+    expect(pieces.every((s) => s.points.every((p) => (p.x - 0.5).abs() > 0.02)), isTrue);
+
+    tools.setEraserPartial(false);
+    final g2 = await t.startGesture(topLeft + const Offset(80, 300), kind: PointerDeviceKind.invertedStylus);
+    await g2.moveBy(const Offset(2, 0));
+    await g2.up();
+    await t.pump();
+    expect(c.annotations.visibleStrokesOn(1).length, 1, reason: 'linkes Stück ganz gelöscht (Radierer-Ende)');
+    await t.runAsync(() => tools.flush());
+    c.dispose();
+  });
 }
