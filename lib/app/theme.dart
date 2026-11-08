@@ -16,9 +16,5 @@ ThemeData buildVoltiTheme(Brightness brightness) {
     seedColor: VoltiColors.terracotta,
     brightness: brightness,
   ).copyWith(primary: brightness == Brightness.light ? VoltiColors.terracotta : const Color(0xFFE08A6C));
-  return ThemeData(
-    colorScheme: scheme,
-    useMaterial3: true,
-    visualDensity: VisualDensity.standard,
-  );
+  return ThemeData(colorScheme: scheme, useMaterial3: true, visualDensity: VisualDensity.standard);
 }

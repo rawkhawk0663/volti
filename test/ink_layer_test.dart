@@ -16,10 +16,14 @@ void main() {
   });
   tearDown(() => dir.deleteSync(recursive: true));
 
-  Future<void> pump(WidgetTester t) => t.pumpWidget(Directionality(
-        textDirection: TextDirection.ltr,
-        child: Center(child: SizedBox(width: 400, height: 600, child: InkLayer(page: 1, controller: c))),
-      ));
+  Future<void> pump(WidgetTester t) => t.pumpWidget(
+    Directionality(
+      textDirection: TextDirection.ltr,
+      child: Center(
+        child: SizedBox(width: 400, height: 600, child: InkLayer(page: 1, controller: c)),
+      ),
+    ),
+  );
 
   Future<void> drawLine(WidgetTester t, PointerDeviceKind kind, {int buttons = kPrimaryButton}) async {
     final center = t.getCenter(find.byType(InkLayer));

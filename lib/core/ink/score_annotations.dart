@@ -64,16 +64,15 @@ class ScoreAnnotations {
   }
 
   Map<String, dynamic> toJson() => {
-        'format': 'volti-annotations',
-        'version': formatVersion,
-        'strokes': (_strokes.values.toList()..sort((a, b) => a.id.compareTo(b.id)))
-            .map((s) => s.toJson())
-            .toList(),
-      };
+    'format': 'volti-annotations',
+    'version': formatVersion,
+    'strokes': (_strokes.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((s) => s.toJson()).toList(),
+  };
 
   static ScoreAnnotations fromJson(Map<String, dynamic> json) {
-    final strokes = (json['strokes'] as List<dynamic>? ?? const [])
-        .map((s) => Stroke.fromJson(s as Map<String, dynamic>));
+    final strokes = (json['strokes'] as List<dynamic>? ?? const []).map(
+      (s) => Stroke.fromJson(s as Map<String, dynamic>),
+    );
     return ScoreAnnotations(strokes);
   }
 }

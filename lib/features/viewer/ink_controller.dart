@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../core/ink/annotation_store.dart';
 import '../../core/ink/score_annotations.dart';
 import '../../core/ink/stroke.dart';
+import '../../core/library/sidecar_store.dart';
 
 /// Was der Stift gerade tut.
 enum ToolMode { read, pen, highlighter, eraser }
@@ -21,10 +21,10 @@ class _UndoEntry {
 /// Verwaltet die Anmerkungen eines Stücks: Zeichnen, Radieren,
 /// Rückgängig/Wiederholen und automatisches Speichern.
 class InkController extends ChangeNotifier {
-  InkController({required this.pdfPath, AnnotationStore? store}) : _store = store ?? const AnnotationStore();
+  InkController({required this.pdfPath, SidecarStore? store}) : _store = store ?? const SidecarStore();
 
   final String pdfPath;
-  final AnnotationStore _store;
+  final SidecarStore _store;
   static const _uuid = Uuid();
 
   ScoreAnnotations _annotations = ScoreAnnotations();
@@ -50,7 +50,7 @@ class InkController extends ChangeNotifier {
   String? saveError;
 
   Future<void> load() async {
-    _annotations = await _store.load(pdfPath);
+    _annotations = (await _store.load(pdfPath)).annotations;
     notifyListeners();
   }
 
@@ -66,11 +66,7 @@ class InkController extends ChangeNotifier {
   }
 
   /// Fügt einen fertig gezeichneten Strich hinzu.
-  void addStroke({
-    required int page,
-    required InkTool tool,
-    required List<InkPoint> points,
-  }) {
+  void addStroke({required int page, required InkTool tool, required List<InkPoint> points}) {
     if (points.isEmpty) return;
     final stroke = Stroke(
       id: _uuid.v4(),
@@ -164,7 +160,7 @@ class InkController extends ChangeNotifier {
     if (!_dirty) return;
     _dirty = false;
     try {
-      final merged = await _store.save(pdfPath, _annotations);
+      final merged = (await _store.save(pdfPath, annotations: _annotations)).annotations;
       // Falls ein anderes Gerät inzwischen etwas ergänzt hat, übernehmen.
       if (merged.allStrokes.length != _annotations.allStrokes.length) {
         _annotations = ScoreAnnotations.merge(_annotations, merged);

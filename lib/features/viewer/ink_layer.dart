@@ -127,29 +127,31 @@ class _InkLayerState extends State<InkLayer> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final size = constraints.biggest;
-      return Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (e) => _down(e, size),
-        onPointerMove: (e) => _move(e, size),
-        onPointerUp: (e) => _up(e, size),
-        onPointerCancel: (e) => _up(e, size),
-        child: Stack(fit: StackFit.expand, children: [
-          RepaintBoundary(
-            child: ListenableBuilder(
-              listenable: c,
-              builder: (context, _) => CustomPaint(
-                painter: StrokesPainter(c.annotations.visibleStrokesOn(widget.page)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (e) => _down(e, size),
+          onPointerMove: (e) => _move(e, size),
+          onPointerUp: (e) => _up(e, size),
+          onPointerCancel: (e) => _up(e, size),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              RepaintBoundary(
+                child: ListenableBuilder(
+                  listenable: c,
+                  builder: (context, _) =>
+                      CustomPaint(painter: StrokesPainter(c.annotations.visibleStrokesOn(widget.page))),
+                ),
               ),
-            ),
+              CustomPaint(painter: _ActivePainter(this, repaint: _activeRepaint)),
+            ],
           ),
-          CustomPaint(
-            painter: _ActivePainter(this, repaint: _activeRepaint),
-          ),
-        ]),
-      );
-    });
+        );
+      },
+    );
   }
 }
 

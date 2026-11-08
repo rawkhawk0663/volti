@@ -12,7 +12,23 @@
 
 Für ein Update lädst du einfach die neueste ZIP-Datei herunter und ersetzt den Ordner. Deine Anmerkungen bleiben erhalten, weil sie neben deinen PDFs gespeichert sind.
 
-## Bedienung (Prototyp)
+## Erster Start
+
+Volti fragt nach deinem **Bibliotheksordner**. Das ist der Ordner, in dem deine Noten-PDFs liegen. Unterordner werden mit einbezogen. Nimm am besten einen Ordner in **Proton Drive** (oder einem anderen Cloud-Speicher). Dann sind Noten, Anmerkungen und Setlists auf allen deinen Geräten verfügbar.
+
+## Bedienung
+
+**Bibliothek**
+- **PDFs hinzufügen** kopiert PDFs in deinen Bibliotheksordner. Du kannst PDFs auch direkt im Explorer in den Ordner legen und dann auf ⟳ (neu einlesen) tippen.
+- **Suchen** findet Stücke nach Titel, Komponist, Genre, Tag oder Ordner. Sortieren und filtern kannst du nach Genre und Tag.
+- **⋮** an einer Kachel, ein Rechtsklick oder langes Drücken öffnet ein Menü mit **Infos bearbeiten** (Titel, Komponist, Genre, Tonart, Tags, Notizen) und **Zu Setlist hinzufügen**.
+- Heisst eine Datei `Komponist - Titel.pdf`, schlägt Volti Komponist und Titel automatisch vor.
+
+**Setlists**
+- Lege eine Setlist an, füge Stücke hinzu und ändere die Reihenfolge, indem du ein Stück am Griff ☰ ziehst.
+- Mit **Spielen** geht es nach der letzten Seite eines Stücks direkt zum nächsten Stück, rückwärts genauso. Oben links springst du über „Stück 2/5 ▾“ direkt zu einem anderen Stück.
+
+**Notenansicht**
 
 | Aktion | So geht's |
 |---|---|
@@ -24,23 +40,25 @@ Für ein Update lädst du einfach die neueste ZIP-Datei herunter und ersetzt den
 
 Mit dem Finger wird nie gezeichnet. So hinterlässt der Handballen beim Schreiben keine Spuren.
 
-## Wo werden die Anmerkungen gespeichert?
+## Wo speichert Volti deine Daten?
 
-Direkt neben dem PDF, als kleine Zusatzdatei:
+Alles liegt in deinem Bibliotheksordner, die PDFs selbst werden nie verändert:
 
 ```
-Bach - Suite 1.pdf
-Bach - Suite 1.pdf.volti.json   ← deine Anmerkungen
+Noten/
+├── Bach - Suite 1.pdf
+├── Bach - Suite 1.pdf.volti.json   ← Infos und Anmerkungen zu diesem Stück
+└── .volti/setlists/…               ← deine Setlists (versteckter Ordner)
 ```
 
-Das PDF selbst wird nie verändert. Liegt der Ordner in einem Cloud-Ordner wie Proton Drive, OneDrive oder Dropbox, werden die Anmerkungen automatisch mitsynchronisiert. Änderungen von zwei Geräten werden zusammengeführt statt überschrieben.
+Nur auf dem jeweiligen Gerät gespeichert werden der Ort des Bibliotheksordners, „zuletzt geöffnet“ und die Vorschaubilder. Liegt der Ordner in einem Cloud-Ordner wie Proton Drive, OneDrive oder Dropbox, werden die Anmerkungen automatisch mitsynchronisiert. Änderungen von zwei Geräten werden zusammengeführt statt überschrieben.
 
 ## Fahrplan
 
 - [x] **0** – Repository und automatischer Build
-- [ ] **1** – Stift-Prototyp: PDF, Blättern, Pedal, Stift, Radierer *(zum Testen auf dem Surface bereit)*
-- [ ] **2** – Bibliothek mit Ordnern, Metadaten (Komponist, Genre, Tags), Suche und Setlists
-- [ ] **3** – Sync zwischen Geräten über einen Cloud-Ordner
+- [x] **1** – Stift-Prototyp: PDF, Blättern, Pedal, Stift, Radierer
+- [x] **2** – Bibliothek mit Ordnern, Metadaten (Komponist, Genre, Tags), Suche und Setlists *(zum Testen bereit)*
+- [ ] **3** – Sync zwischen Geräten über einen Cloud-Ordner, inklusive Konfliktkopien des Cloud-Dienstes
 - [ ] **4** – Android
 - [ ] **5** – Halbe Seitenwechsel, Sprünge bei Wiederholungen, Metronom, Audio und mehr
 

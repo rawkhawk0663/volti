@@ -58,7 +58,10 @@ class PageImageCache extends ChangeNotifier {
 
   Future<void> _render(_Key key) {
     if (_images.containsKey(key)) return Future.value();
-    return _pending[key] ??= _doRender(key).whenComplete(() => _pending.remove(key));
+    // Block-Körper nötig, sonst wartet whenComplete auf sich selbst.
+    return _pending[key] ??= _doRender(key).whenComplete(() {
+      _pending.remove(key);
+    });
   }
 
   Future<void> _doRender(_Key key) async {
@@ -79,10 +82,7 @@ class PageImageCache extends ChangeNotifier {
     }
     _images[key] = image;
     while (_images.length > capacity) {
-      final victim = _images.keys.firstWhere(
-        (k) => !_visible.contains(k.page),
-        orElse: () => _images.keys.first,
-      );
+      final victim = _images.keys.firstWhere((k) => !_visible.contains(k.page), orElse: () => _images.keys.first);
       if (_visible.contains(victim.page)) break;
       _images.remove(victim)!.dispose();
     }

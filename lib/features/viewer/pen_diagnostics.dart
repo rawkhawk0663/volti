@@ -29,13 +29,13 @@ class PenDiagnostics extends ChangeNotifier {
 }
 
 String _kindName(PointerDeviceKind k) => switch (k) {
-      PointerDeviceKind.stylus => 'Stift',
-      PointerDeviceKind.invertedStylus => 'Stift (Radierer-Ende)',
-      PointerDeviceKind.touch => 'Finger',
-      PointerDeviceKind.mouse => 'Maus',
-      PointerDeviceKind.trackpad => 'Trackpad',
-      _ => k.name,
-    };
+  PointerDeviceKind.stylus => 'Stift',
+  PointerDeviceKind.invertedStylus => 'Stift (Radierer-Ende)',
+  PointerDeviceKind.touch => 'Finger',
+  PointerDeviceKind.mouse => 'Maus',
+  PointerDeviceKind.trackpad => 'Trackpad',
+  _ => k.name,
+};
 
 class PenDiagnosticsPanel extends StatelessWidget {
   const PenDiagnosticsPanel({super.key, required this.diagnostics});
@@ -74,10 +74,17 @@ class PenDiagnosticsPanel extends StatelessWidget {
                   for (final (k, v) in rows)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 1),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        if (k.isNotEmpty) SizedBox(width: 100, child: Text(k, style: const TextStyle(color: Colors.white70))),
-                        Text(v),
-                      ]),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (k.isNotEmpty)
+                            SizedBox(
+                              width: 100,
+                              child: Text(k, style: const TextStyle(color: Colors.white70)),
+                            ),
+                          Text(v),
+                        ],
+                      ),
                     ),
                 ],
               ),

@@ -1,22 +1,22 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:volti/core/ink/annotation_store.dart';
 import 'package:volti/core/ink/score_annotations.dart';
 import 'package:volti/core/ink/stroke.dart';
+import 'package:volti/core/library/sidecar_store.dart';
 import 'package:volti/features/viewer/ink_controller.dart';
 
 Stroke stroke(String id, {int page = 1, DateTime? at, bool deleted = false}) => Stroke(
-      id: id,
-      page: page,
-      tool: InkTool.pen,
-      color: 0xFF000000,
-      width: 0.002,
-      points: const [InkPoint(0.1, 0.2, 0.5), InkPoint(0.3, 0.4, 0.9)],
-      createdAt: at ?? DateTime.utc(2026, 1, 1),
-      deleted: deleted,
-      modifiedAt: deleted ? DateTime.utc(2026, 1, 2) : null,
-    );
+  id: id,
+  page: page,
+  tool: InkTool.pen,
+  color: 0xFF000000,
+  width: 0.002,
+  points: const [InkPoint(0.1, 0.2, 0.5), InkPoint(0.3, 0.4, 0.9)],
+  createdAt: at ?? DateTime.utc(2026, 1, 1),
+  deleted: deleted,
+  modifiedAt: deleted ? DateTime.utc(2026, 1, 2) : null,
+);
 
 Set<String> visibleIds(ScoreAnnotations a, [int page = 1]) => a.visibleStrokesOn(page).map((s) => s.id).toSet();
 
@@ -54,22 +54,22 @@ void main() {
     tearDown(() => dir.deleteSync(recursive: true));
 
     test('Änderungen eines anderen Geräts gehen beim Speichern nicht verloren', () async {
-      const store = AnnotationStore();
+      const store = SidecarStore();
       final pdf = '${dir.path}/stueck.pdf';
       // Gerät 1 hat Strich a gespeichert.
-      await store.save(pdf, ScoreAnnotations([stroke('a')]));
+      await store.save(pdf, annotations: ScoreAnnotations([stroke('a')]));
       // Gerät 2 kennt nur seinen eigenen Strich b und speichert.
-      final merged = await store.save(pdf, ScoreAnnotations([stroke('b')]));
-      expect(visibleIds(merged), {'a', 'b'});
-      expect(visibleIds(await store.load(pdf)), {'a', 'b'});
+      final merged = await store.save(pdf, annotations: ScoreAnnotations([stroke('b')]));
+      expect(visibleIds(merged.annotations), {'a', 'b'});
+      expect(visibleIds((await store.load(pdf)).annotations), {'a', 'b'});
     });
 
     test('Beschädigte Datei wird gesichert statt überschrieben', () async {
-      const store = AnnotationStore();
+      const store = SidecarStore();
       final pdf = '${dir.path}/kaputt.pdf';
-      File('$pdf${AnnotationStore.suffix}').writeAsStringSync('{nicht json');
+      File('$pdf${SidecarStore.suffix}').writeAsStringSync('{nicht json');
       final a = await store.load(pdf);
-      expect(a.isEmpty, isTrue);
+      expect(a.annotations.isEmpty, isTrue);
       expect(dir.listSync().any((f) => f.path.contains('.defekt-')), isTrue);
     });
   });
@@ -99,7 +99,7 @@ void main() {
 
       // Nach dem Speichern ist der Stand derselbe (kein "Wiederauferstehen").
       await c.save();
-      expect((await const AnnotationStore().load('${dir.path}/x.pdf')).visibleStrokesOn(1).length, 1);
+      expect((await const SidecarStore().load('${dir.path}/x.pdf')).annotations.visibleStrokesOn(1).length, 1);
       c.dispose();
     });
   });
