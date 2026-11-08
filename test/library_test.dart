@@ -6,11 +6,13 @@ import 'package:path/path.dart' as p;
 import 'package:volti/core/app_settings.dart';
 import 'package:volti/core/library/library_filter.dart';
 import 'package:volti/core/library/library_scanner.dart';
+import 'package:volti/core/library/score_importer.dart';
 import 'package:volti/core/library/score_meta.dart';
 import 'package:volti/core/library/setlist.dart';
 import 'package:volti/core/library/sidecar_store.dart';
 import 'package:volti/core/ink/score_annotations.dart';
 import 'package:volti/core/ink/stroke.dart';
+import 'package:volti/features/library/library_controller.dart';
 
 void main() {
   late Directory dir;
@@ -153,12 +155,87 @@ void main() {
 
   test('Geräte-Einstellungen bleiben erhalten', () async {
     final a = await AppSettings.loadFrom(dir);
-    await a.setLibraryRoot('/noten');
     await a.recordOpened('/noten/x.pdf');
     final b = await AppSettings.loadFrom(dir);
-    expect(b.libraryRoot, '/noten');
     expect(b.lastOpened('/noten/x.pdf'), isNotNull);
     expect(b.lastOpened('/noten/y.pdf'), isNull);
+  });
+
+  group('Import in Voltis Datenordner', () {
+    late Directory data;
+    setUp(() => data = Directory(p.join(dir.path, 'volti-daten')));
+
+    test('Kopiert PDFs samt Infos nach Noten/, Original bleibt unverändert', () async {
+      final src = pdf('extern/Bach - Suite.pdf');
+      await const SidecarStore().save(src.path, meta: ScoreMeta()..set(ScoreMeta.genre, 'Barock'));
+
+      final r = await ScoreImporter(data.path).importFiles([src.path]);
+      expect(r.added.values, ['Noten/Bach - Suite.pdf']);
+      final copy = p.join(data.path, 'Noten', 'Bach - Suite.pdf');
+      expect(File(copy).existsSync(), isTrue);
+      expect((await const SidecarStore().load(copy)).meta.text(ScoreMeta.genre), 'Barock');
+      expect(src.existsSync(), isTrue);
+    });
+
+    test('Gleiche Datei zweimal: wird erkannt; anderer Inhalt mit gleichem Namen: neuer Name', () async {
+      final a = pdf('a/Stück.pdf');
+      final b = File(p.join(dir.path, 'b', 'Stück.PDF'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('%PDF-1.4 anderer, längerer Inhalt');
+      final importer = ScoreImporter(data.path);
+      await importer.importFiles([a.path]);
+      final again = await importer.importFiles([a.path]);
+      expect(again.added, isEmpty);
+      expect(again.alreadyThere.values, ['Noten/Stück.pdf']);
+
+      final other = await importer.importFiles([b.path]);
+      expect(other.added.values, ['Noten/Stück (2).pdf']);
+    });
+
+    test('Ganzen Ordner importieren findet PDFs in Unterordnern', () async {
+      pdf('sammlung/eins.pdf');
+      pdf('sammlung/Barock/zwei.pdf');
+      pdf('sammlung/.versteckt/drei.pdf');
+      final found = await ScoreImporter.findPdfs(p.join(dir.path, 'sammlung'));
+      expect(found.map(p.basename).toSet(), {'eins.pdf', 'zwei.pdf'});
+    });
+
+    test('Bibliothek aus Version 0.1.2 wird übernommen (inkl. Setlists)', () async {
+      final old = p.join(dir.path, 'alter-ordner');
+      pdf('alter-ordner/Barock/Händel.pdf');
+      pdf('alter-ordner/Bach.pdf');
+      final s = Setlist.create('Konzert')
+        ..items.addAll([SetlistItem.create('Barock/Händel.pdf'), SetlistItem.create('Bach.pdf')]);
+      await SetlistStore(old).save(s);
+      File(p.join(dir.path, 'einst', 'settings.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(jsonEncode({'libraryRoot': old}));
+
+      final settings = await AppSettings.loadFrom(Directory(p.join(dir.path, 'einst')));
+      final lib = LibraryController(settings, root: data.path);
+      await lib.init();
+
+      expect(lib.scores.map((e) => e.relativePath).toSet(), {'Noten/Händel.pdf', 'Noten/Bach.pdf'});
+      expect(lib.setlists.single.items.map((i) => i.relativePath), ['Noten/Händel.pdf', 'Noten/Bach.pdf']);
+      expect(settings.legacyLibraryRoot, isNull);
+      expect(File(p.join(old, 'Bach.pdf')).existsSync(), isTrue); // Original bleibt
+    });
+
+    test('Löschen entfernt PDF, Zusatzdatei und Setlist-Einträge', () async {
+      final lib = LibraryController(await AppSettings.loadFrom(Directory(p.join(dir.path, 'cfg'))), root: data.path);
+      await lib.init();
+      await lib.importPdfs([pdf('x/eins.pdf').path, pdf('x/zwei.pdf').path]);
+      final eins = lib.scores.firstWhere((e) => e.title == 'eins');
+      await lib.updateMeta(eins, {ScoreMeta.genre: 'Jazz'});
+      final set = await lib.createSetlist('Probe');
+      await lib.addToSetlist(set, lib.scores);
+
+      await lib.deleteScore(eins);
+      expect(File(eins.path).existsSync(), isFalse);
+      expect(File('${eins.path}${SidecarStore.suffix}').existsSync(), isFalse);
+      expect(lib.scores.map((e) => e.title), ['zwei']);
+      expect((await SetlistStore(data.path).loadAll()).single.items.map((i) => i.relativePath), ['Noten/zwei.pdf']);
+    });
   });
 }
 

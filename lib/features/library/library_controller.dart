@@ -1,23 +1,30 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
 import '../../core/app_settings.dart';
 import '../../core/library/library_scanner.dart';
+import '../../core/library/score_importer.dart';
 import '../../core/library/score_meta.dart';
 import '../../core/library/setlist.dart';
 import '../../core/library/sidecar_store.dart';
 
-/// Hält den Zustand der Bibliothek: Ordner, Stücke, Setlists.
+/// Hält den Zustand der Bibliothek: Stücke und Setlists.
+///
+/// Die Noten liegen in Voltis eigenem Datenordner ([root]). Neue Stücke
+/// kommen über den Import hinein.
 class LibraryController extends ChangeNotifier {
-  LibraryController(this.settings);
+  LibraryController(this.settings, {required this.root});
 
   final AppSettings settings;
+
+  /// Voltis Datenordner (siehe [ScoreImporter] für den Aufbau).
+  final String root;
+
   final _scanner = const LibraryScanner();
   final _sidecars = const SidecarStore();
-
-  String? get root => settings.libraryRoot;
+  late final _importer = ScoreImporter(root);
+  late final _setlistStore = SetlistStore(root);
 
   List<ScoreEntry> _scores = [];
   List<ScoreEntry> get scores => _scores;
@@ -28,35 +35,37 @@ class LibraryController extends ChangeNotifier {
   bool _loading = false;
   bool get loading => _loading;
 
+  /// Läuft gerade ein Import? (für die Fortschrittsanzeige)
+  bool importing = false;
+
   String? error;
 
-  SetlistStore? get _setlistStore => root == null ? null : SetlistStore(root!);
-
   Future<void> init() async {
-    if (root != null) await rescan();
-  }
-
-  Future<void> chooseRoot(String path) async {
-    await settings.setLibraryRoot(path);
-    _scores = [];
-    _setlists = [];
-    notifyListeners();
+    await Directory(_importer.notesDir).create(recursive: true);
+    await _migrateFromVersion012();
     await rescan();
   }
 
+  /// Version 0.1.2 nutzte einen selbst gewählten Ordner. Dessen Inhalt wird
+  /// einmalig übernommen (der alte Ordner bleibt, wie er ist).
+  Future<void> _migrateFromVersion012() async {
+    final old = settings.legacyLibraryRoot;
+    if (old == null) return;
+    try {
+      if (await Directory(old).exists()) await migrateLegacyLibrary(oldRoot: old, newRoot: root);
+      await settings.clearLegacyLibraryRoot();
+    } catch (_) {
+      // Beim nächsten Start nochmals versuchen.
+    }
+  }
+
   Future<void> rescan() async {
-    final r = root;
-    if (r == null) return;
     _loading = true;
     error = null;
     notifyListeners();
     try {
-      if (!await Directory(r).exists()) {
-        error = 'Der Bibliotheksordner wurde nicht gefunden:\n$r';
-      } else {
-        _scores = await _scanner.scan(r);
-        _setlists = await _setlistStore!.loadAll();
-      }
+      _scores = await _scanner.scan(root);
+      _setlists = await _setlistStore.loadAll();
     } catch (e) {
       error = 'Die Bibliothek konnte nicht gelesen werden: $e';
     }
@@ -71,29 +80,43 @@ class LibraryController extends ChangeNotifier {
     return null;
   }
 
-  String absolutePath(String rel) => p.joinAll([root!, ...rel.split('/')]);
-
-  /// Kopiert PDFs in den Bibliotheksordner. Gibt die Anzahl kopierter Dateien zurück.
-  Future<int> importPdfs(List<String> paths) async {
-    final r = root;
-    if (r == null) return 0;
-    var count = 0;
-    for (final src in paths) {
-      if (p.isWithin(r, src)) continue; // liegt schon in der Bibliothek
-      var target = p.join(r, p.basename(src));
-      var n = 2;
-      while (await File(target).exists()) {
-        target = p.join(r, '${p.basenameWithoutExtension(src)} ($n).pdf');
-        n++;
-      }
-      await File(src).copy(target);
-      // Vorhandene Anmerkungen aus dem alten Ort mitnehmen.
-      final side = File('$src${SidecarStore.suffix}');
-      if (await side.exists()) await side.copy('$target${SidecarStore.suffix}');
-      count++;
+  /// Kopiert PDFs in Voltis Datenordner.
+  Future<ImportResult> importPdfs(List<String> paths) async {
+    importing = true;
+    notifyListeners();
+    try {
+      return await _importer.importFiles(paths);
+    } finally {
+      importing = false;
+      await rescan();
     }
-    await rescan();
-    return count;
+  }
+
+  /// Importiert alle PDFs eines Ordners (inkl. Unterordnern).
+  Future<ImportResult> importFolder(String folder) async => importPdfs(await ScoreImporter.findPdfs(folder));
+
+  /// Löscht ein Stück endgültig aus Volti (PDF, Infos und Anmerkungen) und
+  /// entfernt es aus allen Setlists.
+  Future<void> deleteScore(ScoreEntry entry) async {
+    for (final f in [File(entry.path), File('${entry.path}${SidecarStore.suffix}')]) {
+      if (await f.exists()) await f.delete();
+    }
+    for (final s in _setlists) {
+      final before = s.items.length;
+      s.items.removeWhere((i) => i.relativePath == entry.relativePath);
+      if (s.items.length != before) await saveSetlist(s);
+    }
+    _scores = _scores.where((e) => e.path != entry.path).toList();
+    notifyListeners();
+  }
+
+  /// Öffnet den Datenordner im Datei-Explorer (nur Windows/Linux).
+  Future<void> revealDataFolder() async {
+    if (Platform.isWindows) {
+      await Process.run('explorer', [root]);
+    } else if (Platform.isLinux) {
+      await Process.run('xdg-open', [root]);
+    }
   }
 
   Future<void> updateMeta(ScoreEntry entry, Map<String, Object?> changes) async {
@@ -119,7 +142,7 @@ class LibraryController extends ChangeNotifier {
   // ------------------------------------------------------------ Setlists
   Future<Setlist> createSetlist(String name) async {
     final s = Setlist.create(name);
-    await _setlistStore!.save(s);
+    await _setlistStore.save(s);
     _setlists = [..._setlists, s]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     notifyListeners();
     return s;
@@ -127,13 +150,13 @@ class LibraryController extends ChangeNotifier {
 
   Future<void> saveSetlist(Setlist s) async {
     s.touch();
-    await _setlistStore!.save(s);
+    await _setlistStore.save(s);
     _setlists = [..._setlists]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     notifyListeners();
   }
 
   Future<void> deleteSetlist(Setlist s) async {
-    await _setlistStore!.delete(s);
+    await _setlistStore.delete(s);
     _setlists = _setlists.where((x) => x.id != s.id).toList();
     notifyListeners();
   }

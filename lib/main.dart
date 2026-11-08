@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import 'app/theme.dart';
@@ -9,7 +11,9 @@ import 'features/library/library_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await pdfrxFlutterInitialize();
-  final library = LibraryController(await AppSettings.load());
+  // Voltis eigener Datenordner für Noten, Infos, Anmerkungen und Setlists.
+  final dataDir = p.join((await getApplicationSupportDirectory()).path, 'Bibliothek');
+  final library = LibraryController(await AppSettings.load(), root: dataDir);
   library.init(); // liest die Bibliothek im Hintergrund ein
   runApp(VoltiApp(library: library));
 }

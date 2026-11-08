@@ -14,15 +14,19 @@ Für ein Update lädst du einfach die neueste ZIP-Datei herunter und ersetzt den
 
 ## Erster Start
 
-Volti fragt nach deinem **Bibliotheksordner**. Das ist der Ordner, in dem deine Noten-PDFs liegen. Unterordner werden mit einbezogen. Nimm am besten einen Ordner in **Proton Drive** (oder einem anderen Cloud-Speicher). Dann sind Noten, Anmerkungen und Setlists auf allen deinen Geräten verfügbar.
+Volti startet mit einer leeren Bibliothek. Über **Importieren** holst du deine Noten herein:
+- **PDFs importieren …** fügt einzelne oder mehrere PDFs hinzu.
+- **Ganzen Ordner importieren …** fügt alle PDFs eines Ordners hinzu, inklusive Unterordnern. Das ist praktisch, um eine bestehende Notensammlung auf einmal zu übernehmen.
+
+Volti legt dabei eine **Kopie** in seinem eigenen Datenordner ab. Deine Originaldateien bleiben unverändert.
 
 ## Bedienung
 
 **Bibliothek**
-- **PDFs hinzufügen** kopiert PDFs in deinen Bibliotheksordner. Du kannst PDFs auch direkt im Explorer in den Ordner legen und dann auf ⟳ (neu einlesen) tippen.
-- **Suchen** findet Stücke nach Titel, Komponist, Genre, Tag oder Ordner. Sortieren und filtern kannst du nach Genre und Tag.
-- **⋮** an einer Kachel, ein Rechtsklick oder langes Drücken öffnet ein Menü mit **Infos bearbeiten** (Titel, Komponist, Genre, Tonart, Tags, Notizen) und **Zu Setlist hinzufügen**.
+- **Suchen** findet Stücke nach Titel, Komponist, Genre oder Tag. Sortieren und filtern kannst du nach Genre und Tag.
+- **⋮** an einer Kachel, ein Rechtsklick oder langes Drücken öffnet ein Menü mit **Infos bearbeiten** (Titel, Komponist, Genre, Tonart, Tags, Notizen), **Zu Setlist hinzufügen** und **Löschen**.
 - Heisst eine Datei `Komponist - Titel.pdf`, schlägt Volti Komponist und Titel automatisch vor.
+- Wird dieselbe Datei nochmals importiert, erkennt Volti das und legt sie nicht doppelt an.
 
 **Setlists**
 - Lege eine Setlist an, füge Stücke hinzu und ändere die Reihenfolge, indem du ein Stück am Griff ☰ ziehst.
@@ -42,23 +46,24 @@ Mit dem Finger wird nie gezeichnet. So hinterlässt der Handballen beim Schreibe
 
 ## Wo speichert Volti deine Daten?
 
-Alles liegt in deinem Bibliotheksordner, die PDFs selbst werden nie verändert:
+Alles liegt in Voltis eigenem **Datenordner**. Du öffnest ihn über ⚙ → **Datenordner öffnen**, etwa für ein Backup:
 
 ```
-Noten/
-├── Bach - Suite 1.pdf
-├── Bach - Suite 1.pdf.volti.json   ← Infos und Anmerkungen zu diesem Stück
-└── .volti/setlists/…               ← deine Setlists (versteckter Ordner)
+Bibliothek/
+├── Noten/
+│   ├── Bach - Suite 1.pdf
+│   └── Bach - Suite 1.pdf.volti.json   ← Infos und Anmerkungen zu diesem Stück
+└── .volti/setlists/…                   ← deine Setlists
 ```
 
-Nur auf dem jeweiligen Gerät gespeichert werden der Ort des Bibliotheksordners, „zuletzt geöffnet“ und die Vorschaubilder. Liegt der Ordner in einem Cloud-Ordner wie Proton Drive, OneDrive oder Dropbox, werden die Anmerkungen automatisch mitsynchronisiert. Änderungen von zwei Geräten werden zusammengeführt statt überschrieben.
+Die PDFs selbst werden nie verändert. Nur auf dem jeweiligen Gerät gespeichert werden „zuletzt geöffnet“ und die Vorschaubilder.
 
 ## Fahrplan
 
 - [x] **0** – Repository und automatischer Build
 - [x] **1** – Stift-Prototyp: PDF, Blättern, Pedal, Stift, Radierer
-- [x] **2** – Bibliothek mit Ordnern, Metadaten (Komponist, Genre, Tags), Suche und Setlists *(zum Testen bereit)*
-- [ ] **3** – Sync zwischen Geräten über einen Cloud-Ordner, inklusive Konfliktkopien des Cloud-Dienstes
+- [x] **2** – Bibliothek mit Import, Metadaten (Komponist, Genre, Tags), Suche und Setlists *(zum Testen bereit)*
+- [ ] **3** – Sync des Datenordners zwischen Geräten
 - [ ] **4** – Android
 - [ ] **5** – Halbe Seitenwechsel, Sprünge bei Wiederholungen, Metronom, Audio und mehr
 

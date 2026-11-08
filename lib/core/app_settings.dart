@@ -5,8 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 /// Einstellungen und Daten, die nur auf *diesem* Gerät gelten und nicht
-/// synchronisiert werden: wo die Bibliothek liegt, wann ein Stück zuletzt
-/// geöffnet wurde.
+/// synchronisiert werden, z. B. wann ein Stück zuletzt geöffnet wurde.
 class AppSettings {
   AppSettings._(this._file, this._data);
 
@@ -28,10 +27,12 @@ class AppSettings {
 
   static Future<AppSettings> load() async => loadFrom(await getApplicationSupportDirectory());
 
-  String? get libraryRoot => _data['libraryRoot'] as String?;
+  /// Selbst gewählter Bibliotheksordner aus Version 0.1.2. Wird beim Start
+  /// einmalig in Voltis Datenordner übernommen.
+  String? get legacyLibraryRoot => _data['libraryRoot'] as String?;
 
-  Future<void> setLibraryRoot(String? path) async {
-    _data['libraryRoot'] = path;
+  Future<void> clearLegacyLibraryRoot() async {
+    _data.remove('libraryRoot');
     await _write();
   }
 
