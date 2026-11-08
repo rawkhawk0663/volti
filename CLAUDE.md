@@ -48,3 +48,11 @@ flutter test
 ## Stolperfallen
 - `future.whenComplete(() => map.remove(key))` wartet auf sich selbst, wenn die Map Futures enthält. Immer einen Block-Körper `{ map.remove(key); }` verwenden.
 - Beim Einlesen der Bibliothek werden die PDFs nicht geöffnet, weil Cloud-Ordner sonst alles herunterladen würden. Vorschaubilder entstehen erst, wenn eine Kachel sichtbar wird.
+
+## Offene Ideen (noch nicht umsetzen)
+- **Hellmodus auf Weiss:** Der Besitzer findet den sehr sanften Seegrün-Ton im Hellmodus noch etwas komisch und überlegt, auf Weiss umzusteigen. Erst ändern, wenn er es bestätigt. Der Dunkelmodus gefällt ihm so, wie er ist.
+
+## Vereinbarte Richtung für Bearbeitungsfunktionen (angelehnt an forScore, eigenes Design)
+- Zuschneiden und Seiten umordnen verändern das PDF nicht. Volti speichert nur, wie die Seiten angezeigt werden, und Anmerkungen bleiben an ihrem Platz.
+- Alles wird synchronisiert: Ebenen, Stempel, Vorlagen und Sprungmarken.
+- Die App ist für alle Instrumente gedacht. Stempel deshalb in Gruppen (Streicher, Bläser/Gesang, Tasten, Gitarre …). Der Besitzer spielt Gitarre.
