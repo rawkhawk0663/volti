@@ -4,6 +4,7 @@ import 'dart:ui' show Offset;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/ink/annotation_layer.dart';
 import '../../core/ink/score_annotations.dart';
 import '../../core/ink/selection.dart';
 import '../../core/ink/stamp.dart';
@@ -108,6 +109,7 @@ class InkController extends ChangeNotifier {
       width: width,
       points: List.unmodifiable(points),
       createdAt: DateTime.now().toUtc(),
+      layer: _layerForNew(),
     );
     _annotations.put(stroke);
     _push(_UndoEntry(added: [stroke.id]));
@@ -143,6 +145,7 @@ class InkController extends ChangeNotifier {
         points: List.unmodifiable(piece),
         createdAt: original.createdAt,
         modifiedAt: now,
+        layer: original.layer,
       );
       _annotations.put(s);
       ids.add(s.id);
@@ -200,6 +203,7 @@ class InkController extends ChangeNotifier {
       bold: bold,
       italic: italic,
       createdAt: DateTime.now().toUtc(),
+      layer: _layerForNew(),
     );
     _annotations.putText(note);
     _push(_UndoEntry(addedTexts: [note.id]));
@@ -306,6 +310,7 @@ class InkController extends ChangeNotifier {
       size: size,
       color: color,
       createdAt: DateTime.now().toUtc(),
+      layer: _layerForNew(),
     );
     _annotations.putStamp(st);
     _push(_UndoEntry(addedStamps: [st.id]));
@@ -329,6 +334,184 @@ class InkController extends ChangeNotifier {
     }
     if (removed.isEmpty) return;
     _push(_UndoEntry(removedStamps: removed));
+  }
+
+  // ----------------------------------------------------------------- Ebenen
+
+  /// Ebene, auf der neu Gezeichnetes landet (nur auf diesem Gerät gemerkt).
+  String get activeLayer => _annotations.resolveLayer(_activeLayer);
+  String _activeLayer = kDefaultLayer;
+
+  set activeLayer(String id) {
+    _activeLayer = _annotations.resolveLayer(id);
+    notifyListeners();
+  }
+
+  List<AnnotationLayer> get layers => _annotations.layers;
+
+  /// Ebene für Neues. Ist sie ausgeblendet, wird sie eingeblendet – sonst
+  /// würde man ins Unsichtbare zeichnen.
+  String? _layerForNew() {
+    final id = activeLayer;
+    if (!_annotations.isLayerVisible(id)) _putLayer(_annotations.layer(id)!.copyWith(visible: true));
+    return id == kDefaultLayer ? null : id;
+  }
+
+  void _putLayer(AnnotationLayer l) {
+    _annotations.putLayer(l.copyWith(modifiedAt: DateTime.now().toUtc()));
+  }
+
+  /// Neue Ebene ganz oben; sie wird gleich die aktive. Gibt die ID zurück.
+  String addLayer(String name) {
+    final top = layers.fold<double>(0, (m, l) => l.order > m ? l.order : m);
+    final l = AnnotationLayer(
+      id: _uuid.v4(),
+      name: name.trim().isEmpty ? 'Ebene ${layers.length + 1}' : name.trim(),
+      order: top + 1,
+      createdAt: DateTime.now().toUtc(),
+    );
+    _annotations.putLayer(l);
+    _activeLayer = l.id;
+    _changed();
+    return l.id;
+  }
+
+  void renameLayer(String id, String name) {
+    final l = _annotations.layer(id);
+    if (l == null || name.trim().isEmpty || l.name == name.trim()) return;
+    _putLayer(l.copyWith(name: name.trim()));
+    _changed();
+  }
+
+  void setLayerVisible(String id, bool visible) {
+    final l = _annotations.layer(id);
+    if (l == null || l.visible == visible) return;
+    _putLayer(l.copyWith(visible: visible));
+    _changed();
+  }
+
+  /// Ebene an Position [index] setzen (0 = ganz unten).
+  void moveLayer(String id, int index) {
+    final list = layers;
+    final from = list.indexWhere((l) => l.id == id);
+    if (from < 0) return;
+    final l = list.removeAt(from);
+    list.insert(index.clamp(0, list.length), l);
+    for (final (i, x) in list.indexed) {
+      if (x.order != i.toDouble()) _putLayer(x.copyWith(order: i.toDouble()));
+    }
+    _changed();
+  }
+
+  /// Wie viele Elemente (auf allen Seiten) auf der Ebene liegen.
+  int countOnLayer(String id) {
+    final a = _annotations;
+    bool on(String? layer, bool deleted) => !deleted && a.resolveLayer(layer) == id;
+    return a.allStrokes.where((s) => on(s.layer, s.deleted)).length +
+        a.allStamps.where((s) => on(s.layer, s.deleted)).length +
+        a.allTexts.where((t) => on(t.layer, t.deleted)).length;
+  }
+
+  /// Alle Elemente einer Ebene (auf allen Seiten).
+  SelectionIds _idsOnLayer(String id) {
+    final a = _annotations;
+    bool on(String? layer, bool deleted) => !deleted && a.resolveLayer(layer) == id;
+    return SelectionIds(
+      strokes: {
+        for (final s in a.allStrokes)
+          if (on(s.layer, s.deleted)) s.id,
+      },
+      stamps: {
+        for (final s in a.allStamps)
+          if (on(s.layer, s.deleted)) s.id,
+      },
+      texts: {
+        for (final t in a.allTexts)
+          if (on(t.layer, t.deleted)) t.id,
+      },
+    );
+  }
+
+  /// Legt Elemente auf eine andere Ebene – ein Rückgängig-Schritt.
+  void moveToLayer(SelectionIds ids, String layer) {
+    final target = _annotations.resolveLayer(layer);
+    final stored = target == kDefaultLayer ? kDefaultLayer : target;
+    final now = DateTime.now().toUtc();
+    final entry = _UndoEntry();
+    for (final id in ids.strokes) {
+      final s = _annotations[id];
+      if (s == null || s.deleted || _annotations.resolveLayer(s.layer) == target) continue;
+      _annotations.put(s.copyWith(layer: stored, modifiedAt: now));
+      entry.strokesBefore.add(s);
+    }
+    for (final id in ids.stamps) {
+      final st = _annotations.stamp(id);
+      if (st == null || st.deleted || _annotations.resolveLayer(st.layer) == target) continue;
+      _annotations.putStamp(st.copyWith(layer: stored, modifiedAt: now));
+      entry.stampsBefore.add(st);
+    }
+    for (final id in ids.texts) {
+      final n = _annotations.text(id);
+      if (n == null || n.deleted || _annotations.resolveLayer(n.layer) == target) continue;
+      _annotations.putText(n.copyWith(layer: stored, modifiedAt: now));
+      entry.textsBefore.add(n);
+    }
+    if (!entry.isEmpty) _push(entry);
+    if (!_annotations.isLayerVisible(target)) setLayerVisible(target, true);
+  }
+
+  /// Führt [from] in [into] zusammen: Alles wandert nach [into], [from]
+  /// verschwindet. Die Grund-Ebene lässt sich nicht auflösen.
+  void mergeLayer(String from, String into) {
+    if (from == into || from == kDefaultLayer) return;
+    moveToLayer(_idsOnLayer(from), into);
+    _removeLayer(from);
+  }
+
+  /// Löscht eine Ebene mit allem, was darauf liegt. Das Gelöschte lässt sich
+  /// mit "Rückgängig" zurückholen (dann auf der Grund-Ebene).
+  void deleteLayer(String id) {
+    if (id == kDefaultLayer) return;
+    deleteSelection(_idsOnLayer(id));
+    _removeLayer(id);
+  }
+
+  void _removeLayer(String id) {
+    final l = _annotations.layer(id);
+    if (l == null) return;
+    _putLayer(l.copyWith(deleted: true));
+    if (_activeLayer == id) _activeLayer = kDefaultLayer;
+    _changed();
+  }
+
+  /// Kopie einer Ebene mit Kopien aller Elemente, direkt darüber.
+  String duplicateLayer(String id) {
+    final src = _annotations.layer(id);
+    if (src == null) return id;
+    final list = layers;
+    final index = list.indexWhere((l) => l.id == id);
+    final copyId = addLayer('${src.name} (Kopie)');
+    if (!src.visible) setLayerVisible(copyId, false);
+    final clip = copySelection(_idsOnLayer(id));
+    beginBatch();
+    for (final page in {
+      ...clip.strokes.map((s) => s.page),
+      ...clip.stamps.map((s) => s.page),
+      ...clip.texts.map((t) => t.page),
+    }) {
+      paste(
+        InkClip(
+          strokes: [...clip.strokes.where((s) => s.page == page)],
+          stamps: [...clip.stamps.where((s) => s.page == page)],
+          texts: [...clip.texts.where((t) => t.page == page)],
+        ),
+        page,
+        layer: copyId,
+      );
+    }
+    endBatch();
+    moveLayer(copyId, index + 1);
+    return copyId;
   }
 
   // ------------------------------------------------------- Auswahl (Lasso)
@@ -435,7 +618,8 @@ class InkController extends ChangeNotifier {
 
   /// Fügt [clip] auf [page] ein, um [offset] verschoben (normiert).
   /// Alles bekommt neue IDs und liegt obenauf. Gibt die neue Auswahl zurück.
-  SelectionIds paste(InkClip clip, int page, {Offset offset = Offset.zero}) {
+  /// [layer]: Ebene für alles Eingefügte (null = jeweils die Ebene des Originals).
+  SelectionIds paste(InkClip clip, int page, {Offset offset = Offset.zero, String? layer}) {
     final now = DateTime.now().toUtc();
     final tf = SelectionTransform(delta: offset);
     final strokes = <String>{}, stamps = <String>{}, texts = <String>{};
@@ -448,6 +632,7 @@ class InkController extends ChangeNotifier {
         color: s.color,
         width: s.width,
         createdAt: now,
+        layer: layer ?? s.layer,
         points: List.unmodifiable([
           for (final p in s.points)
             () {
@@ -471,6 +656,7 @@ class InkController extends ChangeNotifier {
         size: st.size,
         color: st.color,
         createdAt: now,
+        layer: layer ?? st.layer,
       );
       _annotations.putStamp(copy);
       stamps.add(copy.id);
@@ -491,6 +677,7 @@ class InkController extends ChangeNotifier {
         bold: n.bold,
         italic: n.italic,
         createdAt: now,
+        layer: layer ?? n.layer,
       );
       _annotations.putText(copy);
       texts.add(copy.id);
@@ -531,6 +718,7 @@ class InkController extends ChangeNotifier {
         points: s.points,
         createdAt: s.createdAt,
         modifiedAt: now,
+        layer: s.layer,
       );
       _annotations.put(copy);
       inverse.added.add(copy.id);

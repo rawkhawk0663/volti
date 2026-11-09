@@ -1,3 +1,5 @@
+import 'annotation_layer.dart';
+
 /// Ein gesetzter Stempel (Musiksymbol) auf einer Notenseite.
 ///
 /// Wie Striche und Text-Notizen: normierte Position (Mitte des Symbols,
@@ -14,6 +16,7 @@ class Stamp {
     required this.createdAt,
     this.modifiedAt,
     this.deleted = false,
+    this.layer,
   });
 
   final String id;
@@ -33,6 +36,9 @@ class Stamp {
   final DateTime? modifiedAt;
   final bool deleted;
 
+  /// Ebene (null = Grund-Ebene [kDefaultLayer]).
+  final String? layer;
+
   DateTime get lastChange => modifiedAt ?? createdAt;
 
   Stamp copyWith({
@@ -45,6 +51,7 @@ class Stamp {
     int? color,
     DateTime? modifiedAt,
     bool? deleted,
+    String? layer,
   }) => Stamp(
     id: id ?? this.id,
     page: page ?? this.page,
@@ -56,6 +63,7 @@ class Stamp {
     createdAt: createdAt ?? this.createdAt,
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted ?? this.deleted,
+    layer: layer ?? this.layer,
   );
 
   static double _round(double v) => (v * 100000).roundToDouble() / 100000;
@@ -71,6 +79,7 @@ class Stamp {
     'created': createdAt.toUtc().toIso8601String(),
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
+    if (layer != null && layer != kDefaultLayer) 'layer': layer,
   };
 
   static Stamp fromJson(Map<String, dynamic> j) => Stamp(
@@ -84,5 +93,6 @@ class Stamp {
     createdAt: DateTime.parse(j['created'] as String),
     modifiedAt: j['modified'] == null ? null : DateTime.parse(j['modified'] as String),
     deleted: j['deleted'] == true,
+    layer: j['layer'] as String?,
   );
 }

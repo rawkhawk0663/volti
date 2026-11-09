@@ -32,6 +32,7 @@ class ScoreSidecar {
     'strokes': annotations.toJson()['strokes'],
     if (annotations.allTexts.isNotEmpty) 'texts': annotations.toJson()['texts'],
     if (annotations.allStamps.isNotEmpty) 'stamps': annotations.toJson()['stamps'],
+    if (annotations.allLayers.isNotEmpty) 'layers': annotations.toJson()['layers'],
   };
 
   /// Liest auch das alte Format aus Meilenstein 1 (nur Anmerkungen).

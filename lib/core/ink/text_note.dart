@@ -1,3 +1,5 @@
+import 'annotation_layer.dart';
+
 /// Eine getippte Notiz auf einer Notenseite (z. B. "Bogen ab", "Atmen!").
 ///
 /// Wie bei Strichen: normierte Position (0..1), eindeutige ID, gelöschte
@@ -28,6 +30,7 @@ class TextNote {
     this.italic = false,
     this.modifiedAt,
     this.deleted = false,
+    this.layer,
   });
 
   /// Kein Hintergrund (durchsichtig).
@@ -60,6 +63,9 @@ class TextNote {
   final DateTime? modifiedAt;
   final bool deleted;
 
+  /// Ebene (null = Grund-Ebene [kDefaultLayer]).
+  final String? layer;
+
   DateTime get lastChange => modifiedAt ?? createdAt;
 
   TextNote copyWith({
@@ -77,6 +83,7 @@ class TextNote {
     bool? italic,
     DateTime? modifiedAt,
     bool? deleted,
+    String? layer,
   }) => TextNote(
     id: id ?? this.id,
     page: page ?? this.page,
@@ -92,6 +99,7 @@ class TextNote {
     createdAt: createdAt ?? this.createdAt,
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted ?? this.deleted,
+    layer: layer ?? this.layer,
   );
 
   static double _round(double v) => (v * 100000).roundToDouble() / 100000;
@@ -111,6 +119,7 @@ class TextNote {
     'created': createdAt.toUtc().toIso8601String(),
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
+    if (layer != null && layer != kDefaultLayer) 'layer': layer,
   };
 
   static TextNote fromJson(Map<String, dynamic> json) => TextNote(
@@ -129,5 +138,6 @@ class TextNote {
     createdAt: DateTime.parse(json['created'] as String),
     modifiedAt: json['modified'] == null ? null : DateTime.parse(json['modified'] as String),
     deleted: json['deleted'] == true,
+    layer: json['layer'] as String?,
   );
 }

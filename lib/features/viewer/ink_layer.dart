@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/widgets.dart';
 
+import '../../core/ink/annotation_layer.dart';
 import '../../core/ink/selection.dart';
 import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
@@ -591,19 +592,34 @@ class _InkLayerState extends State<InkLayer> {
               // Fertige Striche als ein einziges Bild: Es wird nur neu erzeugt,
               // wenn sich die Striche ändern. Bei jedem Bild wird dann nur noch
               // dieses Bild gezeigt – statt alle Striche neu zu zeichnen.
-              RepaintBoundary(
-                child: ValueListenableBuilder<InkSelection?>(
-                  valueListenable: tools.selection,
-                  builder: (context, sel, _) => _StrokesImage(
-                    controller: c,
-                    page: widget.page,
-                    size: size,
-                    // Ausgewähltes malt die Auswahl-Ebene (damit es sich mitbewegt).
-                    hidden: sel != null && sel.isOn(c, widget.page)
-                        ? {...sel.ids.strokes, ...sel.ids.stamps}
-                        : const {},
-                  ),
-                ),
+              // Pro Ebene ein eigenes Bild: Zeichnen auf einer Ebene malt nur
+              // deren Bild weiter, Ein-/Ausblenden geht sofort.
+              ListenableBuilder(
+                listenable: Listenable.merge([c, tools.selection]),
+                builder: (context, _) {
+                  final sel = tools.selection.value;
+                  // Ausgewähltes malt die Auswahl-Ebene (damit es sich mitbewegt).
+                  final hidden = sel != null && sel.isOn(c, widget.page)
+                      ? {...sel.ids.strokes, ...sel.ids.stamps}
+                      : const <String>{};
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      for (final l in c.annotations.layers)
+                        if (l.visible)
+                          RepaintBoundary(
+                            key: ValueKey('layer/${l.id}'),
+                            child: _StrokesImage(
+                              controller: c,
+                              page: widget.page,
+                              layer: l.id,
+                              size: size,
+                              hidden: hidden,
+                            ),
+                          ),
+                    ],
+                  );
+                },
               ),
               RepaintBoundary(
                 child: CustomPaint(
@@ -634,10 +650,19 @@ class _InkLayerState extends State<InkLayer> {
 /// * Meldet der Controller etwas, das diese Seite nicht betrifft (Speichern,
 ///   andere Seite, Text), passiert gar nichts.
 class _StrokesImage extends StatefulWidget {
-  const _StrokesImage({required this.controller, required this.page, required this.size, this.hidden = const {}});
+  const _StrokesImage({
+    required this.controller,
+    required this.page,
+    required this.size,
+    this.layer = kDefaultLayer,
+    this.hidden = const {},
+  });
   final InkController controller;
   final int page;
   final Size size;
+
+  /// Nur Elemente dieser Ebene.
+  final String layer;
 
   /// Nicht malen (gerade ausgewählt).
   final Set<String> hidden;
@@ -675,7 +700,7 @@ class _StrokesImageState extends State<_StrokesImage> {
       _baseSize = null; // ganz neu erzeugen
       _dirty = true;
     }
-    if (old.page != widget.page) {
+    if (old.page != widget.page || old.layer != widget.layer) {
       _baseSize = null;
       _dirty = true;
     }
@@ -698,9 +723,10 @@ class _StrokesImageState extends State<_StrokesImage> {
   List<Object> _items() {
     final a = widget.controller.annotations;
     final hidden = widget.hidden;
+    final layer = widget.layer;
     final items = <Object>[
-      ...a.visibleStrokesOn(widget.page).where((s) => !hidden.contains(s.id)),
-      ...a.visibleStampsOn(widget.page).where((s) => !hidden.contains(s.id)),
+      ...a.visibleStrokesOn(widget.page).where((s) => !hidden.contains(s.id) && a.resolveLayer(s.layer) == layer),
+      ...a.visibleStampsOn(widget.page).where((s) => !hidden.contains(s.id) && a.resolveLayer(s.layer) == layer),
     ];
     items.sort((x, y) {
       final c = _created(x).compareTo(_created(y));

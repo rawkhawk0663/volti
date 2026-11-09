@@ -12,6 +12,8 @@
 ///   absichtlich gelöscht wurde und bringt ihn beim Sync nicht zurück.
 library;
 
+import 'annotation_layer.dart';
+
 enum InkTool {
   pen,
   highlighter;
@@ -53,6 +55,7 @@ class Stroke {
     required this.createdAt,
     this.modifiedAt,
     this.deleted = false,
+    this.layer,
   });
 
   /// Eindeutige ID (UUID).
@@ -79,6 +82,9 @@ class Stroke {
 
   final bool deleted;
 
+  /// Ebene (null = Grund-Ebene [kDefaultLayer]).
+  final String? layer;
+
   DateTime get lastChange => modifiedAt ?? createdAt;
 
   /// Umgebendes Rechteck (normiert) – für schnelle Vorprüfungen beim Radieren.
@@ -102,6 +108,7 @@ class Stroke {
     List<InkPoint>? points,
     DateTime? createdAt,
     DateTime? modifiedAt,
+    String? layer,
   }) => Stroke(
     id: id ?? this.id,
     page: page ?? this.page,
@@ -112,6 +119,7 @@ class Stroke {
     createdAt: createdAt ?? this.createdAt,
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted,
+    layer: layer ?? this.layer,
   );
 
   Stroke markDeleted(DateTime when) => Stroke(
@@ -124,6 +132,7 @@ class Stroke {
     createdAt: createdAt,
     modifiedAt: when,
     deleted: true,
+    layer: layer,
   );
 
   Map<String, dynamic> toJson() => {
@@ -135,6 +144,7 @@ class Stroke {
     'created': createdAt.toUtc().toIso8601String(),
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
+    if (layer != null && layer != kDefaultLayer) 'layer': layer,
     // Gelöschte Striche brauchen keine Punkte mehr – spart Platz.
     'points': deleted ? <List<double>>[] : points.map((p) => p.toJson()).toList(),
   };
@@ -148,6 +158,7 @@ class Stroke {
     createdAt: DateTime.parse(json['created'] as String),
     modifiedAt: json['modified'] == null ? null : DateTime.parse(json['modified'] as String),
     deleted: json['deleted'] == true,
+    layer: json['layer'] as String?,
     points: (json['points'] as List<dynamic>? ?? const []).map((p) => InkPoint.fromJson(p as List<dynamic>)).toList(),
   );
 }

@@ -65,6 +65,11 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Ausgewähltes wird nicht im Strich-Bild gemalt, sondern in der Auswahl-Ebene (`_SelectionPainter`), damit es sich beim Ziehen flüssig mitbewegt. Die Text-Ebene blendet ausgewählte Notizen aus. Der Finger wählt nie aus. Beim Blättern wird die Auswahl aufgehoben, weil sonst z. B. „Entf“ Unsichtbares löschen würde.
    Umfärben behält die Deckkraft (`recolorKeepingAlpha`), z. B. beim Textmarker.
 
+11. **Ebenen (Paket 2b):** pro Stück, gelten auf allen Seiten (`AnnotationLayer`, Feld `layers` in der Zusatzdatei). Elemente tragen `layer`. Fehlt es, oder ist die Ebene gelöscht oder unbekannt, gilt die Grund-Ebene `kDefaultLayer` (`ScoreAnnotations.resolveLayer`). So bleiben alte Dateien gültig. Die Grund-Ebene lässt sich nicht löschen.
+   Name, Reihenfolge und Sichtbarkeit werden synchronisiert (jüngste Fassung gewinnt, gelöscht bleibt gelöscht). Die aktive Ebene merkt sich nur das Gerät (`InkController.activeLayer`). Zeichnet man auf eine ausgeblendete aktive Ebene, wird sie eingeblendet.
+   `visible…On(page)` liefert nur Elemente eingeblendeter Ebenen. Radierer, Lasso und Text-Ebene greifen deshalb nie auf Ausgeblendetes zu. Pro eingeblendeter Ebene gibt es ein eigenes Strich-Bild (`_StrokesImage(layer:)`). Ein-/Ausblenden geht so sofort, und Zeichnen auf einer unteren Ebene bleibt ein schnelles Dazumalen.
+   Ebenen-Änderungen selbst sind nicht rückgängig machbar. Das Verschieben von Elementen zwischen Ebenen und das Löschen ihres Inhalts aber schon (beim Zurückholen landet der Inhalt einer gelöschten Ebene auf der Grund-Ebene).
+
 ## Prüfen
 ```bash
 flutter analyze

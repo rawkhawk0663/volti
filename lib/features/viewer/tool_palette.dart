@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import 'ink_controller.dart';
+import 'layers_dialog.dart';
 import 'tool_controller.dart';
 import 'tool_popover.dart';
 
@@ -172,6 +173,11 @@ class _ToolOverlayState extends State<ToolOverlay> {
               tool(ToolMode.text, Icons.text_fields, 'Text (T)'),
               tool(ToolMode.stamp, Icons.music_note, 'Stempel (S)'),
               tool(ToolMode.shape, Icons.category_outlined, 'Formen (F)'),
+              _BarButton(
+                icon: Icons.layers_outlined,
+                tooltip: activeLayerLabel(ink) == null ? 'Ebenen' : 'Ebenen (aktiv: ${activeLayerLabel(ink)})',
+                onTap: () => showLayersDialog(context, ink),
+              ),
               _BarButton(
                 icon: Icons.straighten,
                 tooltip: 'Lineal (L)',

@@ -10,6 +10,7 @@ import '../../core/ink/text_note.dart';
 import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
+import 'layers_dialog.dart';
 import 'shapes.dart';
 import 'stamp_paint.dart';
 import 'text_layer.dart';
@@ -104,6 +105,8 @@ class ToolPopover extends StatelessWidget {
                 ),
               ),
             ),
+            // Wohin gezeichnet wird – nur sichtbar, wenn es mehrere Ebenen gibt.
+            if (ink != null && mode != ToolMode.eraser) ActiveLayerChip(ink: ink!),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -522,6 +525,33 @@ class _LassoSettings extends StatelessWidget {
                   action(Icons.delete_outline, 'Löschen', 'Entf', tools.deleteSelection),
                 ],
               ),
+              if (ink != null && ink!.layers.length > 1) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: PopupMenuButton<String>(
+                    tooltip: 'Auf eine andere Ebene legen',
+                    onSelected: (id) {
+                      final s = tools.selection.value;
+                      if (s != null) s.controller.moveToLayer(s.live, id);
+                    },
+                    itemBuilder: (_) => [
+                      for (final l in ink!.layers.reversed) PopupMenuItem(value: l.id, child: Text(l.name)),
+                    ],
+                    child: IgnorePointer(
+                      child: OutlinedButton.icon(
+                        onPressed: () {},
+                        icon: const Icon(Icons.layers_outlined, size: 18),
+                        label: const Text('Auf Ebene …'),
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               const _Label('Farbe ändern'),
               Wrap(
                 spacing: 6,

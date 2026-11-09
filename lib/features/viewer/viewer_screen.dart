@@ -11,6 +11,7 @@ import 'fullscreen.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
 import '../../core/ink/selection.dart';
+import 'layers_dialog.dart';
 import 'page_flow.dart';
 import 'pen_diagnostics.dart';
 import 'ruler_overlay.dart';
@@ -742,6 +743,14 @@ class _TopBar extends StatelessWidget {
                           child: Text(label),
                         ),
                       const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: () => showLayersDialog(context, state._activePiece.ink),
+                        child: const ListTile(
+                          leading: Icon(Icons.layers_outlined),
+                          title: Text('Ebenen …'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                       CheckedPopupMenuItem(
                         value: state._toggleDiagnostics,
                         checked: state._showDiagnostics,
