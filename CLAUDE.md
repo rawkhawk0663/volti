@@ -54,6 +54,7 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    **Wichtig:** Flutters Grafik-Technik malt alle Vektor-Zeichnungen bei *jedem* Bild neu (kein automatischer Zwischenspeicher). Deshalb werden fertige Striche und Stempel einer Seite in ein Bild umgewandelt (`_StrokesImage`). Kommt nur etwas dazu, wird es auf das bestehende Bild gemalt (`toImage`, nicht `toImageSync`, sonst hält jedes Bild alle früheren im Speicher fest). Nur wenn etwas verschwindet oder sich ändert, entsteht das Bild ganz neu. Speichern allein löst nichts aus (Vergleich über ID und Änderungszeit). Leiste und Fenster haben keinen Schatten. Auch der entstehende Strich legt seinen Anfang alle 24 Punkte als Bild ab. Messung auf dem Surface Pro 9 (i7-1255U) vorher: 75 ms Malen pro Bild, 12 Bilder/s.
    **Ein Bild pro Seite** (`_Composer`, `_CompositePainter`): Die Bilder der Ebenen (`_StrokesImage`, selbst unsichtbar) werden zu *einem* Gesamtbild zusammengesetzt, sobald sich etwas ändert. Das Leuchtstift-Bild enthält immer die Notenseite, deshalb malt die Stift-Ebene auch die Seite, und die Notenansicht zeigt kein eigenes Seitenbild mehr. Bis das Gesamtbild fertig ist, werden die Einzelbilder gezeigt. Gemessen (Linux, Software-Grafik, volle Seite mit 3 Ebenen und Leuchtstift): vorher 45 ms und 16 Bilder/s, danach 27 ms und 34 Bilder/s, gleich wie auf einer leeren Seite. Jedes zusätzliche seitengrosse Bild pro Bild kostet spürbar.
    Der entstehende Strich wird in voller Farbe gemalt und, wenn er durchsichtig ist (Leuchtstift), als Ganzes in einem `saveLayer` durchsichtig gemacht. Er wird nie als durchsichtige Fläche bei jedem Bild neu berechnet (das war sehr langsam). Das Zwischenbild des Anfangs wird jedes Mal ganz neu aufgenommen und nicht aus dem vorigen Bild, sonst hielte es alle früheren im Speicher fest.
+   Entstehender **Leuchtstift** ohne `saveLayer` (auf dem Surface teuer: 14 Bilder/s): Der Anfang liegt als Bild in voller Farbe vor und wird mit der Deckkraft gemalt. Das neue Stück ist *ein* durchsichtiger Linienzug. Beide enden gerade (`StrokeCap.butt`) und stossen ohne dunklere Stelle aneinander (`_paintHighlighter`).
    Messen geht hier auch ohne Surface: Linux-Build unter Xvfb, Stift-Test einschalten, mit `xdotool` zeichnen (siehe frühere Sitzungen).
    Keine Durchsichtigkeits-Animationen beim Zeichnen: Leiste und Fenster bleiben deckend, auf Wunsch des Besitzers und weil Durchsichtigkeit pro Bild Zeit kostet.
    Stift-Verzögerung: Im Windows-Runner (`flutter_window.cpp`, `DisablePenDelays`) sind die Windows-Stiftkomfortfunktionen abgeschaltet (Gedrückt-halten-Rechtsklick, Tipp-Kreise, Flicks). Der entstehende Strich malt pro Bild nur die neuen Teilstücke (Zwischenbild) und zeigt eine kurze Vorhersage (~18 ms, nur Anzeige). Die Messung steht im Stift-Test (`PerfMeter`: Verzögerung und Bild-Zeiten).
@@ -100,6 +101,9 @@ flutter test
 
 ## Offene Tests beim Besitzer
 - **Pedal:** Das iRig BlueTurn verliert beim Besitzer immer wieder die Bluetooth-Verbindung. Das liegt am Gerät, nicht an Volti. Pfeiltasten funktionieren, also auch die meisten Pedale. Er kauft eventuell ein anderes.
+
+## Darstellung
+- Hell/dunkel/System wählt der Besitzer unter ⚙ (`ToolController.themeMode`, geräteeigene Einstellung `themeMode`).
 
 ## Offene Ideen (noch nicht umsetzen)
 - **Hellmodus auf Weiss:** Der Besitzer findet den sehr sanften Seegrün-Ton im Hellmodus noch etwas komisch und überlegt, auf Weiss umzusteigen. Erst ändern, wenn er es bestätigt. Der Dunkelmodus gefällt ihm so, wie er ist.

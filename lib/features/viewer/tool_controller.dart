@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
 
 import '../../core/app_settings.dart';
@@ -126,6 +127,19 @@ class ToolController extends ChangeNotifier {
   // ------------------------------------------------------------- Werkzeuge
   /// "Bearbeiten": mit dem zuletzt benutzten Werkzeug beginnen.
   void startEditing() => setMode(_lastTool);
+
+  // ------------------------------------------------------- Darstellung
+  /// Hell, dunkel oder wie das System (nur auf diesem Gerät gemerkt).
+  late final themeMode = ValueNotifier<ThemeMode>(switch (settings.text('themeMode')) {
+    'light' => ThemeMode.light,
+    'dark' => ThemeMode.dark,
+    _ => ThemeMode.system,
+  });
+
+  void setThemeMode(ThemeMode m) {
+    themeMode.value = m;
+    settings.setText('themeMode', m.name);
+  }
 
   /// Zeigt das Werkzeug-Fenster die Ebenen? (Am selben Ort wie die
   /// Werkzeug-Einstellungen; das gewählte Werkzeug bleibt aktiv.)
@@ -423,6 +437,7 @@ class ToolController extends ChangeNotifier {
   void dispose() {
     _saveTimer?.cancel();
     selection.dispose();
+    themeMode.dispose();
     isDrawing.dispose();
     rulerChanged.dispose();
     super.dispose();

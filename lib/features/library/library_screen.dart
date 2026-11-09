@@ -12,6 +12,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../../core/library/sidecar_store.dart';
 import '../viewer/page_setup_screen.dart';
+import '../viewer/tool_controller.dart';
 import '../viewer/viewer_screen.dart';
 import 'edit_meta_dialog.dart';
 import 'library_controller.dart';
@@ -392,6 +393,21 @@ class _ScoresViewState extends State<_ScoresView> {
                     enabled: false,
                     child: Text('Voltis Datenordner:\n${lib.root}', style: theme.textTheme.bodySmall),
                   ),
+                  // Darstellung: hell, dunkel oder wie das System
+                  for (final (mode, label, icon) in const [
+                    (ThemeMode.system, 'Darstellung: wie das System', Icons.brightness_auto_outlined),
+                    (ThemeMode.light, 'Darstellung: hell', Icons.light_mode_outlined),
+                    (ThemeMode.dark, 'Darstellung: dunkel', Icons.dark_mode_outlined),
+                  ])
+                    PopupMenuItem(
+                      value: () => ToolScope.read(context).setThemeMode(mode),
+                      child: ListTile(
+                        leading: Icon(icon),
+                        title: Text(label),
+                        trailing: ToolScope.read(context).themeMode.value == mode ? const Icon(Icons.check) : null,
+                      ),
+                    ),
+                  const PopupMenuDivider(),
                   if (Platform.isWindows || Platform.isLinux)
                     PopupMenuItem(
                       value: lib.revealDataFolder,

@@ -75,6 +75,8 @@ Der Stift-Favorit „Abdecken“ (weiss) eignet sich, um Teile der Noten zu übe
 
 Mit dem Finger wird nie gezeichnet. So hinterlässt der Handballen beim Schreiben keine Spuren.
 
+**Darstellung**: ⚙ → **Darstellung: wie das System / hell / dunkel**. Das gilt nur für dieses Gerät.
+
 ## Wo speichert Volti deine Daten?
 
 Alles liegt in Voltis eigenem **Datenordner**. Du öffnest ihn über ⚙ → **Datenordner öffnen**, etwa für ein Backup:

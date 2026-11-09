@@ -52,12 +52,17 @@ class VoltiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToolScope(
       tools: tools,
-      child: MaterialApp(
-        title: 'Volti',
-        debugShowCheckedModeBanner: false,
-        theme: buildVoltiTheme(Brightness.light),
-        darkTheme: buildVoltiTheme(Brightness.dark),
-        home: LibraryScreen(library: library, sync: sync),
+      child: ValueListenableBuilder<ThemeMode>(
+        valueListenable: tools.themeMode,
+        builder: (context, mode, home) => MaterialApp(
+          title: 'Volti',
+          debugShowCheckedModeBanner: false,
+          theme: buildVoltiTheme(Brightness.light),
+          darkTheme: buildVoltiTheme(Brightness.dark),
+          themeMode: mode,
+          home: home,
+        ),
+        child: LibraryScreen(library: library, sync: sync),
       ),
     );
   }

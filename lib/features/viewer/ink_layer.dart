@@ -1277,6 +1277,10 @@ class _ActivePainter extends CustomPainter {
     }
     final dpr = state._dpr;
     final dst = Offset.zero & size;
+    if (hl) {
+      _paintHighlighter(canvas, size, color, preset.width, pts, dpr, dst);
+      return;
+    }
     if (pts.length - state._cachedPoints > 24) {
       // Ganz neu aufnehmen (ohne das vorige Bild hineinzumalen): So hält das
       // neue Bild nicht alle früheren im Speicher fest.
@@ -1311,6 +1315,64 @@ class _ActivePainter extends CustomPainter {
     segments(canvas, img == null ? 1 : state._cachedPoints, pts.length);
     if (!hl) _paintPrediction(canvas, size, preset.copyWith(color: solid.toARGB32()), pts);
     if (translucent) canvas.restore();
+  }
+
+  /// Entstehender Leuchtstift – ohne Zwischenbild pro Bild (`saveLayer`), das
+  /// auf vielen Grafikchips teuer ist (gemessen auf dem Surface: 14 Bilder/s).
+  ///
+  /// * Der Anfang liegt als Bild in voller Farbe vor und wird mit der
+  ///   Deckkraft des Leuchtstifts gemalt (ein einziges Bild, günstig).
+  /// * Das neue Stück wird als *ein* durchsichtiger Linienzug gemalt – in
+  ///   sich überlappt nichts doppelt.
+  /// * Beide Teile enden gerade ("butt") und stossen genau aneinander, also
+  ///   gibt es am Übergang keine dunklere Stelle.
+  void _paintHighlighter(
+    Canvas canvas,
+    Size size,
+    Color color,
+    double width,
+    List<InkPoint> pts,
+    double dpr,
+    Rect dst,
+  ) {
+    Path pathOf(int from, int to) {
+      final path = Path()..moveTo(pts[from].x * size.width, pts[from].y * size.height);
+      for (var i = from + 1; i < to; i++) {
+        path.lineTo(pts[i].x * size.width, pts[i].y * size.height);
+      }
+      return path;
+    }
+
+    Paint paintFor(Color c) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width * size.width
+      ..strokeCap = StrokeCap.butt
+      ..strokeJoin = StrokeJoin.round
+      ..color = c;
+
+    if (pts.length - state._cachedPoints > 32) {
+      final recorder = ui.PictureRecorder();
+      final c = Canvas(recorder)..scale(dpr);
+      c.drawPath(pathOf(0, pts.length), paintFor(color.withValues(alpha: 1)));
+      final picture = recorder.endRecording();
+      final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
+      picture.dispose();
+      final old = state._cachedStart;
+      state._cachedStart = img;
+      state._cachedPoints = pts.length;
+      if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
+    final img = state._cachedStart;
+    final from = img == null ? 0 : state._cachedPoints - 1;
+    if (img != null) {
+      canvas.drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        dst,
+        Paint()..color = Color.fromRGBO(0, 0, 0, color.a),
+      );
+    }
+    if (pts.length - from >= 2) canvas.drawPath(pathOf(from, pts.length), paintFor(color));
   }
 
   /// Kurzes vorhergesagtes Stück am Ende des Strichs (nur Anzeige).
