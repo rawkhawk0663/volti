@@ -64,7 +64,9 @@ class ToolController extends ChangeNotifier {
   /// Bleibt erhalten, wenn man das Werkzeug wechselt.
   Offset? popoverOffset;
 
-  static const eraserSizes = [8.0, 14.0, 26.0];
+  /// Grösse des teilweisen Radierers (Radius in Bildschirmpunkten).
+  static const eraserMin = 2.0;
+  static const eraserMax = 30.0;
 
   Future<void> load() async {
     _s = await store.load();
@@ -137,7 +139,7 @@ class ToolController extends ChangeNotifier {
   }
 
   void setEraserRadius(double r) {
-    _s.eraserRadius = r;
+    _s.eraserRadius = r.clamp(eraserMin, eraserMax);
     _changed();
   }
 

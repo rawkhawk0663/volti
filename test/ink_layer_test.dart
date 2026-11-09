@@ -148,4 +148,41 @@ void main() {
     await t.runAsync(() => tools.flush());
     c.dispose();
   });
+
+  testWidgets('Strich-Bild: Neues wird dazugemalt, Radiertes verschwindet', (t) async {
+    await pump(t);
+    void line(double y) => c.addStroke(
+      page: 1,
+      tool: InkTool.pen,
+      color: 0xFF000000,
+      width: 0.01,
+      points: [InkPoint(0.2, y, 0.5), InkPoint(0.8, y, 0.5)],
+    );
+
+    Future<int> alphaAt(double x, double y) async {
+      // Warten, bis das Bild im Hintergrund fertig ist.
+      for (var i = 0; i < 20; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump();
+      }
+      final img = t.widget<RawImage>(find.byType(RawImage)).image!;
+      final bytes = (await t.runAsync(() => img.toByteData()))!;
+      final px = (x * img.width).round(), py = (y * img.height).round();
+      return bytes.getUint8((py * img.width + px) * 4 + 3);
+    }
+
+    line(0.25);
+    await t.pump();
+    expect(await alphaAt(0.5, 0.25), greaterThan(200));
+    line(0.75);
+    await t.pump();
+    expect(await alphaAt(0.5, 0.75), greaterThan(200), reason: 'neuer Strich im Bild');
+    expect(await alphaAt(0.5, 0.25), greaterThan(200), reason: 'alter Strich bleibt');
+
+    c.eraseStrokes([c.annotations.visibleStrokesOn(1).first]);
+    await t.pump();
+    expect(await alphaAt(0.5, 0.25), 0, reason: 'radierter Strich ist weg');
+    expect(await alphaAt(0.5, 0.75), greaterThan(200));
+    c.dispose();
+  });
 }

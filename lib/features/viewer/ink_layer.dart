@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
 import '../../app/theme.dart';
 import '../../core/ink/tool_settings.dart';
@@ -447,7 +448,16 @@ class _InkLayerState extends State<InkLayer> {
   }
 }
 
-/// Fertige Striche einer Seite, vorgerendert als Bild in voller Auflösung.
+/// Fertige Striche und Stempel einer Seite, vorgerendert als Bild.
+///
+/// Damit das Schreiben auch auf vollen Seiten flüssig bleibt:
+/// * Kommt nur etwas **dazu** (der Normalfall beim Schreiben), wird das
+///   bestehende Bild genommen und nur das Neue darübergemalt. Bis das neue
+///   Bild fertig ist (ein, zwei Bilder lang), wird das Neue direkt gemalt.
+/// * Nur wenn etwas verschwindet oder sich ändert (Radieren, Rückgängig,
+///   Abgleich), wird die ganze Seite neu erzeugt.
+/// * Meldet der Controller etwas, das diese Seite nicht betrifft (Speichern,
+///   andere Seite, Text), passiert gar nichts.
 class _StrokesImage extends StatefulWidget {
   const _StrokesImage({required this.controller, required this.page, required this.size});
   final InkController controller;
@@ -459,10 +469,18 @@ class _StrokesImage extends StatefulWidget {
 }
 
 class _StrokesImageState extends State<_StrokesImage> {
-  ui.Image? _image;
+  /// Fertiges Bild (null = leer) und welche Elemente darin stecken.
+  ui.Image? _base;
+  List<String> _baseKeys = const [];
+  Size? _baseSize;
+  double? _baseDpr;
+
+  /// Neu hinzugekommene Elemente, die (noch) nicht im Bild sind.
+  List<Object> _pending = const [];
+
   bool _dirty = true;
-  Size? _renderedSize;
-  double? _renderedDpr;
+  bool _composing = false;
+  int _generation = 0;
 
   @override
   void initState() {
@@ -476,57 +494,165 @@ class _StrokesImageState extends State<_StrokesImage> {
     if (old.controller != widget.controller) {
       old.controller.removeListener(_onChanged);
       widget.controller.addListener(_onChanged);
+      _baseSize = null; // ganz neu erzeugen
       _dirty = true;
     }
-    if (old.page != widget.page) _dirty = true;
+    if (old.page != widget.page) {
+      _baseSize = null;
+      _dirty = true;
+    }
   }
 
-  // Höchstens ein neues Bild pro Bildschirm-Bild (auch beim schnellen Radieren).
   void _onChanged() {
-    if (!_dirty) setState(() => _dirty = true);
+    if (!_dirty && mounted) setState(() => _dirty = true);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onChanged);
-    _image?.dispose();
+    _generation++;
+    _base?.dispose();
     super.dispose();
   }
 
-  void _render(double dpr) {
-    final size = widget.size;
-    final strokes = widget.controller.annotations.visibleStrokesOn(widget.page);
-    final stamps = widget.controller.annotations.visibleStampsOn(widget.page);
-    _dirty = false;
-    _renderedSize = size;
-    _renderedDpr = dpr;
-    final old = _image;
-    if ((strokes.isEmpty && stamps.isEmpty) || size.isEmpty) {
-      _image = null;
-    } else {
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder)..scale(dpr);
-      for (final s in strokes) {
-        paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points);
-      }
-      for (final st in stamps) {
-        paintStamp(canvas, size, st);
-      }
-      final picture = recorder.endRecording();
-      _image = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
-      picture.dispose();
+  /// Sichtbare Elemente der Seite in Malreihenfolge (älteste zuerst).
+  List<Object> _items() {
+    final a = widget.controller.annotations;
+    final items = <Object>[...a.visibleStrokesOn(widget.page), ...a.visibleStampsOn(widget.page)];
+    items.sort((x, y) {
+      final c = _created(x).compareTo(_created(y));
+      return c != 0 ? c : _id(x).compareTo(_id(y));
+    });
+    return items;
+  }
+
+  static DateTime _created(Object o) => o is Stroke ? o.createdAt : (o as Stamp).createdAt;
+  static String _id(Object o) => o is Stroke ? o.id : (o as Stamp).id;
+  static String _keyOf(Object o) => o is Stroke
+      ? '${o.id}@${o.lastChange.microsecondsSinceEpoch}'
+      : '${(o as Stamp).id}@${o.lastChange.microsecondsSinceEpoch}';
+
+  static bool _startsWith(List<String> list, List<String> prefix) {
+    if (prefix.length > list.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (list[i] != prefix[i]) return false;
     }
+    return true;
+  }
+
+  static void _paintItems(Canvas canvas, Size size, Iterable<Object> items) {
+    for (final it in items) {
+      if (it is Stroke) {
+        paintStroke(canvas, size, it.tool, Color(it.color), it.width, it.points);
+      } else if (it is Stamp) {
+        paintStamp(canvas, size, it);
+      }
+    }
+  }
+
+  /// Bild aus [base] (in Pixeln) plus [items] aufnehmen.
+  static ui.Picture _record(ui.Image? base, Iterable<Object> items, Size size, double dpr) {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    if (base != null) canvas.drawImage(base, Offset.zero, Paint());
+    canvas.scale(dpr);
+    _paintItems(canvas, size, items);
+    return recorder.endRecording();
+  }
+
+  void _setBase(ui.Image? img, List<String> keys, Size size, double dpr) {
+    final old = _base;
+    _base = img;
+    _baseKeys = keys;
+    _baseSize = size;
+    _baseDpr = dpr;
     // Das alte Bild erst nach dem nächsten Bild freigeben.
     if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+  }
+
+  void _update(double dpr) {
+    _dirty = false;
+    final size = widget.size;
+    final items = _items();
+    final keys = [for (final it in items) _keyOf(it)];
+
+    if (_baseSize == size && _baseDpr == dpr && _startsWith(keys, _baseKeys)) {
+      // Nichts verschwunden: höchstens etwas dazugekommen.
+      _pending = items.sublist(_baseKeys.length);
+      if (_pending.isNotEmpty) _compose(dpr);
+      return;
+    }
+
+    // Etwas ist verschwunden oder hat sich verändert → ganz neu erzeugen.
+    _generation++;
+    _pending = const [];
+    if (items.isEmpty || size.isEmpty) {
+      _setBase(null, keys, size, dpr);
+      return;
+    }
+    final picture = _record(null, items, size, dpr);
+    final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
+    picture.dispose();
+    _setBase(img, keys, size, dpr);
+  }
+
+  /// Bestehendes Bild + neue Elemente zu einem neuen Bild zusammenfügen.
+  ///
+  /// Bewusst `toImage` (im Hintergrund) statt `toImageSync`: Das fertige Bild
+  /// hängt dann nicht mehr am vorherigen. Sonst würde jeder Strich alle
+  /// früheren Bilder im Speicher festhalten.
+  Future<void> _compose(double dpr) async {
+    if (_composing) return; // Nach dem Fertigwerden wird nochmals geprüft.
+    _composing = true;
+    final gen = _generation;
+    final size = _baseSize!;
+    final pending = _pending;
+    final keys = [..._baseKeys, for (final it in pending) _keyOf(it)];
+    late final ui.Image img;
+    try {
+      final picture = _record(_base, pending, size, dpr);
+      img = await picture.toImage((size.width * dpr).ceil(), (size.height * dpr).ceil());
+      picture.dispose();
+    } finally {
+      _composing = false;
+    }
+    if (!mounted || gen != _generation) {
+      img.dispose();
+      if (mounted) setState(() => _dirty = true);
+      return;
+    }
+    setState(() {
+      _setBase(img, keys, size, dpr);
+      _dirty = true; // inzwischen Dazugekommenes einsortieren
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    if (_dirty || _renderedSize != widget.size || _renderedDpr != dpr) _render(dpr);
-    final img = _image;
-    return img == null ? const SizedBox.expand() : RawImage(image: img, fit: BoxFit.fill);
+    if (_dirty || _baseSize != widget.size || _baseDpr != dpr) _update(dpr);
+    final img = _base;
+    final pending = _pending;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (img != null) RawImage(image: img, fit: BoxFit.fill),
+        if (pending.isNotEmpty) CustomPaint(painter: _ItemsPainter(pending)),
+      ],
+    );
   }
+}
+
+/// Malt wenige neue Elemente direkt, bis sie im Bild sind.
+class _ItemsPainter extends CustomPainter {
+  _ItemsPainter(this.items);
+  final List<Object> items;
+
+  @override
+  void paint(Canvas canvas, Size size) => _StrokesImageState._paintItems(canvas, size, items);
+
+  @override
+  bool shouldRepaint(_ItemsPainter old) => !identical(old.items, items);
 }
 
 /// Zeichnet fertige Striche einer Seite.

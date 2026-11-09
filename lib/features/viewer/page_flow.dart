@@ -51,36 +51,21 @@ class PageFlow {
   /// Rechte Seite in der Doppelansicht (null = keine mehr).
   PageSlot? rightOf(PageSlot left) => after(left);
 
-  /// Ist [s] die letzte Seite ihres Stücks, und kommt danach noch ein Stück?
-  bool _endsPieceBeforeAnother(PageSlot s) => s.page == pageCount(s.piece) && s.piece + 1 < pieceCount;
-
   /// Nächste Ansicht.
   ///
-  /// Eine Seite: einfach die nächste Seite.
+  /// Alle Stücke verhalten sich wie ein einziges, durchgehendes PDF:
+  /// Es geht immer genau **eine** Seite weiter. In der Doppelansicht rutscht
+  /// die rechte Seite also nach links, und rechts erscheint die nächste.
+  /// So sieht man jeden Song vollständig und jeden Songübergang.
   ///
-  /// Zwei Seiten: innerhalb eines Stücks zwei Seiten weiter. Am Ende eines
-  /// Stücks gibt es aber **immer** eine Ansicht mit der letzten Seite des
-  /// alten und der ersten Seite des neuen Stücks nebeneinander – egal wie
-  /// viele Seiten die Stücke haben. Wichtig für Live-Musik: Man sieht den
-  /// Übergang.
+  /// Doppelansicht: Ist rechts schon die allerletzte Seite, geht es nicht
+  /// weiter (sonst bliebe rechts eine leere Hälfte).
   PageSlot? next(PageSlot left, {required bool twoUp}) {
-    if (!twoUp) return after(left);
-    final right = after(left);
-    if (right == null) return null;
-    // Rechts steht die letzte Seite eines Stücks → sie kommt nach links,
-    // rechts erscheint der Anfang des nächsten Stücks.
-    if (_endsPieceBeforeAnother(right)) return right;
-    return after(right);
+    final one = after(left);
+    if (!twoUp || one == null) return one;
+    return after(one) == null ? null : one;
   }
 
-  /// Vorherige Ansicht – genau die Ansicht, von der aus "weiter" hierher
-  /// führen würde (Übergangsansichten inklusive).
-  PageSlot? previous(PageSlot left, {required bool twoUp}) {
-    final one = before(left);
-    if (!twoUp || one == null) return one;
-    final two = before(one);
-    if (two != null && next(two, twoUp: true) == left) return two;
-    if (next(one, twoUp: true) == left) return one;
-    return two ?? one;
-  }
+  /// Vorherige Ansicht: eine Seite zurück.
+  PageSlot? previous(PageSlot left, {required bool twoUp}) => before(left);
 }

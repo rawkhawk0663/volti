@@ -59,8 +59,12 @@ class ToolPopover extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final mode = tools.mode;
     return Material(
-      elevation: 6,
-      borderRadius: BorderRadius.circular(18),
+      // Kein Schatten: Er müsste bei jedem Bild beim Zeichnen mitgemalt werden.
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
       clipBehavior: Clip.antiAlias,
       color: scheme.surface,
       child: Ink(
@@ -276,34 +280,31 @@ class _EraserSettings extends StatelessWidget {
         if (partial) ...[
           const _Label('Grösse'),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              for (final (i, r) in ToolController.eraserSizes.indexed)
-                Tooltip(
-                  message: const ['Klein', 'Mittel', 'Gross'][i],
-                  child: InkResponse(
-                    onTap: () => tools.setEraserRadius(r),
-                    radius: 28,
-                    child: SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: Center(
-                        child: Container(
-                          width: r * 1.6,
-                          height: r * 1.6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: tools.eraserRadius == r ? scheme.primaryContainer : null,
-                            border: Border.all(
-                              color: tools.eraserRadius == r ? scheme.primary : scheme.outline,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      ),
+              Expanded(
+                child: Slider(
+                  min: ToolController.eraserMin,
+                  max: ToolController.eraserMax,
+                  value: tools.eraserRadius.clamp(ToolController.eraserMin, ToolController.eraserMax),
+                  onChanged: tools.setEraserRadius,
+                ),
+              ),
+              // Vorschau in echter Grösse
+              SizedBox(
+                width: ToolController.eraserMax * 2 + 4,
+                height: ToolController.eraserMax * 2 + 4,
+                child: Center(
+                  child: Container(
+                    width: tools.eraserRadius * 2,
+                    height: tools.eraserRadius * 2,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: scheme.primaryContainer,
+                      border: Border.all(color: scheme.primary, width: 1.5),
                     ),
                   ),
                 ),
+              ),
             ],
           ),
         ],

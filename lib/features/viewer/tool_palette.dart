@@ -133,8 +133,12 @@ class _ToolOverlayState extends State<ToolOverlay> {
     Widget tool(ToolMode m, IconData icon, String tip, {Color? dot}) =>
         _BarButton(icon: icon, tooltip: tip, selected: mode == m, dot: dot, onTap: () => tools.tapTool(m));
     return Material(
-      elevation: 3,
-      borderRadius: BorderRadius.circular(20),
+      // Kein Schatten: Er müsste bei jedem Bild beim Zeichnen mitgemalt werden.
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
       clipBehavior: Clip.antiAlias,
       color: scheme.surface,
       child: Ink(

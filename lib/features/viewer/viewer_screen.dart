@@ -573,7 +573,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
     // RepaintBoundary: Jede Ebene wird nur neu gemalt, wenn sie sich selbst
     // ändert. Sonst würde z. B. jede Stiftbewegung auch die grosse Notenseite
     // neu malen – das macht das Zeichnen träge.
+    // Schlüssel pro Seite: Rutscht beim Blättern die rechte Seite nach links,
+    // behält sie ihre fertigen Bilder und muss nichts neu erzeugen.
     return Listener(
+      key: ValueKey('page/$key'),
       // Merken, auf welcher Seite zuletzt gearbeitet wurde (Rückgängig, Leeren).
       onPointerDown: (_) {
         if (_activeSlot != slot) setState(() => _activeSlot = slot);

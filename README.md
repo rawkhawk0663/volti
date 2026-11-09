@@ -44,7 +44,7 @@ Beim Öffnen siehst du nur die Noten auf anthrazitfarbenem Hintergrund. Die Leis
 | Sofort zeichnen | Mit dem **Stift aufsetzen und ziehen**. Kurz antippen blättert weiterhin. Ausschalten über ⋮ → „Mit dem Stift sofort zeichnen“ |
 | Radieren mit dem Surface Pen | Radierer-Ende des Stifts benutzen oder Seitentaste gedrückt halten, auch in der Spielansicht |
 | Seite springen | Leiste einblenden, dann den Regler unten ziehen |
-| Zwei Seiten nebeneinander | Im **Querformat automatisch**. In einer Setlist geht es über Songgrenzen hinweg: Bei jedem Songwechsel siehst du die letzte Seite des alten und die erste Seite des neuen Songs nebeneinander. Umstellen über ⋮ → „Seiten: automatisch / immer eine / immer zwei“ |
+| Zwei Seiten nebeneinander | Im **Querformat automatisch**. Eine Setlist verhält sich wie ein einziges, durchgehendes PDF: Jedes Umblättern geht genau eine Seite weiter, die rechte Seite rutscht nach links. So siehst du jeden Song vollständig und jeden Songwechsel. Umstellen über ⋮ → „Seiten: automatisch / immer eine / immer zwei“ |
 
 **Notenansicht – Bearbeiten**
 
@@ -57,7 +57,7 @@ Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugl
 | Fenster verschieben | An der Kopfzeile (⠿) ziehen. Wechselst du das Werkzeug, erscheint das neue Fenster an derselben Stelle |
 | Favoriten | Oben im Fenster. Antippen übernimmt die Einstellung, ☆ speichert die aktuelle als Favorit, lange drücken oder Rechtsklick entfernt einen. Tasten **1–9** wählen die Favoriten |
 | Stift und Textmarker | Farbe, Breite und Deckkraft, mit Vorschau |
-| Radierer | **Ganze Elemente** (löscht berührte Striche und Notizen komplett) oder **Teilweise** (wie ein Radiergummi, in drei Grössen). Das Radierer-Ende des Surface Pen radiert genauso. Ein Radier-Zug lässt sich mit einem Mal rückgängig machen |
+| Radierer | **Ganze Elemente** (löscht berührte Striche und Notizen komplett) oder **Teilweise** (wie ein Radiergummi, Grösse mit dem Schieberegler). Das Radierer-Ende des Surface Pen radiert genauso. Ein Radier-Zug lässt sich mit einem Mal rückgängig machen |
 | Text-Notiz | Auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen. Im Fenster stellst du **Schrift** (Auswahlliste: Roboto, Noto Serif, Roboto Mono), **B** (Bold, fett), **I** (Italic, kursiv), Grösse, **Textfarbe** und **Hintergrund** ein (ohne, Weiss, Gelb, Grün, Blau, Rosa). Tippst du eine bestehende Notiz an, gelten Änderungen im Fenster für diese Notiz. Ziehen verschiebt sie |
 | Stempel | Symbol ♪ oder Taste **S**: Musiksymbole aus der Schrift Bravura in Gruppen (Dynamik, Artikulation, Vorzeichen, Form, Verzierungen, Streicher, Bläser & Gesang, Tasten, Gitarre, Weiteres). Auf die Seite tippen setzt den Stempel, einen gesetzten Stempel ziehen verschiebt ihn. Grösse und Farbe im Fenster, oben die zuletzt benutzten |
 | Formen | Symbol oder Taste **F**: Linie, Pfeil, Rechteck, Ellipse, Crescendo, Decrescendo, Bogen. Vom Anfang zum Ende ziehen. Farbe und Breite im Fenster |
