@@ -86,7 +86,8 @@ Future<void> playSetlist(BuildContext context, LibraryController library, Setlis
     final entry = library.byRelativePath(s.items[i].relativePath);
     if (entry == null) continue;
     if (i == start) startIndex = items.length;
-    items.add(ViewerItem(entry.path, entry.title));
+    final item = s.items[i];
+    items.add(ViewerItem(entry.path, item.label ?? entry.title, bookmark: item.bookmark));
   }
   return openScores(context, library, items, start: startIndex, setlistName: s.name);
 }
@@ -176,12 +177,14 @@ class SetlistDetailScreen extends StatelessWidget {
                             radius: 14,
                             child: Text('${i + 1}', style: const TextStyle(fontSize: 12)),
                           ),
-                          title: Text(entry?.title ?? item.relativePath),
+                          title: Text(item.label ?? entry?.title ?? item.relativePath),
                           subtitle: entry == null
                               ? Text(
                                   'Nicht gefunden – umbenannt oder gelöscht?',
                                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                                 )
+                              : item.bookmark != null
+                              ? Text('Lesezeichen in «${entry.title}»')
                               : (entry.composer == null ? null : Text(entry.composer!)),
                           onTap: entry == null ? null : () => playSetlist(context, library, s, start: i),
                           trailing: Padding(
@@ -302,12 +305,18 @@ class _ScorePickerState extends State<_ScorePicker> {
 }
 
 /// Fragt, zu welcher Setlist ein Stück hinzugefügt werden soll.
-Future<void> addToSetlistDialog(BuildContext context, LibraryController library, ScoreEntry entry) async {
+Future<void> addToSetlistDialog(
+  BuildContext context,
+  LibraryController library,
+  ScoreEntry entry, {
+  String? bookmark,
+  String? label,
+}) async {
   const newOne = '__neu__';
   final choice = await showDialog<String>(
     context: context,
     builder: (c) => SimpleDialog(
-      title: Text('„${entry.title}“ hinzufügen zu …'),
+      title: Text('„${label ?? entry.title}“ hinzufügen zu …'),
       children: [
         for (final s in library.setlists)
           SimpleDialogOption(onPressed: () => Navigator.pop(c, s.id), child: Text(s.name)),
@@ -327,7 +336,11 @@ Future<void> addToSetlistDialog(BuildContext context, LibraryController library,
   } else {
     target = library.setlists.firstWhere((s) => s.id == choice);
   }
-  await library.addToSetlist(target, [entry]);
+  if (bookmark != null) {
+    await library.addBookmarkToSetlist(target, entry, bookmark, label ?? entry.title);
+  } else {
+    await library.addToSetlist(target, [entry]);
+  }
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Zu „${target.name}“ hinzugefügt')));
   }

@@ -173,6 +173,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
               tool(ToolMode.text, Icons.text_fields, 'Text (T)'),
               tool(ToolMode.stamp, Icons.music_note, 'Stempel (S)'),
               tool(ToolMode.shape, Icons.category_outlined, 'Formen (F)'),
+              tool(ToolMode.link, Icons.turn_right, 'Sprungmarke (J)'),
               _BarButton(
                 icon: Icons.layers_outlined,
                 tooltip: activeLayerLabel(ink) == null ? 'Ebenen' : 'Ebenen (aktiv: ${activeLayerLabel(ink)})',

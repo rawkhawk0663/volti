@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../viewer/tool_controller.dart';
 import '../viewer/viewer_screen.dart';
 import 'library_controller.dart';
+import 'setlists_view.dart';
 
 /// Öffnet ein oder mehrere Stücke im Notenbetrachter und aktualisiert danach
 /// die Bibliothek (z. B. das Anmerkungs-Symbol).
@@ -22,6 +23,11 @@ Future<void> openScores(
         startIndex: start,
         setlistName: setlistName,
         onOpened: library.settings.recordOpened,
+        addBookmarkToSetlist: (ctx, path, b) async {
+          final entry = library.byPath(path);
+          if (entry == null) return;
+          await addToSetlistDialog(ctx, library, entry, bookmark: b.id, label: b.name);
+        },
       ),
     ),
   );

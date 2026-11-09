@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/ink/annotation_layer.dart';
+import '../../core/ink/navigation_marks.dart';
 import '../../core/ink/score_annotations.dart';
 import '../../core/ink/selection.dart';
 import '../../core/ink/stamp.dart';
@@ -647,6 +648,68 @@ class InkController extends ChangeNotifier {
     arrangeLayers(rows);
     endBatch();
     return copyId;
+  }
+
+  // ------------------------------------------------ Sprungmarken, Lesezeichen
+  // (Werden gespeichert und abgeglichen. Löschen fragt vorher nach, darum
+  // ohne "Rückgängig".)
+
+  String addLink({
+    required int page,
+    required double x,
+    required double y,
+    required int toPage,
+    required double toX,
+    required double toY,
+  }) {
+    final l = JumpLink(
+      id: _uuid.v4(),
+      page: page,
+      x: x,
+      y: y,
+      toPage: toPage,
+      toX: toX,
+      toY: toY,
+      createdAt: DateTime.now().toUtc(),
+    );
+    _annotations.putLink(l);
+    _changed();
+    return l.id;
+  }
+
+  void updateLink(JumpLink l) {
+    _annotations.putLink(l.copyWith(modifiedAt: DateTime.now().toUtc()));
+    _changed();
+  }
+
+  void deleteLink(String id) {
+    final l = _annotations.link(id);
+    if (l == null || l.deleted) return;
+    updateLink(l.copyWith(deleted: true));
+  }
+
+  String addBookmark({required String name, required int page, int? endPage}) {
+    final b = Bookmark(
+      id: _uuid.v4(),
+      name: name.trim().isEmpty ? 'Lesezeichen' : name.trim(),
+      page: page,
+      endPage: endPage,
+      createdAt: DateTime.now().toUtc(),
+    );
+    _annotations.putBookmark(b);
+    _changed();
+    return b.id;
+  }
+
+  void updateBookmark(Bookmark b) {
+    _annotations.putBookmark(b.copyWith(modifiedAt: DateTime.now().toUtc()));
+    _changed();
+  }
+
+  void deleteBookmark(String id) {
+    final b = _annotations.bookmark(id);
+    if (b == null || b.deleted) return;
+    updateBookmark(b.copyWith(deleted: true));
   }
 
   // ------------------------------------------------------- Auswahl (Lasso)

@@ -47,6 +47,7 @@ String toolName(ToolMode m) => switch (m) {
   ToolMode.stamp => 'Stempel',
   ToolMode.shape => 'Formen',
   ToolMode.lasso => 'Auswählen',
+  ToolMode.link => 'Sprungmarke',
   _ => '',
 };
 
@@ -128,6 +129,7 @@ class ToolPopover extends StatelessWidget {
                         ToolMode.stamp => _StampSettings(tools: tools),
                         ToolMode.shape => _ShapeSettings(tools: tools),
                         ToolMode.lasso => _LassoSettings(tools: tools, ink: ink, page: page),
+                        ToolMode.link => _LinkSettings(tools: tools),
                         _ => const SizedBox.shrink(),
                       },
               ),
@@ -572,6 +574,46 @@ class _GlyphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GlyphPainter old) => old.glyph != glyph || old.color != color;
+}
+
+// ------------------------------------------------------------ Sprungmarken
+class _LinkSettings extends StatelessWidget {
+  const _LinkSettings({required this.tools});
+  final ToolController tools;
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
+    return ValueListenableBuilder(
+      valueListenable: tools.linkStart,
+      builder: (context, start, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 6),
+          if (start == null) ...[
+            Text('1. Startpunkt antippen', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+              'Zum Beispiel beim «D.S.» oder am Ende einer Wiederholung. Dort erscheint ein blauer Punkt.',
+              style: hint,
+            ),
+          ] else ...[
+            Text('2. Ziel antippen', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text('Zum Beispiel beim Segno. Du kannst vorher umblättern.', style: hint),
+            const SizedBox(height: 8),
+            OutlinedButton(onPressed: () => tools.linkStart.value = null, child: const Text('Abbrechen')),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'Beim Spielen springt Volti beim Antippen des blauen Punkts zum Ziel, das kurz orange aufblinkt. '
+            'Hier: Punkt ziehen verschiebt ihn, antippen zeigt Ziel ändern und Löschen.',
+            style: hint,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ------------------------------------------------------------------- Lasso

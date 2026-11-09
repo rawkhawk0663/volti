@@ -26,6 +26,9 @@ enum ToolMode {
 
   /// Auswählen (Lasso): einkreisen, dann verschieben, kopieren, umfärben …
   lasso,
+
+  /// Sprungmarken setzen: Startpunkt, dann Ziel antippen.
+  link,
 }
 
 /// Ausgewählte Elemente auf einer Seite eines Stücks.
@@ -113,6 +116,10 @@ class ToolController extends ChangeNotifier {
 
   bool get paletteLeft => settings.flag('paletteLeft', orElse: true);
 
+  /// Halbe Seitenwechsel (bei einer Seite): erst die obere Hälfte wechseln.
+  bool get halfTurns => settings.flag('halfTurns', orElse: false);
+  Future<void> setHalfTurns(bool v) => _setFlag('halfTurns', v);
+
   Future<void> setInstantPen(bool v) => _setFlag('instantPen', v);
   Future<void> togglePaletteSide() async {
     popoverOffset = null; // Fenster wieder neben die Palette
@@ -127,6 +134,9 @@ class ToolController extends ChangeNotifier {
   // ------------------------------------------------------------- Werkzeuge
   /// "Bearbeiten": mit dem zuletzt benutzten Werkzeug beginnen.
   void startEditing() => setMode(_lastTool);
+
+  /// Startpunkt einer Sprungmarke, die noch auf ihr Ziel wartet.
+  final linkStart = ValueNotifier<({InkController ink, int page, double x, double y})?>(null);
 
   // ------------------------------------------------------- Darstellung
   /// Hell, dunkel oder wie das System (nur auf diesem Gerät gemerkt).
@@ -166,6 +176,7 @@ class ToolController extends ChangeNotifier {
       return;
     }
     if (m != ToolMode.lasso) clearSelection();
+    if (m != ToolMode.link) linkStart.value = null;
     _mode = m;
     if (m != ToolMode.read && m != ToolMode.none) _lastTool = m;
     notifyListeners();
@@ -438,6 +449,7 @@ class ToolController extends ChangeNotifier {
     _saveTimer?.cancel();
     selection.dispose();
     themeMode.dispose();
+    linkStart.dispose();
     isDrawing.dispose();
     rulerChanged.dispose();
     super.dispose();

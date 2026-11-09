@@ -1,4 +1,5 @@
 import 'annotation_layer.dart';
+import 'navigation_marks.dart';
 import 'stamp.dart';
 import 'stroke.dart';
 import 'text_note.dart';
@@ -13,7 +14,15 @@ class ScoreAnnotations {
     Iterable<TextNote> texts = const [],
     Iterable<Stamp> stamps = const [],
     Iterable<AnnotationLayer> layers = const [],
+    Iterable<JumpLink> links = const [],
+    Iterable<Bookmark> bookmarks = const [],
   ]) {
+    for (final l in links) {
+      _links[l.id] = l;
+    }
+    for (final b in bookmarks) {
+      _bookmarks[b.id] = b;
+    }
     for (final l in layers) {
       _layers[l.id] = l;
     }
@@ -34,6 +43,29 @@ class ScoreAnnotations {
   final Map<String, TextNote> _texts = {};
   final Map<String, Stamp> _stamps = {};
   final Map<String, AnnotationLayer> _layers = {};
+  final Map<String, JumpLink> _links = {};
+  final Map<String, Bookmark> _bookmarks = {};
+
+  // ------------------------------------------------ Sprungmarken, Lesezeichen
+  Iterable<JumpLink> get allLinks => _links.values;
+  Iterable<Bookmark> get allBookmarks => _bookmarks.values;
+  JumpLink? link(String id) => _links[id];
+  Bookmark? bookmark(String id) => _bookmarks[id];
+  void putLink(JumpLink l) => _links[l.id] = l;
+  void putBookmark(Bookmark b) => _bookmarks[b.id] = b;
+
+  /// Sprungmarken, deren blauer Punkt auf [page] liegt.
+  List<JumpLink> linksOn(int page) => [
+    for (final l in _links.values)
+      if (l.page == page && !l.deleted) l,
+  ];
+
+  /// Lesezeichen, nach Seite sortiert.
+  List<Bookmark> get bookmarks => _bookmarks.values.where((b) => !b.deleted).toList()
+    ..sort((a, b) {
+      final c = a.page.compareTo(b.page);
+      return c != 0 ? c : a.name.compareTo(b.name);
+    });
 
   // ---------------------------------------------------------------- Ebenen
 
@@ -160,7 +192,19 @@ class ScoreAnnotations {
   /// Das Ergebnis ist unabhängig von der Reihenfolge: `a.merge(b)` und
   /// `b.merge(a)` ergeben denselben Stand.
   static ScoreAnnotations merge(ScoreAnnotations a, ScoreAnnotations b) {
-    final result = ScoreAnnotations(a.allStrokes, a.allTexts, a.allStamps, a.allLayers);
+    final result = ScoreAnnotations(a.allStrokes, a.allTexts, a.allStamps, a.allLayers, a.allLinks, a.allBookmarks);
+    for (final other in b.allLinks) {
+      final mine = result._links[other.id];
+      result.putLink(
+        mine == null ? other : _latest(mine, other, mine.lastChange, other.lastChange, mine.deleted, other.deleted),
+      );
+    }
+    for (final other in b.allBookmarks) {
+      final mine = result._bookmarks[other.id];
+      result.putBookmark(
+        mine == null ? other : _latest(mine, other, mine.lastChange, other.lastChange, mine.deleted, other.deleted),
+      );
+    }
     for (final other in b.allLayers) {
       final mine = result._layers[other.id];
       result.putLayer(mine == null ? other : _pickLayer(mine, other));
@@ -197,6 +241,12 @@ class ScoreAnnotations {
     return a.name.compareTo(b.name) >= 0 ? a : b;
   }
 
+  /// Gelöscht bleibt gelöscht, sonst gewinnt die jüngste Fassung.
+  static T _latest<T>(T a, T b, DateTime ta, DateTime tb, bool da, bool db) {
+    if (da != db) return da ? a : b;
+    return tb.isAfter(ta) ? b : a;
+  }
+
   static Stamp _pickStamp(Stamp a, Stamp b) {
     if (a.deleted != b.deleted) return a.deleted ? a : b;
     final c = a.lastChange.compareTo(b.lastChange);
@@ -217,6 +267,10 @@ class ScoreAnnotations {
     'strokes': (_strokes.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((s) => s.toJson()).toList(),
     if (_stamps.isNotEmpty)
       'stamps': (_stamps.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((t) => t.toJson()).toList(),
+    if (_links.isNotEmpty)
+      'links': (_links.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((l) => l.toJson()).toList(),
+    if (_bookmarks.isNotEmpty)
+      'bookmarks': (_bookmarks.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((l) => l.toJson()).toList(),
     if (_layers.isNotEmpty)
       'layers': (_layers.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((l) => l.toJson()).toList(),
     if (_texts.isNotEmpty)
@@ -234,6 +288,12 @@ class ScoreAnnotations {
     final layers = (json['layers'] as List<dynamic>? ?? const []).map(
       (l) => AnnotationLayer.fromJson(l as Map<String, dynamic>),
     );
-    return ScoreAnnotations(strokes, texts, stamps, layers);
+    final links = (json['links'] as List<dynamic>? ?? const []).map(
+      (l) => JumpLink.fromJson(l as Map<String, dynamic>),
+    );
+    final bookmarks = (json['bookmarks'] as List<dynamic>? ?? const []).map(
+      (l) => Bookmark.fromJson(l as Map<String, dynamic>),
+    );
+    return ScoreAnnotations(strokes, texts, stamps, layers, links, bookmarks);
   }
 }

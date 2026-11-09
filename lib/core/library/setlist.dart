@@ -40,16 +40,26 @@ class Setlist {
 }
 
 class SetlistItem {
-  SetlistItem({required this.id, required this.relativePath});
-  factory SetlistItem.create(String relativePath) => SetlistItem(id: const Uuid().v4(), relativePath: relativePath);
+  SetlistItem({required this.id, required this.relativePath, this.bookmark, this.label});
+  factory SetlistItem.create(String relativePath, {String? bookmark, String? label}) =>
+      SetlistItem(id: const Uuid().v4(), relativePath: relativePath, bookmark: bookmark, label: label);
 
   /// Eigene ID pro Eintrag – dasselbe Stück darf mehrmals vorkommen.
   final String id;
   final String relativePath;
 
-  Map<String, dynamic> toJson() => {'id': id, 'path': relativePath};
-  static SetlistItem fromJson(Map<String, dynamic> json) =>
-      SetlistItem(id: json['id'] as String, relativePath: json['path'] as String);
+  /// Nur ein Lesezeichen-Bereich des Stücks (z. B. ein Lied aus einem
+  /// Sammelband) und sein Name zum Anzeigen.
+  final String? bookmark;
+  final String? label;
+
+  Map<String, dynamic> toJson() => {'id': id, 'path': relativePath, 'bookmark': ?bookmark, 'label': ?label};
+  static SetlistItem fromJson(Map<String, dynamic> json) => SetlistItem(
+    id: json['id'] as String,
+    relativePath: json['path'] as String,
+    bookmark: json['bookmark'] as String?,
+    label: json['label'] as String?,
+  );
 }
 
 /// Speichert Setlists als einzelne Dateien im versteckten Ordner

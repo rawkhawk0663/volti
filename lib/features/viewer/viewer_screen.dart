@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
@@ -14,6 +15,9 @@ import '../../core/ink/selection.dart';
 import '../../core/library/page_setup.dart';
 import '../../core/library/sidecar_store.dart';
 import 'cropped_page.dart';
+import '../../core/ink/navigation_marks.dart';
+import 'bookmarks_sheet.dart';
+import 'links_layer.dart';
 import 'page_flow.dart';
 import 'page_setup_screen.dart';
 import 'pen_diagnostics.dart';
@@ -24,9 +28,13 @@ import 'tool_palette.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
 class ViewerItem {
-  const ViewerItem(this.path, this.title);
+  const ViewerItem(this.path, this.title, {this.bookmark});
   final String path;
   final String title;
+
+  /// Nur den Bereich dieses Lesezeichens zeigen (z. B. ein Lied aus einem
+  /// Sammelband in einer Setlist).
+  final String? bookmark;
 }
 
 /// Die Notenansicht.
@@ -47,9 +55,13 @@ class ViewerScreen extends StatefulWidget {
     this.startIndex = 0,
     this.setlistName,
     this.onOpened,
+    this.addBookmarkToSetlist,
   });
 
   final List<ViewerItem> items;
+
+  /// Lesezeichen als eigenes Stück in eine Setlist legen (von der Bibliothek).
+  final Future<void> Function(BuildContext context, String path, Bookmark bookmark)? addBookmarkToSetlist;
   final ToolController tools;
   final int startIndex;
   final String? setlistName;
@@ -76,7 +88,21 @@ class _Piece {
   PageSetup setup = PageSetup.empty;
 
   /// Angezeigte Seiten als PDF-Seitennummern.
-  List<int> get _shown => setup.pages(cache?.pageCount ?? 0);
+  List<int> get _shown {
+    final all = setup.pages(cache?.pageCount ?? 0);
+    final id = item.bookmark;
+    final b = id == null ? null : ink.annotations.bookmark(id);
+    if (b == null || b.deleted) return all;
+    // Nur der Bereich des Lesezeichens.
+    final start = all.indexOf(b.page);
+    if (start < 0) return all;
+    var end = all.indexOf(b.lastPage, start);
+    if (end < 0) end = start;
+    return all.sublist(start, end + 1);
+  }
+
+  /// Alle angezeigten Seiten des Stücks (ohne Lesezeichen-Bereich).
+  List<int> get allShown => setup.pages(cache?.pageCount ?? 0);
 
   /// Anzahl angezeigter Seiten (null, solange das Stück lädt).
   int? get pageCount => cache == null ? (error != null ? 0 : null) : _shown.length;
@@ -128,6 +154,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
   final _diagnostics = PenDiagnostics();
   bool _showDiagnostics = false;
 
+  /// Nach einem Sprung: Ziel kurz aufblinken lassen, und von wo man kam.
+  final _flash = ValueNotifier<JumpFlash?>(null);
+  PageSlot? _returnTo;
+  Timer? _returnTimer;
+
   /// Wird gerade eine Text-Notiz getippt? Dann blättern Tasten nicht um.
   bool _editingText = false;
 
@@ -153,6 +184,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// z. B. "Seite 3 von 8", "Seiten 3–4 von 8" oder "Seite 8 · rechts: Ave Maria".
   String get _pageLabel {
+    final half = _half && _halfMode ? _flow.after(_left) : null;
+    if (half != null) {
+      return half.piece == _left.piece
+          ? 'Seite ${_left.page} → ${half.page} von $_pageCount'
+          : 'Seite ${_left.page} → ${widget.items[half.piece].title}';
+    }
     final r = _right;
     if (r == null) return 'Seite ${_left.page} von $_pageCount';
     if (r.piece == _left.piece) return 'Seiten ${_left.page}–${r.page} von $_pageCount';
@@ -261,7 +298,15 @@ class _ViewerScreenState extends State<ViewerScreen> {
     tools.select(InkSelection(ink, page, ids));
   }
 
+  /// Halber Seitenwechsel läuft: oben schon die nächste Seite, unten noch
+  /// das Ende der aktuellen.
+  bool _half = false;
+
+  /// Halbe Seitenwechsel gerade möglich? (Nur bei einer Seite.)
+  bool get _halfMode => tools.halfTurns && !_twoUp;
+
   void _show(PageSlot slot) {
+    if (_half) setState(() => _half = false);
     if (slot == _left) return;
     // Eine Auswahl auf einer Seite, die man nicht mehr sieht, wäre gefährlich
     // (z. B. Entf-Taste) – also aufheben. Die Zwischenablage bleibt.
@@ -290,7 +335,75 @@ class _ViewerScreenState extends State<ViewerScreen> {
       p.dispose();
     }
     _diagnostics.dispose();
+    _returnTimer?.cancel();
+    _flash.dispose();
     super.dispose();
+  }
+
+  /// Lesezeichen des aktuellen Stücks.
+  void _openBookmarks() {
+    final piece = _leftPiece;
+    if (piece == null || piece.cache == null) return;
+    final index = _left.piece;
+    // In einem Lesezeichen-Eintrag einer Setlist gelten die Seiten des
+    // ganzen Stücks; sonst die angezeigten.
+    final shown = piece.item.bookmark == null ? piece._shown : piece.allShown;
+    final current = shown.indexOf(piece.source(_left.page)) + 1;
+    final add = widget.addBookmarkToSetlist;
+    showBookmarks(
+      context,
+      ink: piece.ink,
+      shown: shown,
+      current: current.clamp(1, shown.length),
+      onOpen: (display) {
+        final pdf = shown[display - 1];
+        final here = piece._shown.indexOf(pdf);
+        if (here >= 0) _show(PageSlot(index, here + 1));
+      },
+      onAddToSetlist: add == null ? null : (b) => add(context, piece.item.path, b),
+    );
+  }
+
+  /// Springt zum Ziel einer Sprungmarke und lässt es kurz aufblinken.
+  void _jump(int pieceIndex, JumpLink l) {
+    final piece = _pieces[pieceIndex];
+    final count = piece?.pageCount ?? 0;
+    if (piece == null || count == 0) return;
+    int? display;
+    for (var d = 1; d <= count; d++) {
+      if (piece.source(d) == l.toPage) {
+        display = d;
+        break;
+      }
+    }
+    if (display == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Die Zielseite ist ausgeblendet (Seiten anordnen).')));
+      return;
+    }
+    final target = PageSlot(pieceIndex, display);
+    final visible = target == _left || target == _right;
+    if (!visible) {
+      final from = _left;
+      _show(target);
+      setState(() => _returnTo = from);
+      _returnTimer?.cancel();
+      _returnTimer = Timer(const Duration(seconds: 8), () {
+        if (mounted) setState(() => _returnTo = null);
+      });
+    }
+    final f = JumpFlash(piece.ink, l.toPage, l.toX, l.toY);
+    _flash.value = f;
+    Timer(const Duration(milliseconds: 1800), () {
+      if (identical(_flash.value, f)) _flash.value = null;
+    });
+  }
+
+  void _jumpBack() {
+    final r = _returnTo;
+    _returnTimer?.cancel();
+    setState(() => _returnTo = null);
+    if (r != null) _show(r);
   }
 
   /// Seite im aktuellen Stück (Regler, Pos1/Ende).
@@ -307,6 +420,16 @@ class _ViewerScreenState extends State<ViewerScreen> {
     if (_left.piece + 1 < widget.items.length) await _ensure(_left.piece + 1);
     if (_twoUp && _left.piece + 2 < widget.items.length) await _ensure(_left.piece + 2);
     if (!mounted) return;
+    if (_halfMode) {
+      final next = _flow.after(_left);
+      if (next == null) return;
+      if (!_half) {
+        setState(() => _half = true); // erst oben die nächste Seite
+      } else {
+        _show(next); // jetzt ganz
+      }
+      return;
+    }
     final target = _flow.next(_left, twoUp: _twoUp);
     if (target != null) _show(target);
   }
@@ -314,6 +437,17 @@ class _ViewerScreenState extends State<ViewerScreen> {
   Future<void> _prev() async {
     if (_left.piece > 0) await _ensure(_left.piece - 1);
     if (!mounted) return;
+    if (_halfMode) {
+      if (_half) {
+        setState(() => _half = false); // wieder die ganze aktuelle Seite
+        return;
+      }
+      final before = _flow.before(_left);
+      if (before == null) return;
+      _show(before);
+      setState(() => _half = true); // halb zwischen der vorigen und dieser
+      return;
+    }
     final target = _flow.previous(_left, twoUp: _twoUp);
     if (target != null) _show(target);
   }
@@ -418,6 +552,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
       tools.setMode(ToolMode.stamp);
     } else if (down && key == LogicalKeyboardKey.keyF) {
       tools.setMode(ToolMode.shape);
+    } else if (down && key == LogicalKeyboardKey.keyJ) {
+      tools.setMode(ToolMode.link);
     } else if (down && !ctrl && key == LogicalKeyboardKey.keyA) {
       tools.setMode(ToolMode.lasso);
     } else if (down && key == LogicalKeyboardKey.keyL) {
@@ -511,6 +647,19 @@ class _ViewerScreenState extends State<ViewerScreen> {
                   ),
                 ),
               ),
+            // Nach einem Sprung: zurück, woher man kam (ein paar Sekunden lang)
+            if (_returnTo != null)
+              Positioned(
+                left: 16,
+                bottom: 24,
+                child: ExcludeFocus(
+                  child: FilledButton.tonalIcon(
+                    onPressed: _jumpBack,
+                    icon: const Icon(Icons.undo),
+                    label: const Text('Zurück'),
+                  ),
+                ),
+              ),
             if (_showDiagnostics)
               Positioned(
                 right: 12,
@@ -585,7 +734,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
     const margin = 6.0, gap = 8.0;
     final availW = box.maxWidth - 2 * margin;
     final availH = box.maxHeight - 2 * margin;
-    final slots = [_left, ?_right];
+    final halfNext = _half && _halfMode ? _flow.after(_left) : null;
+    final slots = [_left, ?_right, ?halfNext];
     double aspectOf(PageSlot s) {
       final p = _pieces[s.piece];
       if (p?.cache != null) return p!.aspect(s.page);
@@ -593,6 +743,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       return l?.cache == null ? 0.707 : l!.aspect(_left.page);
     }
 
+    if (halfNext != null) return _buildHalf(halfNext, availW, availH, aspectOf);
     final aspects = [for (final s in slots) aspectOf(s)];
     final totalAspect = aspects.reduce((a, b) => a + b);
     final gaps = gap * (slots.length - 1);
@@ -633,6 +784,48 @@ class _ViewerScreenState extends State<ViewerScreen> {
             if (i > 0) const SizedBox(width: gap),
             _buildPage(s, h * aspects[i], h, dpr),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Halber Seitenwechsel: oben die obere Hälfte der nächsten Seite, unten
+  /// die untere Hälfte der aktuellen – getrennt durch eine feine Linie.
+  Widget _buildHalf(PageSlot next, double availW, double availH, double Function(PageSlot) aspectOf) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    Size fit(PageSlot s) {
+      final a = aspectOf(s);
+      final h = availW / availH > a ? availH : availW / a;
+      return Size(h * a, h);
+    }
+
+    final cur = fit(_left), nxt = fit(next);
+    for (final s in [_left, next]) {
+      final p = _pieces[s.piece];
+      p?.cache?.setVisiblePages({
+        for (final x in [_left, next])
+          if (x.piece == s.piece) p.source(x.page),
+      });
+    }
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRect(
+            child: Align(
+              alignment: Alignment.topCenter,
+              heightFactor: 0.5,
+              child: _buildPage(next, nxt.width, nxt.height, dpr),
+            ),
+          ),
+          Container(height: 3, width: math.max(cur.width, nxt.width), color: VoltiColors.seafoam),
+          ClipRect(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              heightFactor: 0.5,
+              child: _buildPage(_left, cur.width, cur.height, dpr),
+            ),
+          ),
         ],
       ),
     );
@@ -712,6 +905,17 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     onEditingChanged: (v) => setState(() => _editingText = v),
                   ),
                 ),
+                // Sprungmarken (blaue Punkte) und das Aufblinken am Ziel
+                RepaintBoundary(
+                  child: LinksLayer(
+                    key: ValueKey('links/$key'),
+                    page: src,
+                    controller: piece.ink,
+                    tools: tools,
+                    flash: _flash,
+                    onJump: (l) => _jump(slot.piece, l),
+                  ),
+                ),
               ],
             ),
           ),
@@ -784,6 +988,11 @@ class _TopBar extends StatelessWidget {
                     label: const Text('Bearbeiten'),
                   ),
                   IconButton(
+                    tooltip: 'Lesezeichen',
+                    icon: const Icon(Icons.bookmarks_outlined),
+                    onPressed: state._openBookmarks,
+                  ),
+                  IconButton(
                     tooltip: state._fullscreen ? 'Vollbild beenden (F11)' : 'Vollbild (F11)',
                     icon: Icon(state._fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
                     onPressed: state._toggleFullscreen,
@@ -793,6 +1002,11 @@ class _TopBar extends StatelessWidget {
                     icon: const Icon(Icons.more_vert),
                     onSelected: (a) => a(),
                     itemBuilder: (_) => [
+                      CheckedPopupMenuItem(
+                        value: () => tools.setHalfTurns(!tools.halfTurns),
+                        checked: tools.halfTurns,
+                        child: const Text('Halbe Seitenwechsel (bei einer Seite)'),
+                      ),
                       CheckedPopupMenuItem(
                         value: () => tools.setInstantPen(!tools.instantPen),
                         checked: tools.instantPen,

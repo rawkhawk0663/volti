@@ -86,6 +86,11 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 13. **Eigene Stempel:** Bilder in `Bibliothek/.volti/stamps/<id>.png` (nie verändert oder gelöscht, gesetzte Stempel brauchen sie). Die Liste steht in `.volti/stamps.json` (`CustomStampStore`, Format `volti-stamps` v1, Sync wie Setlists: jüngste Fassung gewinnt). Die Bilder werden wie PDFs abgeglichen. Beim Import (`importCustomStamp`): weisser Hintergrund wird durchsichtig, Ränder werden weggeschnitten (`prepareStampPixels`), höchstens 600 px, Mittelpunkt `anchorX/Y` wird vom Besitzer gesetzt.
    Ein gesetzter Stempel trägt `custom` (ID) statt `glyph`. Höhe = `size` × Seitenbreite, die Farbe wird nicht angewendet. Malen geht über die gemeinsame Instanz `CustomStamps.instance` (`paintCustomStamp`, `customStampRect`). Ist ein Bild nachgeladen, malt `_StrokesImage` neu.
 
+14. **Navigation (Paket C):** Sprungmarken (`JumpLink`, Feld `links`) und Lesezeichen (`Bookmark`, Feld `bookmarks`) gehören zu den Anmerkungen eines Stücks (`ScoreAnnotations`). Sie werden pro Eintrag zusammengeführt: gelöscht bleibt gelöscht, sonst gewinnt die jüngste Fassung. Seiten sind immer PDF-Seiten.
+   Sprungmarken: Werkzeug `ToolMode.link` (Taste J). `ToolController.linkStart` hält den Startpunkt, bis das Ziel angetippt wird, auch nach dem Umblättern. `LinksLayer` zeigt die blauen Punkte (in der Spielansicht antippen = springen). `_ViewerScreenState._jump` springt zur ersten angezeigten Seite mit der Ziel-PDF-Seite, lässt das Ziel aufblinken (`JumpFlash`) und zeigt 8 s lang „Zurück“.
+   Lesezeichen mit Bereich (`page`..`endPage`) können als Setlist-Eintrag dienen (`SetlistItem.bookmark`/`label`, `ViewerItem.bookmark`). `_Piece._shown` zeigt dann nur diesen Bereich.
+   Halbe Seitenwechsel (`ToolController.halfTurns`, nur bei einer Seite): `_half` zeigt oben die obere Hälfte der nächsten und unten die untere Hälfte der aktuellen Seite (`_buildHalf`). Weiter/zurück schaltet zwischen ganz und halb.
+
 ## Prüfen
 ```bash
 flutter analyze

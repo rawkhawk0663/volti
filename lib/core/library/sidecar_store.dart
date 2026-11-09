@@ -38,6 +38,8 @@ class ScoreSidecar {
     if (annotations.allTexts.isNotEmpty) 'texts': annotations.toJson()['texts'],
     if (annotations.allStamps.isNotEmpty) 'stamps': annotations.toJson()['stamps'],
     if (annotations.allLayers.isNotEmpty) 'layers': annotations.toJson()['layers'],
+    if (annotations.allLinks.isNotEmpty) 'links': annotations.toJson()['links'],
+    if (annotations.allBookmarks.isNotEmpty) 'bookmarks': annotations.toJson()['bookmarks'],
     if (pages.toJson() != null) 'pages': pages.toJson(),
   };
 

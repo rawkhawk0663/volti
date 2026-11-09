@@ -174,4 +174,17 @@ class LibraryController extends ChangeNotifier {
     s.items.addAll(entries.map((e) => SetlistItem.create(e.relativePath)));
     await saveSetlist(s);
   }
+
+  /// Ein Lesezeichen (Bereich eines Stücks) als eigenen Eintrag hinzufügen.
+  Future<void> addBookmarkToSetlist(Setlist s, ScoreEntry entry, String bookmark, String label) async {
+    s.items.add(SetlistItem.create(entry.relativePath, bookmark: bookmark, label: label));
+    await saveSetlist(s);
+  }
+
+  ScoreEntry? byPath(String path) {
+    for (final s in _scores) {
+      if (s.path == path) return s;
+    }
+    return null;
+  }
 }
