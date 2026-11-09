@@ -2,8 +2,10 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/widgets.dart';
 
+import '../../core/ink/selection.dart';
 import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
 import '../../app/theme.dart';
@@ -68,6 +70,13 @@ class _InkLayerState extends State<InkLayer> {
 
   /// Formen: Start- und Endpunkt beim Aufziehen.
   Offset? _shapeStart, _shapeEnd;
+
+  /// Lasso: gezogene Linie (Pixel) bzw. laufendes Verschieben/Vergrössern.
+  List<Offset>? _lasso;
+  _SelectDrag? _selDrag;
+  Offset _selStart = Offset.zero;
+  Rect _selRect = Rect.zero;
+  SelectionTransform _selTf = SelectionTransform.identity;
 
   /// Lineal: Kante, an der entlang gerade gezeichnet wird (Seiten-Koordinaten).
   (Offset, Offset)? _rulerEdge;
@@ -137,6 +146,10 @@ class _InkLayerState extends State<InkLayer> {
       _beginStamp(e, size);
       return;
     }
+    if (!eraserEvent && mode == ToolMode.lasso) {
+      _beginLasso(e, size);
+      return;
+    }
     if (!eraserEvent && mode == ToolMode.shape) {
       _pointer = e.pointer;
       _shapeStart = _shapeEnd = e.localPosition;
@@ -163,6 +176,10 @@ class _InkLayerState extends State<InkLayer> {
 
   void _move(PointerEvent e, Size size) {
     if (e.pointer != _pointer) return;
+    if (_lasso != null || _selDrag != null) {
+      _moveLasso(e.localPosition, size);
+      return;
+    }
     if (_stampPos != null) {
       _stampPos = e.localPosition - _stampGrab;
       _activeRepaint.value++;
@@ -182,6 +199,10 @@ class _InkLayerState extends State<InkLayer> {
 
   void _up(PointerEvent e, Size size) {
     if (e.pointer != _pointer) return;
+    if (_lasso != null || _selDrag != null) {
+      _endLasso(size);
+      return;
+    }
     if (_stampPos != null) {
       _endStamp(size);
       return;
@@ -264,6 +285,144 @@ class _InkLayerState extends State<InkLayer> {
     }
     _stampPos = null;
     _movingStampId = null;
+    _pointer = null;
+    tools.isDrawing.value = false;
+    _activeRepaint.value++;
+  }
+
+  // ------------------------------------------------------------------ Lasso
+  static const _selPad = 6.0;
+  static const _handleRadius = 22.0;
+
+  InkSelection? get _mySelection {
+    final s = tools.selection.value;
+    return s != null && s.isOn(c, widget.page) ? s : null;
+  }
+
+  /// Fläche der Auswahl in Pixeln (ohne Rand), null = nichts ausgewählt.
+  Rect? selectionRect(SelectionIds ids, Size size) {
+    final a = c.annotations;
+    Rect? r;
+    void add(Rect x) => r = r == null ? x : r!.expandToInclude(x);
+    for (final id in ids.strokes) {
+      final s = a[id];
+      if (s == null || s.points.isEmpty) continue;
+      final b = s.bounds;
+      final half = s.width * size.width * 0.85;
+      add(
+        Rect.fromLTRB(
+          b.left * size.width,
+          b.top * size.height,
+          b.right * size.width,
+          b.bottom * size.height,
+        ).inflate(half),
+      );
+    }
+    for (final id in ids.stamps) {
+      final st = a.stamp(id);
+      if (st != null) add(stampRect(st, size));
+    }
+    for (final id in ids.texts) {
+      final n = a.text(id);
+      if (n == null) continue;
+      final b = textNoteBounds(n, size);
+      add(Rect.fromLTRB(b.left, b.top, b.right + 4, b.bottom)); // + Innenabstand der Notiz
+    }
+    return r;
+  }
+
+  void _beginLasso(PointerDownEvent e, Size size) {
+    _pointer = e.pointer;
+    final pos = e.localPosition;
+    final sel = _mySelection;
+    if (sel != null) {
+      final r = selectionRect(sel.live, size);
+      if (r != null) {
+        final box = r.inflate(_selPad);
+        if ((pos - box.bottomRight).distance <= _handleRadius) {
+          _selDrag = _SelectDrag.scale;
+        } else if (box.contains(pos)) {
+          _selDrag = _SelectDrag.move;
+        }
+        if (_selDrag != null) {
+          _selStart = pos;
+          _selRect = r;
+          _selTf = SelectionTransform.identity;
+          tools.isDrawing.value = true;
+          _activeRepaint.value++;
+          return;
+        }
+      }
+      tools.clearSelection(); // daneben getippt: Auswahl aufheben
+    }
+    _lasso = [pos];
+    tools.isDrawing.value = true;
+    _activeRepaint.value++;
+  }
+
+  void _moveLasso(Offset pos, Size size) {
+    final lasso = _lasso;
+    if (lasso != null) {
+      if ((pos - lasso.last).distance >= 2) lasso.add(pos);
+      _activeRepaint.value++;
+      return;
+    }
+    final r = _selRect;
+    final anchorNorm = Offset(r.left / size.width, r.top / size.height);
+    if (_selDrag == _SelectDrag.move) {
+      // Auf der Seite bleiben.
+      final d = pos - _selStart;
+      final dx = d.dx.clamp(-r.left, size.width - r.right);
+      final dy = d.dy.clamp(-r.top, size.height - r.bottom);
+      _selTf = SelectionTransform(delta: Offset(dx / size.width, dy / size.height), anchor: anchorNorm);
+    } else {
+      // Vergrössern am Griff unten rechts; die obere linke Ecke bleibt stehen.
+      final v0 = r.bottomRight - r.topLeft;
+      final len2 = v0.dx * v0.dx + v0.dy * v0.dy;
+      if (len2 <= 0) return;
+      final v = pos - r.topLeft;
+      var s = (v.dx * v0.dx + v.dy * v0.dy) / len2;
+      var maxS = 8.0;
+      if (v0.dx > 0) maxS = math.min(maxS, (size.width - r.left) / v0.dx);
+      if (v0.dy > 0) maxS = math.min(maxS, (size.height - r.top) / v0.dy);
+      s = s.clamp(0.2, math.max(0.2, maxS));
+      _selTf = SelectionTransform(scale: s, anchor: anchorNorm);
+    }
+    _activeRepaint.value++;
+  }
+
+  void _endLasso(Size size) {
+    final lasso = _lasso;
+    if (lasso != null) {
+      var extent = 0.0;
+      for (final p in lasso) {
+        extent = math.max(extent, (p - lasso.first).distance);
+      }
+      if (lasso.length >= 3 && extent > 8) {
+        final poly = [for (final p in lasso) Offset(p.dx / size.width, p.dy / size.height)];
+        final ids = lassoSelect(
+          c.annotations,
+          widget.page,
+          poly,
+          textBounds: (n) {
+            final r = textNoteBounds(n, size);
+            return Rect.fromLTRB(
+              r.left / size.width,
+              r.top / size.height,
+              r.right / size.width,
+              r.bottom / size.height,
+            );
+          },
+        );
+        tools.select(InkSelection(c, widget.page, ids));
+      }
+    } else {
+      final sel = _mySelection;
+      if (sel != null && !_selTf.isIdentity) c.transformSelection(sel.live, _selTf);
+    }
+    _lasso = null;
+    _selDrag = null;
+    _selTf = SelectionTransform.identity;
     _pointer = null;
     tools.isDrawing.value = false;
     _activeRepaint.value++;
@@ -433,7 +592,23 @@ class _InkLayerState extends State<InkLayer> {
               // wenn sich die Striche ändern. Bei jedem Bild wird dann nur noch
               // dieses Bild gezeigt – statt alle Striche neu zu zeichnen.
               RepaintBoundary(
-                child: _StrokesImage(controller: c, page: widget.page, size: size),
+                child: ValueListenableBuilder<InkSelection?>(
+                  valueListenable: tools.selection,
+                  builder: (context, sel, _) => _StrokesImage(
+                    controller: c,
+                    page: widget.page,
+                    size: size,
+                    // Ausgewähltes malt die Auswahl-Ebene (damit es sich mitbewegt).
+                    hidden: sel != null && sel.isOn(c, widget.page)
+                        ? {...sel.ids.strokes, ...sel.ids.stamps}
+                        : const {},
+                  ),
+                ),
+              ),
+              RepaintBoundary(
+                child: CustomPaint(
+                  painter: _SelectionPainter(this, repaint: Listenable.merge([_activeRepaint, tools.selection, c])),
+                ),
               ),
               // Eigene Ebene: Der entstehende Strich wird bei jeder Bewegung
               // neu gemalt, ohne alles andere mitzumalen.
@@ -459,10 +634,13 @@ class _InkLayerState extends State<InkLayer> {
 /// * Meldet der Controller etwas, das diese Seite nicht betrifft (Speichern,
 ///   andere Seite, Text), passiert gar nichts.
 class _StrokesImage extends StatefulWidget {
-  const _StrokesImage({required this.controller, required this.page, required this.size});
+  const _StrokesImage({required this.controller, required this.page, required this.size, this.hidden = const {}});
   final InkController controller;
   final int page;
   final Size size;
+
+  /// Nicht malen (gerade ausgewählt).
+  final Set<String> hidden;
 
   @override
   State<_StrokesImage> createState() => _StrokesImageState();
@@ -501,6 +679,7 @@ class _StrokesImageState extends State<_StrokesImage> {
       _baseSize = null;
       _dirty = true;
     }
+    if (!setEquals(old.hidden, widget.hidden)) _dirty = true;
   }
 
   void _onChanged() {
@@ -518,7 +697,11 @@ class _StrokesImageState extends State<_StrokesImage> {
   /// Sichtbare Elemente der Seite in Malreihenfolge (älteste zuerst).
   List<Object> _items() {
     final a = widget.controller.annotations;
-    final items = <Object>[...a.visibleStrokesOn(widget.page), ...a.visibleStampsOn(widget.page)];
+    final hidden = widget.hidden;
+    final items = <Object>[
+      ...a.visibleStrokesOn(widget.page).where((s) => !hidden.contains(s.id)),
+      ...a.visibleStampsOn(widget.page).where((s) => !hidden.contains(s.id)),
+    ];
     items.sort((x, y) {
       final c = _created(x).compareTo(_created(y));
       return c != 0 ? c : _id(x).compareTo(_id(y));
@@ -653,6 +836,115 @@ class _ItemsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ItemsPainter old) => !identical(old.items, items);
+}
+
+enum _SelectDrag { move, scale }
+
+/// Lasso-Linie und Auswahl: Rahmen, Griff und die ausgewählten Elemente
+/// (beim Verschieben/Vergrössern gleich an der neuen Stelle).
+class _SelectionPainter extends CustomPainter {
+  _SelectionPainter(this.state, {required Listenable repaint}) : super(repaint: repaint);
+  final _InkLayerState state;
+
+  static final _line = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5
+    ..color = VoltiColors.deep;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lasso = state._lasso;
+    if (lasso != null && lasso.length > 1) {
+      final path = Path()..addPolygon(lasso, true);
+      canvas.drawPath(path, Paint()..color = VoltiColors.seafoam.withValues(alpha: 0.10));
+      _dashedPath(canvas, lasso, close: false);
+    }
+    final sel = state._mySelection;
+    if (sel == null) return;
+    final ids = sel.live;
+    final r = state.selectionRect(ids, size);
+    if (r == null) return;
+    final tf = state._selTf;
+    final a = Offset(tf.anchor.dx * size.width, tf.anchor.dy * size.height);
+    final d = Offset(tf.delta.dx * size.width, tf.delta.dy * size.height);
+    Offset px(Offset p) => a + (p - a) * tf.scale + d;
+
+    // Ausgewählte Elemente
+    final ann = state.c.annotations;
+    canvas.save();
+    canvas.translate(a.dx + d.dx, a.dy + d.dy);
+    canvas.scale(tf.scale);
+    canvas.translate(-a.dx, -a.dy);
+    final strokes = [for (final id in ids.strokes) ?ann[id]]..sort((x, y) => x.createdAt.compareTo(y.createdAt));
+    for (final s in strokes) {
+      paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points);
+    }
+    for (final id in ids.stamps) {
+      final st = ann.stamp(id);
+      if (st != null) paintStamp(canvas, size, st);
+    }
+    canvas.restore();
+    // Text-Notizen in ihrer neuen Grösse (nicht nur vergrössert gemalt).
+    final scaled = Size(size.width * tf.scale, size.height * tf.scale);
+    for (final id in ids.texts) {
+      final n = ann.text(id);
+      if (n == null) continue;
+      final o = px(Offset(n.x * size.width, n.y * size.height));
+      canvas.save();
+      canvas.translate(o.dx - n.x * scaled.width, o.dy - n.y * scaled.height);
+      paintTextNote(canvas, n, scaled);
+      canvas.restore();
+    }
+
+    // Rahmen und Griff
+    final box = Rect.fromPoints(px(r.topLeft), px(r.bottomRight)).inflate(_InkLayerState._selPad);
+    canvas.drawRect(box, Paint()..color = VoltiColors.seafoam.withValues(alpha: 0.08));
+    _dashedPath(canvas, [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft], close: true);
+    final h = box.bottomRight;
+    canvas.drawCircle(h, 9, Paint()..color = const Color(0xFFFFFFFF));
+    canvas.drawCircle(h, 9, _line..strokeWidth = 2);
+    // kleiner Doppelpfeil im Griff
+    final arrow = Paint()
+      ..color = VoltiColors.deep
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(h + const Offset(-4, -4), h + const Offset(4, 4), arrow);
+    canvas.drawLine(h + const Offset(4, 4), h + const Offset(0.5, 4), arrow);
+    canvas.drawLine(h + const Offset(4, 4), h + const Offset(4, 0.5), arrow);
+    canvas.drawLine(h + const Offset(-4, -4), h + const Offset(-0.5, -4), arrow);
+    canvas.drawLine(h + const Offset(-4, -4), h + const Offset(-4, -0.5), arrow);
+    _line.strokeWidth = 1.5;
+  }
+
+  /// Gestrichelte Linie durch [pts].
+  static void _dashedPath(Canvas canvas, List<Offset> pts, {required bool close}) {
+    const dash = 6.0, gap = 4.0;
+    final all = close ? [...pts, pts.first] : pts;
+    var on = true;
+    var left = dash;
+    for (var i = 1; i < all.length; i++) {
+      var a = all[i - 1];
+      final b = all[i];
+      var seg = (b - a).distance;
+      if (seg == 0) continue;
+      final dir = (b - a) / seg;
+      while (seg > 0) {
+        final step = math.min(left, seg);
+        final next = a + dir * step;
+        if (on) canvas.drawLine(a, next, _line);
+        a = next;
+        seg -= step;
+        left -= step;
+        if (left <= 0) {
+          on = !on;
+          left = on ? dash : gap;
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SelectionPainter old) => true;
 }
 
 /// Zeichnet fertige Striche einer Seite.

@@ -48,7 +48,7 @@ Beim Öffnen siehst du nur die Noten auf anthrazitfarbenem Hintergrund. Die Leis
 
 **Notenansicht – Bearbeiten**
 
-Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugleiste mit Stift, Textmarker, Radierer, Text, Stempel, Formen und Lineal.
+Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugleiste mit Stift, Textmarker, Radierer, Auswählen, Text, Stempel, Formen und Lineal.
 
 | Aktion | So geht's |
 |---|---|
@@ -58,6 +58,8 @@ Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugl
 | Favoriten | Oben im Fenster. Antippen übernimmt die Einstellung, ☆ speichert die aktuelle als Favorit, lange drücken oder Rechtsklick entfernt einen. Tasten **1–9** wählen die Favoriten |
 | Stift und Textmarker | Farbe, Breite und Deckkraft, mit Vorschau |
 | Radierer | **Ganze Elemente** (löscht berührte Striche und Notizen komplett) oder **Teilweise** (wie ein Radiergummi, Grösse mit dem Schieberegler). Das Radierer-Ende des Surface Pen radiert genauso. Ein Radier-Zug lässt sich mit einem Mal rückgängig machen |
+| Auswählen (Lasso) | Symbol ⬚ oder Taste **A**. Mit Stift oder Maus einkreisen, was du auswählen möchtest (Striche, Stempel, Text-Notizen). **Ziehen** verschiebt die Auswahl, der **runde Griff** unten rechts macht sie grösser oder kleiner. Im Fenster: **Kopieren** (Strg+C), **Ausschneiden** (Strg+X), **Duplizieren** (Strg+D), **Löschen** (Entf) und **Farbe ändern**. **Strg+A** wählt alles auf der Seite. Daneben tippen oder Esc hebt die Auswahl auf |
+| Einfügen | Eine Seite antippen, dann **Einfügen** im Fenster oder **Strg+V**. Das geht auch in einem anderen Stück. Auf derselben Seite landet die Kopie leicht versetzt |
 | Text-Notiz | Auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen. Im Fenster stellst du **Schrift** (Auswahlliste: Roboto, Noto Serif, Roboto Mono), **B** (Bold, fett), **I** (Italic, kursiv), Grösse, **Textfarbe** und **Hintergrund** ein (ohne, Weiss, Gelb, Grün, Blau, Rosa). Tippst du eine bestehende Notiz an, gelten Änderungen im Fenster für diese Notiz. Ziehen verschiebt sie |
 | Stempel | Symbol ♪ oder Taste **S**: Musiksymbole aus der Schrift Bravura in Gruppen (Dynamik, Artikulation, Vorzeichen, Form, Verzierungen, Streicher, Bläser & Gesang, Tasten, Gitarre, Noten, Pausen). Die Gruppen sind Tabs: antippen oder im Fenster nach links/rechts wischen. Auf die Seite tippen setzt den Stempel, einen gesetzten Stempel ziehen verschiebt ihn. Grösse und Farbe im Fenster, oben die zuletzt benutzten |
 | Formen | Symbol oder Taste **F**: Linie, Pfeil, Rechteck, Ellipse, Crescendo, Decrescendo, Bogen. Vom Anfang zum Ende ziehen. Crescendo und Decrescendo öffnen sich immer gleich weit, egal wie lang sie sind. Farbe und Breite im Fenster |

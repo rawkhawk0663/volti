@@ -94,6 +94,26 @@ class Stroke {
     return (left: l, top: t, right: r, bottom: b);
   }();
 
+  Stroke copyWith({
+    String? id,
+    int? page,
+    int? color,
+    double? width,
+    List<InkPoint>? points,
+    DateTime? createdAt,
+    DateTime? modifiedAt,
+  }) => Stroke(
+    id: id ?? this.id,
+    page: page ?? this.page,
+    tool: tool,
+    color: color ?? this.color,
+    width: width ?? this.width,
+    points: points ?? this.points,
+    createdAt: createdAt ?? this.createdAt,
+    modifiedAt: modifiedAt ?? this.modifiedAt,
+    deleted: deleted,
+  );
+
   Stroke markDeleted(DateTime when) => Stroke(
     id: id,
     page: page,

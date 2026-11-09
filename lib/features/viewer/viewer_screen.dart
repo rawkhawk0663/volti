@@ -10,6 +10,7 @@ import '../../core/pdf/page_image_cache.dart';
 import 'fullscreen.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
+import '../../core/ink/selection.dart';
 import 'page_flow.dart';
 import 'pen_diagnostics.dart';
 import 'ruler_overlay.dart';
@@ -193,8 +194,25 @@ class _ViewerScreenState extends State<ViewerScreen> {
     });
   }
 
+  /// Alles auf der zuletzt berührten Seite auswählen (Strg+A).
+  void _selectAll() {
+    final ink = _activePiece.ink, page = _activePage;
+    final a = ink.annotations;
+    final ids = SelectionIds(
+      strokes: {for (final s in a.visibleStrokesOn(page)) s.id},
+      stamps: {for (final s in a.visibleStampsOn(page)) s.id},
+      texts: {for (final t in a.visibleTextsOn(page)) t.id},
+    );
+    if (ids.isEmpty) return;
+    tools.setMode(ToolMode.lasso);
+    tools.select(InkSelection(ink, page, ids));
+  }
+
   void _show(PageSlot slot) {
     if (slot == _left) return;
+    // Eine Auswahl auf einer Seite, die man nicht mehr sieht, wäre gefährlich
+    // (z. B. Entf-Taste) – also aufheben. Die Zwischenablage bleibt.
+    tools.clearSelection();
     setState(() {
       _left = slot;
       _activeSlot = null;
@@ -316,6 +334,19 @@ class _ViewerScreenState extends State<ViewerScreen> {
       _goTo(1);
     } else if (key == LogicalKeyboardKey.end) {
       _goTo(_pageCount);
+    } else if (ctrl && key == LogicalKeyboardKey.keyC) {
+      tools.copySelection();
+    } else if (ctrl && key == LogicalKeyboardKey.keyX) {
+      tools.cutSelection();
+    } else if (ctrl && key == LogicalKeyboardKey.keyV) {
+      tools.pasteInto(_activePiece.ink, _activePage);
+    } else if (ctrl && key == LogicalKeyboardKey.keyD) {
+      tools.duplicateSelection();
+    } else if (ctrl && key == LogicalKeyboardKey.keyA) {
+      _selectAll();
+    } else if ((key == LogicalKeyboardKey.delete || key == LogicalKeyboardKey.backspace) &&
+        tools.selection.value != null) {
+      tools.deleteSelection();
     } else if (ctrl && key == LogicalKeyboardKey.keyZ) {
       shift ? _activePiece.ink.redo() : _activePiece.ink.undo();
     } else if (ctrl && key == LogicalKeyboardKey.keyY) {
@@ -334,12 +365,16 @@ class _ViewerScreenState extends State<ViewerScreen> {
       tools.setMode(ToolMode.stamp);
     } else if (down && key == LogicalKeyboardKey.keyF) {
       tools.setMode(ToolMode.shape);
+    } else if (down && !ctrl && key == LogicalKeyboardKey.keyA) {
+      tools.setMode(ToolMode.lasso);
     } else if (down && key == LogicalKeyboardKey.keyL) {
       tools.toggleRuler();
     } else if (down && _digits.contains(key)) {
       tools.applyFavoriteIndex(_digits.indexOf(key));
     } else if (key == LogicalKeyboardKey.escape) {
-      if (tools.editing) {
+      if (tools.selection.value != null) {
+        tools.clearSelection();
+      } else if (tools.editing) {
         tools.finishEditing();
       } else if (_fullscreen) {
         _toggleFullscreen();

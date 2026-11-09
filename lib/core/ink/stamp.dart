@@ -35,19 +35,28 @@ class Stamp {
 
   DateTime get lastChange => modifiedAt ?? createdAt;
 
-  Stamp copyWith({String? id, double? x, double? y, double? size, int? color, DateTime? modifiedAt, bool? deleted}) =>
-      Stamp(
-        id: id ?? this.id,
-        page: page,
-        x: x ?? this.x,
-        y: y ?? this.y,
-        glyph: glyph,
-        size: size ?? this.size,
-        color: color ?? this.color,
-        createdAt: createdAt,
-        modifiedAt: modifiedAt ?? this.modifiedAt,
-        deleted: deleted ?? this.deleted,
-      );
+  Stamp copyWith({
+    String? id,
+    int? page,
+    DateTime? createdAt,
+    double? x,
+    double? y,
+    double? size,
+    int? color,
+    DateTime? modifiedAt,
+    bool? deleted,
+  }) => Stamp(
+    id: id ?? this.id,
+    page: page ?? this.page,
+    x: x ?? this.x,
+    y: y ?? this.y,
+    glyph: glyph,
+    size: size ?? this.size,
+    color: color ?? this.color,
+    createdAt: createdAt ?? this.createdAt,
+    modifiedAt: modifiedAt ?? this.modifiedAt,
+    deleted: deleted ?? this.deleted,
+  );
 
   static double _round(double v) => (v * 100000).roundToDouble() / 100000;
 

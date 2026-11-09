@@ -46,6 +46,27 @@ Rect textNoteBounds(TextNote t, Size size) {
   return r;
 }
 
+/// Malt eine Text-Notiz direkt (für die Lasso-Auswahl), so wie sie auch
+/// als Widget erscheint.
+void paintTextNote(Canvas canvas, TextNote t, Size size) {
+  final painter = TextPainter(
+    text: TextSpan(text: t.text, style: noteStyle(t, size.width)),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final origin = Offset(t.x * size.width, t.y * size.height);
+  if (t.background != TextNote.noBackground) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(origin.dx, origin.dy, painter.width + 4, painter.height),
+        const Radius.circular(3),
+      ),
+      Paint()..color = Color(t.background),
+    );
+  }
+  painter.paint(canvas, origin + const Offset(2, 0));
+  painter.dispose();
+}
+
 /// Zeigt die Text-Notizen einer Seite. Im Text-Modus kann man tippen, um eine
 /// Notiz zu schreiben, eine vorhandene antippen, um sie zu ändern, oder sie
 /// mit dem Finger, Stift oder der Maus verschieben.
@@ -217,10 +238,13 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
       builder: (context, constraints) {
         final size = constraints.biggest;
         return ListenableBuilder(
-          listenable: Listenable.merge([c, tools]),
+          listenable: Listenable.merge([c, tools, tools.selection]),
           builder: (context, _) {
             final active = tools.mode == ToolMode.text;
-            final notes = c.annotations.visibleTextsOn(widget.page);
+            // Ausgewählte Notizen malt die Lasso-Auswahl (sie bewegen sich mit).
+            final sel = tools.selection.value;
+            final hidden = sel != null && sel.isOn(c, widget.page) ? sel.ids.texts : const <String>{};
+            final notes = c.annotations.visibleTextsOn(widget.page).where((n) => !hidden.contains(n.id));
             return Stack(
               fit: StackFit.expand,
               children: [

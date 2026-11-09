@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:ui' show Offset;
 
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/ink/score_annotations.dart';
+import '../../core/ink/selection.dart';
 import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
@@ -21,6 +23,7 @@ class _UndoEntry {
     List<String>? addedStamps,
     List<Stamp>? removedStamps,
     List<Stamp>? stampsBefore,
+    List<Stroke>? strokesBefore,
   }) : added = added ?? [],
        removed = removed ?? [],
        addedTexts = addedTexts ?? [],
@@ -28,7 +31,8 @@ class _UndoEntry {
        textsBefore = textsBefore ?? [],
        addedStamps = addedStamps ?? [],
        removedStamps = removedStamps ?? [],
-       stampsBefore = stampsBefore ?? [];
+       stampsBefore = stampsBefore ?? [],
+       strokesBefore = strokesBefore ?? [];
 
   final List<String> added;
   final List<Stroke> removed;
@@ -44,6 +48,9 @@ class _UndoEntry {
   /// Stempel vor dem Verschieben.
   final List<Stamp> stampsBefore;
 
+  /// Striche vor einer Änderung (verschoben, vergrössert, umgefärbt).
+  final List<Stroke> strokesBefore;
+
   bool get isEmpty =>
       added.isEmpty &&
       removed.isEmpty &&
@@ -52,7 +59,8 @@ class _UndoEntry {
       textsBefore.isEmpty &&
       addedStamps.isEmpty &&
       removedStamps.isEmpty &&
-      stampsBefore.isEmpty;
+      stampsBefore.isEmpty &&
+      strokesBefore.isEmpty;
 }
 
 /// Verwaltet die Anmerkungen eines Stücks: Zeichnen, Radieren,
@@ -323,6 +331,175 @@ class InkController extends ChangeNotifier {
     _push(_UndoEntry(removedStamps: removed));
   }
 
+  // ------------------------------------------------------- Auswahl (Lasso)
+
+  /// Verschiebt und/oder vergrössert die Auswahl – ein Rückgängig-Schritt.
+  void transformSelection(SelectionIds ids, SelectionTransform tf) {
+    if (tf.isIdentity) return;
+    final now = DateTime.now().toUtc();
+    final entry = _UndoEntry();
+    for (final id in ids.strokes) {
+      final s = _annotations[id];
+      if (s == null || s.deleted) continue;
+      _annotations.put(
+        s.copyWith(
+          points: List.unmodifiable([
+            for (final p in s.points)
+              () {
+                final q = tf.apply(Offset(p.x, p.y));
+                return InkPoint(q.dx, q.dy, p.pressure);
+              }(),
+          ]),
+          width: s.width * tf.scale,
+          modifiedAt: now,
+        ),
+      );
+      entry.strokesBefore.add(s);
+    }
+    for (final id in ids.stamps) {
+      final st = _annotations.stamp(id);
+      if (st == null || st.deleted) continue;
+      final q = tf.apply(Offset(st.x, st.y));
+      _annotations.putStamp(st.copyWith(x: q.dx, y: q.dy, size: st.size * tf.scale, modifiedAt: now));
+      entry.stampsBefore.add(st);
+    }
+    for (final id in ids.texts) {
+      final n = _annotations.text(id);
+      if (n == null || n.deleted) continue;
+      final q = tf.apply(Offset(n.x, n.y));
+      _annotations.putText(n.copyWith(x: q.dx, y: q.dy, size: n.size * tf.scale, modifiedAt: now));
+      entry.textsBefore.add(n);
+    }
+    if (!entry.isEmpty) _push(entry);
+  }
+
+  /// Färbt die Auswahl um. Die Deckkraft (z. B. vom Textmarker) bleibt.
+  void recolorSelection(SelectionIds ids, int color) {
+    final now = DateTime.now().toUtc();
+    final entry = _UndoEntry();
+    for (final id in ids.strokes) {
+      final s = _annotations[id];
+      if (s == null || s.deleted) continue;
+      final c = recolorKeepingAlpha(s.color, color);
+      if (c == s.color) continue;
+      _annotations.put(s.copyWith(color: c, modifiedAt: now));
+      entry.strokesBefore.add(s);
+    }
+    for (final id in ids.stamps) {
+      final st = _annotations.stamp(id);
+      if (st == null || st.deleted) continue;
+      final c = recolorKeepingAlpha(st.color, color);
+      if (c == st.color) continue;
+      _annotations.putStamp(st.copyWith(color: c, modifiedAt: now));
+      entry.stampsBefore.add(st);
+    }
+    for (final id in ids.texts) {
+      final n = _annotations.text(id);
+      if (n == null || n.deleted) continue;
+      final c = recolorKeepingAlpha(n.color, color);
+      if (c == n.color) continue;
+      _annotations.putText(n.copyWith(color: c, modifiedAt: now));
+      entry.textsBefore.add(n);
+    }
+    if (!entry.isEmpty) _push(entry);
+  }
+
+  /// Löscht die Auswahl – ein Rückgängig-Schritt.
+  void deleteSelection(SelectionIds ids) {
+    final a = _annotations;
+    beginBatch();
+    eraseStrokes([for (final id in ids.strokes) ?a[id]]);
+    deleteStamps([for (final id in ids.stamps) ?a.stamp(id)]);
+    deleteTexts([for (final id in ids.texts) ?a.text(id)]);
+    endBatch();
+  }
+
+  /// Kopie der Auswahl für die Zwischenablage.
+  InkClip copySelection(SelectionIds ids) {
+    final a = _annotations;
+    return InkClip(
+      strokes: [
+        for (final id in ids.strokes)
+          if (a[id] case final s? when !s.deleted) s,
+      ],
+      stamps: [
+        for (final id in ids.stamps)
+          if (a.stamp(id) case final s? when !s.deleted) s,
+      ],
+      texts: [
+        for (final id in ids.texts)
+          if (a.text(id) case final t? when !t.deleted) t,
+      ],
+    );
+  }
+
+  /// Fügt [clip] auf [page] ein, um [offset] verschoben (normiert).
+  /// Alles bekommt neue IDs und liegt obenauf. Gibt die neue Auswahl zurück.
+  SelectionIds paste(InkClip clip, int page, {Offset offset = Offset.zero}) {
+    final now = DateTime.now().toUtc();
+    final tf = SelectionTransform(delta: offset);
+    final strokes = <String>{}, stamps = <String>{}, texts = <String>{};
+    final entry = _UndoEntry();
+    for (final s in clip.strokes) {
+      final copy = Stroke(
+        id: _uuid.v4(),
+        page: page,
+        tool: s.tool,
+        color: s.color,
+        width: s.width,
+        createdAt: now,
+        points: List.unmodifiable([
+          for (final p in s.points)
+            () {
+              final q = tf.apply(Offset(p.x, p.y));
+              return InkPoint(q.dx, q.dy, p.pressure);
+            }(),
+        ]),
+      );
+      _annotations.put(copy);
+      strokes.add(copy.id);
+      entry.added.add(copy.id);
+    }
+    for (final st in clip.stamps) {
+      final q = tf.apply(Offset(st.x, st.y));
+      final copy = Stamp(
+        id: _uuid.v4(),
+        page: page,
+        x: q.dx,
+        y: q.dy,
+        glyph: st.glyph,
+        size: st.size,
+        color: st.color,
+        createdAt: now,
+      );
+      _annotations.putStamp(copy);
+      stamps.add(copy.id);
+      entry.addedStamps.add(copy.id);
+    }
+    for (final n in clip.texts) {
+      final q = tf.apply(Offset(n.x, n.y));
+      final copy = TextNote(
+        id: _uuid.v4(),
+        page: page,
+        x: q.dx,
+        y: q.dy,
+        text: n.text,
+        size: n.size,
+        color: n.color,
+        background: n.background,
+        font: n.font,
+        bold: n.bold,
+        italic: n.italic,
+        createdAt: now,
+      );
+      _annotations.putText(copy);
+      texts.add(copy.id);
+      entry.addedTexts.add(copy.id);
+    }
+    if (!entry.isEmpty) _push(entry);
+    return SelectionIds(strokes: strokes, stamps: stamps, texts: texts);
+  }
+
   // ------------------------------------------------- Rückgängig/Wiederholen
 
   void undo() => _apply(_undo, _redo);
@@ -397,6 +574,12 @@ class InkController extends ChangeNotifier {
       _annotations.putStamp(before.copyWith(modifiedAt: now));
       inverse.stampsBefore.add(current);
     }
+    for (final before in entry.strokesBefore) {
+      final current = _annotations[before.id];
+      if (current == null || current.deleted) continue;
+      _annotations.put(before.copyWith(modifiedAt: now));
+      inverse.strokesBefore.add(current);
+    }
     to.add(inverse);
     _changed();
   }
@@ -414,6 +597,9 @@ class InkController extends ChangeNotifier {
       }
       for (var i = 0; i < e.stampsBefore.length; i++) {
         if (e.stampsBefore[i].id == oldId) e.stampsBefore[i] = e.stampsBefore[i].copyWith(id: newId);
+      }
+      for (var i = 0; i < e.strokesBefore.length; i++) {
+        if (e.strokesBefore[i].id == oldId) e.strokesBefore[i] = e.strokesBefore[i].copyWith(id: newId);
       }
     }
   }
@@ -437,6 +623,7 @@ class InkController extends ChangeNotifier {
       }
       b.addedStamps.addAll(e.addedStamps);
       b.stampsBefore.addAll(e.stampsBefore);
+      b.strokesBefore.addAll(e.strokesBefore);
       _changed();
       return;
     }

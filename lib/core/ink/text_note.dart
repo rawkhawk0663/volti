@@ -64,6 +64,8 @@ class TextNote {
 
   TextNote copyWith({
     String? id,
+    int? page,
+    DateTime? createdAt,
     double? x,
     double? y,
     String? text,
@@ -77,7 +79,7 @@ class TextNote {
     bool? deleted,
   }) => TextNote(
     id: id ?? this.id,
-    page: page,
+    page: page ?? this.page,
     x: x ?? this.x,
     y: y ?? this.y,
     text: text ?? this.text,
@@ -87,7 +89,7 @@ class TextNote {
     font: font ?? this.font,
     bold: bold ?? this.bold,
     italic: italic ?? this.italic,
-    createdAt: createdAt,
+    createdAt: createdAt ?? this.createdAt,
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted ?? this.deleted,
   );

@@ -60,6 +60,11 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Die Gruppen stehen im Fenster als Tabs, zwischen denen man wischen kann (`TabBarView`, auch mit Maus und Stift). Gespeicherte Stempel werden über den Codepunkt gefunden, Reihenfolge und Gruppen dürfen sich also ändern.
    Formen werden als gewöhnliche Striche gespeichert (`shapeGeometry`), eine Form ist ein Rückgängig-Schritt. Crescendo/Decrescendo haben eine feste Öffnung (`kHairpinOpening`, relativ zur Seitenbreite), unabhängig von der Länge. Das Lineal (`RulerOverlay`) lässt sich nur mit Finger oder Maus bewegen. Der Stift zeichnet nahe einer Kante gerade daran entlang (`_nearRulerEdge`). Stempel werden ins Strich-Bild mitgemalt.
 
+10. **Lasso (Paket 2a):** `ToolMode.lasso`. Die Auswahl (`InkSelection`: Stück, Seite, `SelectionIds`) und die Zwischenablage (`InkClip`) liegen app-weit im `ToolController`. So kann man in ein anderes Stück einfügen. Eingefügt wird auf die zuletzt berührte Seite.
+   Verschieben und Vergrössern ändert die Elemente selbst und behält ihre IDs (`InkController.transformSelection`, `SelectionTransform`, Änderungszeit neu, damit der Sync die jüngste Fassung nimmt). Rückgängig über `strokesBefore`/`stampsBefore`/`textsBefore`. Einfügen und Duplizieren erzeugen neue IDs.
+   Ausgewähltes wird nicht im Strich-Bild gemalt, sondern in der Auswahl-Ebene (`_SelectionPainter`), damit es sich beim Ziehen flüssig mitbewegt. Die Text-Ebene blendet ausgewählte Notizen aus. Der Finger wählt nie aus. Beim Blättern wird die Auswahl aufgehoben, weil sonst z. B. „Entf“ Unsichtbares löschen würde.
+   Umfärben behält die Deckkraft (`recolorKeepingAlpha`), z. B. beim Textmarker.
+
 ## Prüfen
 ```bash
 flutter analyze

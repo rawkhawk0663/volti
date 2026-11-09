@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../core/app_settings.dart';
+import '../../core/ink/selection.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/tool_settings.dart';
+import 'ink_controller.dart';
 
 /// Was gerade aktiv ist.
 enum ToolMode {
@@ -20,6 +22,22 @@ enum ToolMode {
   text,
   stamp,
   shape,
+
+  /// Auswählen (Lasso): einkreisen, dann verschieben, kopieren, umfärben …
+  lasso,
+}
+
+/// Ausgewählte Elemente auf einer Seite eines Stücks.
+class InkSelection {
+  const InkSelection(this.controller, this.page, this.ids);
+  final InkController controller;
+  final int page;
+  final SelectionIds ids;
+
+  bool isOn(InkController c, int p) => identical(controller, c) && page == p;
+
+  /// Nur, was es noch gibt (z. B. nach "Rückgängig").
+  SelectionIds get live => ids.liveIn(controller.annotations);
 }
 
 /// Wie viele Seiten nebeneinander gezeigt werden.
@@ -113,6 +131,7 @@ class ToolController extends ChangeNotifier {
 
   void setMode(ToolMode m) {
     if (_mode == m) return;
+    if (m != ToolMode.lasso) clearSelection();
     _mode = m;
     if (m != ToolMode.read && m != ToolMode.none) _lastTool = m;
     notifyListeners();
@@ -284,9 +303,79 @@ class ToolController extends ChangeNotifier {
     return _saving;
   }
 
+  // ------------------------------------------------------ Auswahl (Lasso)
+
+  /// Aktuelle Auswahl (höchstens eine, app-weit).
+  final selection = ValueNotifier<InkSelection?>(null);
+
+  /// Zwischenablage für Anmerkungen – gilt app-weit, auch für andere Stücke.
+  InkClip? get clipboard => _clipboard;
+  InkClip? _clipboard;
+  InkSelection? _clipSource;
+  int _pasteCount = 0;
+
+  void select(InkSelection? s) => selection.value = (s == null || s.ids.isEmpty) ? null : s;
+
+  void clearSelection() {
+    if (selection.value != null) selection.value = null;
+  }
+
+  void copySelection() {
+    final s = selection.value;
+    if (s == null) return;
+    final clip = s.controller.copySelection(s.live);
+    if (clip.isEmpty) return;
+    _clipboard = clip;
+    _clipSource = s;
+    _pasteCount = 0;
+    notifyListeners();
+  }
+
+  void cutSelection() {
+    copySelection();
+    deleteSelection();
+  }
+
+  void deleteSelection() {
+    final s = selection.value;
+    if (s == null) return;
+    s.controller.deleteSelection(s.live);
+    clearSelection();
+  }
+
+  /// Kopie gleich daneben (leicht versetzt), die dann ausgewählt ist.
+  void duplicateSelection() {
+    final s = selection.value;
+    if (s == null) return;
+    final clip = s.controller.copySelection(s.live);
+    if (clip.isEmpty) return;
+    final ids = s.controller.paste(clip, s.page, offset: const Offset(0.02, 0.02));
+    select(InkSelection(s.controller, s.page, ids));
+  }
+
+  /// Fügt die Zwischenablage auf [page] von [target] ein. Auf derselben
+  /// Seite wie das Original leicht versetzt, sonst an derselben Stelle.
+  void pasteInto(InkController target, int page) {
+    final clip = _clipboard;
+    if (clip == null || clip.isEmpty) return;
+    final src = _clipSource;
+    final samePlace = src != null && src.isOn(target, page);
+    final step = samePlace ? ++_pasteCount * 0.02 : 0.0;
+    final ids = target.paste(clip, page, offset: Offset(step, step));
+    if (_mode != ToolMode.lasso) setMode(ToolMode.lasso);
+    select(InkSelection(target, page, ids));
+  }
+
+  void recolorSelection(int color) {
+    final s = selection.value;
+    if (s == null) return;
+    s.controller.recolorSelection(s.live, color);
+  }
+
   @override
   void dispose() {
     _saveTimer?.cancel();
+    selection.dispose();
     isDrawing.dispose();
     rulerChanged.dispose();
     super.dispose();

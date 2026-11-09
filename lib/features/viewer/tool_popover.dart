@@ -8,6 +8,7 @@ import '../../core/ink/stamp_catalog.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
 import '../../core/ink/tool_settings.dart';
+import 'ink_controller.dart';
 import 'ink_layer.dart';
 import 'shapes.dart';
 import 'stamp_paint.dart';
@@ -41,15 +42,20 @@ String toolName(ToolMode m) => switch (m) {
   ToolMode.text => 'Text',
   ToolMode.stamp => 'Stempel',
   ToolMode.shape => 'Formen',
+  ToolMode.lasso => 'Auswählen',
   _ => '',
 };
 
 /// Einstellungsfenster des aktiven Werkzeugs. Lässt sich an der Kopfzeile
 /// frei verschieben ([onDrag]).
 class ToolPopover extends StatelessWidget {
-  const ToolPopover({super.key, required this.tools, required this.onDrag});
+  const ToolPopover({super.key, required this.tools, required this.onDrag, this.ink, this.page = 1});
 
   final ToolController tools;
+
+  /// Zuletzt berührte Seite – dorthin wird eingefügt.
+  final InkController? ink;
+  final int page;
   final ValueChanged<Offset> onDrag;
 
   static const width = 272.0;
@@ -108,6 +114,7 @@ class ToolPopover extends StatelessWidget {
                   ToolMode.text => _TextSettings(tools: tools),
                   ToolMode.stamp => _StampSettings(tools: tools),
                   ToolMode.shape => _ShapeSettings(tools: tools),
+                  ToolMode.lasso => _LassoSettings(tools: tools, ink: ink, page: page),
                   _ => const SizedBox.shrink(),
                 },
               ),
@@ -458,6 +465,93 @@ class _GlyphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GlyphPainter old) => old.glyph != glyph || old.color != color;
+}
+
+// ------------------------------------------------------------------- Lasso
+class _LassoSettings extends StatelessWidget {
+  const _LassoSettings({required this.tools, required this.ink, required this.page});
+  final ToolController tools;
+  final InkController? ink;
+  final int page;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hint = Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    return ListenableBuilder(
+      // Auswahl und Anmerkungen (z. B. nach Rückgängig) können sich ändern.
+      listenable: Listenable.merge([tools, tools.selection, ?ink]),
+      builder: (context, _) {
+        final sel = tools.selection.value;
+        final count = sel?.live.count ?? 0;
+        final clip = tools.clipboard;
+        Widget action(IconData icon, String label, String shortcut, VoidCallback? onTap) => Tooltip(
+          message: shortcut,
+          child: OutlinedButton.icon(
+            onPressed: onTap,
+            icon: Icon(icon, size: 18),
+            label: Text(label),
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+          ),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 6),
+            if (count == 0)
+              Text(
+                'Mit dem Stift oder der Maus einkreisen, was du auswählen möchtest. Strg+A wählt alles auf der Seite.',
+                style: hint,
+              )
+            else ...[
+              Text(
+                count == 1 ? '1 Element ausgewählt' : '$count Elemente ausgewählt',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  action(Icons.copy, 'Kopieren', 'Strg+C', tools.copySelection),
+                  action(Icons.content_cut, 'Ausschneiden', 'Strg+X', tools.cutSelection),
+                  action(Icons.library_add_outlined, 'Duplizieren', 'Strg+D', tools.duplicateSelection),
+                  action(Icons.delete_outline, 'Löschen', 'Entf', tools.deleteSelection),
+                ],
+              ),
+              const _Label('Farbe ändern'),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final c in penColors.where((c) => c != 0xFFFFFFFF))
+                    _Swatch(color: Color(c), selected: false, onTap: () => tools.recolorSelection(c)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Ziehen verschiebt die Auswahl. Am runden Griff unten rechts ziehen macht sie grösser oder kleiner.',
+                style: hint,
+              ),
+            ],
+            if (clip != null && ink != null) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: () => tools.pasteInto(ink!, page),
+                icon: const Icon(Icons.content_paste, size: 18),
+                label: Text('Einfügen auf Seite $page'),
+              ),
+              const SizedBox(height: 4),
+              Text('Auch in ein anderes Stück: dort eine Seite antippen, dann einfügen (Strg+V).', style: hint),
+            ],
+          ],
+        );
+      },
+    );
+  }
 }
 
 // -------------------------------------------------------------------- Formen

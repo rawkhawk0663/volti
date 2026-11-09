@@ -103,7 +103,13 @@ class _ToolOverlayState extends State<ToolOverlay> {
                   ValueListenableBuilder<Offset?>(
                     valueListenable: _dragOffset,
                     child: RepaintBoundary(
-                      child: ToolPopover(key: ValueKey(mode), tools: tools, onDrag: (d) => _drag(d, screen)),
+                      child: ToolPopover(
+                        key: ValueKey(mode),
+                        tools: tools,
+                        ink: widget.ink,
+                        page: widget.page,
+                        onDrag: (d) => _drag(d, screen),
+                      ),
                     ),
                     builder: (context, dragged, child) {
                       // dragged löst nur das Neuzeichnen aus; massgeblich ist die gemerkte Position.
@@ -162,6 +168,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
                 dot: Color(tools.highlighter.color | 0xFF000000),
               ),
               tool(ToolMode.eraser, Icons.auto_fix_normal, 'Radierer (E)'),
+              tool(ToolMode.lasso, Icons.highlight_alt, 'Auswählen (A)'),
               tool(ToolMode.text, Icons.text_fields, 'Text (T)'),
               tool(ToolMode.stamp, Icons.music_note, 'Stempel (S)'),
               tool(ToolMode.shape, Icons.category_outlined, 'Formen (F)'),
