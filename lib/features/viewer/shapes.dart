@@ -5,9 +5,16 @@ import '../../core/ink/tool_settings.dart';
 
 /// Linienzüge einer Form zwischen [a] (Start) und [b] (Ende), in Bildpunkten.
 ///
+/// [pageWidth] ist die Breite der Seite in Bildpunkten. Daran richtet sich
+/// die Öffnung von Crescendo und Decrescendo: Sie ist immer gleich weit,
+/// egal wie lang man die Gabel zieht (wie im Notensatz üblich).
+///
 /// Formen werden als gewöhnliche Striche gespeichert – Radieren, Rückgängig
 /// und Sync funktionieren dadurch wie bei allem anderen.
-List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double strokePx) {
+/// Öffnung von Crescendo/Decrescendo relativ zur Seitenbreite.
+const kHairpinOpening = 0.016;
+
+List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double strokePx, {double? pageWidth}) {
   final d = b - a;
   final len = d.distance;
   if (len < 2) return const [];
@@ -44,7 +51,10 @@ List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double stro
     case ShapeKind.crescendo:
     case ShapeKind.decrescendo:
       // Gabel: öffnet sich beim Crescendo zum Ende hin, beim Decrescendo zum Anfang.
-      final h = (len * 0.16).clamp(8.0, 30.0) / 2;
+      // Öffnung ≈ 1.6 % der Seitenbreite (etwas mehr als ein Linienabstand auf A4),
+      // bei sehr kurzen Gabeln höchstens halb so weit wie lang.
+      final opening = math.min((pageWidth ?? 800) * kHairpinOpening, len * 0.5);
+      final h = opening / 2;
       final tip = kind == ShapeKind.crescendo ? a : b;
       final open = kind == ShapeKind.crescendo ? b : a;
       return [

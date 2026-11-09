@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui' show PointMode;
+import 'dart:ui' show PointMode, PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 
@@ -334,8 +334,15 @@ class _StampSettings extends StatefulWidget {
   State<_StampSettings> createState() => _StampSettingsState();
 }
 
-class _StampSettingsState extends State<_StampSettings> {
-  late int _category = _categoryOf(widget.tools.stamp.glyph);
+class _StampSettingsState extends State<_StampSettings> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(
+    length: stampCatalog.length,
+    vsync: this,
+    initialIndex: _categoryOf(widget.tools.stamp.glyph),
+  );
+
+  /// Höhe der Symbol-Fläche: vier Reihen, mehr wird darin gescrollt.
+  static const _gridHeight = 4 * 40.0 + 3 * 6 + 12;
 
   static int _categoryOf(int glyph) {
     final i = stampCatalog.indexWhere((c) => c.glyphs.any((g) => g.codepoint == glyph));
@@ -343,10 +350,17 @@ class _StampSettingsState extends State<_StampSettings> {
   }
 
   @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tools = widget.tools;
     final st = tools.stamp;
     final recent = tools.recentStamps;
+    final scheme = Theme.of(context).colorScheme;
     Widget cell(int glyph) => _FavoriteChip(
       selected: st.glyph == glyph,
       tooltip: stampGlyph(glyph)?.label ?? '',
@@ -358,27 +372,47 @@ class _StampSettingsState extends State<_StampSettings> {
       children: [
         if (recent.isNotEmpty) ...[
           const _Label('Zuletzt benutzt'),
-          Wrap(spacing: 6, runSpacing: 6, children: [for (final g in recent.take(6)) cell(g)]),
+          Wrap(spacing: 6, runSpacing: 6, children: [for (final g in recent.take(5)) cell(g)]),
+          const SizedBox(height: 6),
         ],
-        const _Label('Symbole'),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            for (final (i, c) in stampCatalog.indexed)
-              ChoiceChip(
-                label: Text(c.name, style: const TextStyle(fontSize: 12)),
-                selected: _category == i,
-                showCheckmark: false,
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                onSelected: (_) => setState(() => _category = i),
-              ),
-          ],
+        // Gruppen als Tabs; nach links/rechts wischen wechselt die Gruppe.
+        TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          padding: EdgeInsets.zero,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 10),
+          labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          unselectedLabelStyle: const TextStyle(fontSize: 13),
+          dividerColor: scheme.outlineVariant,
+          tabs: [for (final c in stampCatalog) Tab(height: 34, text: c.name)],
         ),
-        const SizedBox(height: 8),
-        Wrap(spacing: 6, runSpacing: 6, children: [for (final g in stampCatalog[_category].glyphs) cell(g.codepoint)]),
+        SizedBox(
+          height: _gridHeight,
+          child: ScrollConfiguration(
+            // Auch mit Maus und Stift wischen (nicht nur mit dem Finger).
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.stylus,
+                PointerDeviceKind.invertedStylus,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+              },
+            ),
+            child: TabBarView(
+              controller: _tabs,
+              children: [
+                for (final c in stampCatalog)
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    child: Wrap(spacing: 6, runSpacing: 6, children: [for (final g in c.glyphs) cell(g.codepoint)]),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        _PageDots(controller: _tabs),
         const SizedBox(height: 4),
         Text(
           'Auf die Seite tippen, um den Stempel zu setzen. Einen gesetzten Stempel ziehen, um ihn zu verschieben.',
@@ -508,7 +542,7 @@ class _ShapeIconPainter extends CustomPainter {
       ShapeKind.line || ShapeKind.arrow => (Offset(3, size.height - 5), Offset(size.width - 3, 5)),
       _ => (Offset(2, size.height / 2 + 4), Offset(size.width - 2, size.height / 2 + 4)),
     };
-    for (final piece in shapeGeometry(kind, a, b, 1.5)) {
+    for (final piece in shapeGeometry(kind, a, b, 1.5, pageWidth: size.width * 28)) {
       canvas.drawPoints(PointMode.polygon, piece, paint);
     }
   }
@@ -880,4 +914,39 @@ class _PreviewPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PreviewPainter old) => !old.preset.sameLook(preset);
+}
+
+/// Kleine Punkte unter den Stempel-Gruppen: zeigen, wo man gerade ist.
+class _PageDots extends StatelessWidget {
+  const _PageDots({required this.controller});
+  final TabController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: controller.animation!,
+      builder: (context, _) {
+        final pos = controller.animation!.value;
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < controller.length; i++)
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color.lerp(scheme.primary, scheme.outlineVariant, (pos - i).abs().clamp(0.0, 1.0)),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }

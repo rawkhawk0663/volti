@@ -13,12 +13,14 @@ CATALOG = [
         ("dynamicPPP", "ppp"), ("dynamicPP", "pp"), ("dynamicPiano", "p"), ("dynamicMP", "mp"),
         ("dynamicMF", "mf"), ("dynamicForte", "f"), ("dynamicFF", "ff"), ("dynamicFFF", "fff"),
         ("dynamicFortePiano", "fp"), ("dynamicSforzato", "sfz"), ("dynamicForzando", "fz"),
-        ("dynamicRinforzando2", "rfz"),
+        ("dynamicRinforzando2", "rfz"), ("dynamicSforzando1", "sf"), ("dynamicSforzatoPiano", "sfp"),
+        ("dynamicSforzatoFF", "sffz"), ("dynamicNiente", "niente"),
     ]),
     ("Artikulation", [
         ("articAccentAbove", "Akzent"), ("articStaccatoAbove", "Staccato"), ("articTenutoAbove", "Tenuto"),
         ("articTenutoStaccatoAbove", "Portato"), ("articMarcatoAbove", "Marcato"),
-        ("articStaccatissimoAbove", "Staccatissimo"), ("fermataAbove", "Fermate"), ("fermataBelow", "Fermate unten"),
+        ("articStaccatissimoAbove", "Staccatissimo"), ("articAccentStaccatoAbove", "Akzent + Staccato"),
+        ("fermataAbove", "Fermate"), ("fermataBelow", "Fermate unten"), ("arpeggiato", "Arpeggio"),
         ("breathMarkComma", "Atemzeichen"), ("caesura", "Zäsur"),
     ]),
     ("Vorzeichen", [
@@ -27,7 +29,8 @@ CATALOG = [
     ]),
     ("Form", [
         ("segno", "Segno"), ("coda", "Coda"), ("dalSegno", "D.S."), ("daCapo", "D.C."),
-        ("repeatLeft", "Wiederholung Anfang"), ("repeatRight", "Wiederholung Ende"), ("repeat1Bar", "Simile"),
+        ("codaSquare", "Coda (eckig)"), ("repeatLeft", "Wiederholung Anfang"), ("repeatRight", "Wiederholung Ende"),
+        ("repeat1Bar", "Simile"), ("repeat2Bars", "Simile 2 Takte"),
     ]),
     ("Verzierungen", [
         ("ornamentTrill", "Triller"), ("ornamentShortTrill", "Pralltriller"), ("ornamentMordent", "Mordent"),
@@ -35,24 +38,40 @@ CATALOG = [
     ]),
     ("Streicher", [
         ("stringsDownBow", "Abstrich"), ("stringsUpBow", "Aufstrich"), ("stringsHarmonic", "Flageolett"),
-        ("stringsThumbPosition", "Daumenaufsatz"),
+        ("stringsThumbPosition", "Daumenaufsatz"), ("pluckedSnapPizzicatoAbove", "Bartók-Pizzicato"),
+        ("pluckedLeftHandPizzicato", "Pizzicato linke Hand"),
     ]),
     ("Bläser & Gesang", [
         ("breathMarkComma", "Atemzeichen"), ("breathMarkTick", "Atemzeichen (Häkchen)"),
         ("brassMuteClosed", "gestopft (+)"), ("brassMuteOpen", "offen (o)"),
     ]),
     ("Tasten", [
-        ("keyboardPedalPed", "Pedal"), ("keyboardPedalUp", "Pedal loslassen"),
+        ("keyboardPedalPed", "Pedal"), ("keyboardPedalUp", "Pedal loslassen"), ("keyboardPedalHalf2", "Halbpedal"),
+        ("keyboardPedalSost", "Sostenuto"),
     ]),
     ("Gitarre", [
         ("fingering0", "0"), ("fingering1", "1"), ("fingering2", "2"), ("fingering3", "3"), ("fingering4", "4"),
         ("fingeringPLower", "p"), ("fingeringILower", "i"), ("fingeringMLower", "m"), ("fingeringALower", "a"),
         ("guitarString1", "Saite 1"), ("guitarString2", "Saite 2"), ("guitarString3", "Saite 3"),
         ("guitarString4", "Saite 4"), ("guitarString5", "Saite 5"), ("guitarString6", "Saite 6"),
+        ("fingeringTUpper", "T (Daumen)"), ("guitarStrumDown", "Anschlag abwärts"), ("guitarStrumUp", "Anschlag aufwärts"),
+        ("guitarBarreFull", "Barré"), ("guitarBarreHalf", "Halbes Barré"), ("guitarVibratoStroke", "Vibrato"),
+        ("guitarGolpe", "Golpe"), ("noteheadXBlack", "Dead Note (x)"), ("pluckedDamp", "Abdämpfen"),
     ]),
-    ("Weiteres", [
-        ("metNoteQuarterUp", "Viertelnote"), ("metNoteHalfUp", "Halbe Note"), ("metNote8thUp", "Achtelnote"),
-        ("noteheadBlack", "Notenkopf"),
+    ("Noten", [
+        ("metNoteDoubleWhole", "Doppelganze"), ("metNoteWhole", "Ganze Note"), ("metNoteHalfUp", "Halbe Note"),
+        ("metNoteQuarterUp", "Viertelnote"), ("metNote8thUp", "Achtelnote"), ("metNote16thUp", "Sechzehntel"),
+        ("metNote32ndUp", "Zweiunddreissigstel"), ("metAugmentationDot", "Punkt (Verlängerung)"),
+        ("metNoteHalfDown", "Halbe (Hals unten)"), ("metNoteQuarterDown", "Viertel (Hals unten)"),
+        ("metNote8thDown", "Achtel (Hals unten)"), ("metNote16thDown", "Sechzehntel (Hals unten)"),
+        ("noteheadBlack", "Notenkopf"), ("noteheadHalf", "Notenkopf halb"), ("noteheadWhole", "Notenkopf ganz"),
+        ("noteheadDiamondWhite", "Rautenkopf"), ("noteheadXBlack", "Kreuzkopf (x)"),
+        ("tuplet3", "Triole (3)"), ("tuplet5", "Quintole (5)"), ("tuplet6", "Sextole (6)"),
+    ]),
+    ("Pausen", [
+        ("restDoubleWhole", "Doppelganze Pause"), ("restWhole", "Ganze Pause"), ("restHalf", "Halbe Pause"),
+        ("restQuarter", "Viertelpause"), ("rest8th", "Achtelpause"), ("rest16th", "Sechzehntelpause"),
+        ("rest32nd", "Zweiunddreissigstelpause"), ("restHBar", "Mehrtaktpause"), ("metAugmentationDot", "Punkt"),
     ]),
 ]
 

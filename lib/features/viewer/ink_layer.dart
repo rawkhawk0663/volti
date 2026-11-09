@@ -273,7 +273,7 @@ class _InkLayerState extends State<InkLayer> {
   void _endShape(Size size) {
     final a = _shapeStart!, b = _shapeEnd!;
     final style = tools.shape;
-    final pieces = shapeGeometry(tools.shapeKind, a, b, style.width * size.width);
+    final pieces = shapeGeometry(tools.shapeKind, a, b, style.width * size.width, pageWidth: size.width);
     if (pieces.isNotEmpty && (b - a).distance > 6) {
       c.beginBatch(); // eine Form = ein Rückgängig-Schritt
       for (final piece in pieces) {
@@ -698,7 +698,7 @@ class _ActivePainter extends CustomPainter {
         ..strokeWidth = math.max(0.8, style.width * size.width)
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-      for (final piece in shapeGeometry(tools.shapeKind, a, b, style.width * size.width)) {
+      for (final piece in shapeGeometry(tools.shapeKind, a, b, style.width * size.width, pageWidth: size.width)) {
         canvas.drawPoints(ui.PointMode.polygon, piece, paint);
       }
       return;

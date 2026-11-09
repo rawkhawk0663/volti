@@ -93,6 +93,17 @@ void main() {
       final cresc = shapeGeometry(ShapeKind.crescendo, Offset.zero, const Offset(100, 0), 2).single;
       expect(cresc[1], Offset.zero);
       expect(cresc.first.dx, 100);
+      // Öffnung bleibt gleich weit, egal wie lang die Gabel ist
+      double opening(double len) {
+        final g = shapeGeometry(ShapeKind.crescendo, Offset.zero, Offset(len, 0), 2, pageWidth: 1000).single;
+        return (g.first - g.last).distance;
+      }
+
+      expect(opening(100), closeTo(16, 0.01));
+      expect(opening(600), closeTo(16, 0.01));
+      final dim = shapeGeometry(ShapeKind.decrescendo, Offset.zero, const Offset(400, 0), 2, pageWidth: 1000).single;
+      expect(dim[1], const Offset(400, 0), reason: 'Decrescendo: Spitze am Ende');
+      expect((dim.first - dim.last).distance, closeTo(16, 0.01));
       // Zu kurz → keine Form
       expect(shapeGeometry(ShapeKind.line, Offset.zero, const Offset(1, 0), 2), isEmpty);
     });

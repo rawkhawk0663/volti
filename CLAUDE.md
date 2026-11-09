@@ -57,7 +57,8 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Beim Ziehen des Einstellungsfensters ändert sich nur die Position (`ValueListenableBuilder`), nicht der Inhalt. Die Notenansicht baut sich bei Werkzeug-Änderungen nur neu auf, wenn sich das Werkzeug selbst ändert.
 
 9. **Stempel, Formen, Lineal (Paket 1b):** Stempel sind eigene Elemente (`Stamp`, Feld `stamps` in der Zusatzdatei) mit Zeichen aus **Bravura** (SMuFL, `assets/fonts/Bravura.otf`, OFL). Die Sammlung `lib/core/ink/stamp_catalog.dart` wird mit `tool/make_stamps.py` erzeugt und enthält die Tinten-Ausdehnung jedes Zeichens, damit Stempel genau mittig sitzen (`paintGlyph`).
-   Formen werden als gewöhnliche Striche gespeichert (`shapeGeometry`), eine Form ist ein Rückgängig-Schritt. Das Lineal (`RulerOverlay`) lässt sich nur mit Finger oder Maus bewegen. Der Stift zeichnet nahe einer Kante gerade daran entlang (`_nearRulerEdge`). Stempel werden ins Strich-Bild mitgemalt.
+   Die Gruppen stehen im Fenster als Tabs, zwischen denen man wischen kann (`TabBarView`, auch mit Maus und Stift). Gespeicherte Stempel werden über den Codepunkt gefunden, Reihenfolge und Gruppen dürfen sich also ändern.
+   Formen werden als gewöhnliche Striche gespeichert (`shapeGeometry`), eine Form ist ein Rückgängig-Schritt. Crescendo/Decrescendo haben eine feste Öffnung (`kHairpinOpening`, relativ zur Seitenbreite), unabhängig von der Länge. Das Lineal (`RulerOverlay`) lässt sich nur mit Finger oder Maus bewegen. Der Stift zeichnet nahe einer Kante gerade daran entlang (`_nearRulerEdge`). Stempel werden ins Strich-Bild mitgemalt.
 
 ## Prüfen
 ```bash
