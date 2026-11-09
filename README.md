@@ -44,6 +44,7 @@ Beim Öffnen siehst du nur die Noten auf anthrazitfarbenem Hintergrund. Die Leis
 | Sofort zeichnen | Mit dem **Stift aufsetzen und ziehen**. Kurz antippen blättert weiterhin. Ausschalten über ⋮ → „Mit dem Stift sofort zeichnen“ |
 | Radieren mit dem Surface Pen | Radierer-Ende des Stifts benutzen oder Seitentaste gedrückt halten, auch in der Spielansicht |
 | Seite springen | Leiste einblenden, dann den Regler unten ziehen |
+| Seiten anordnen und zuschneiden | ⋮ → **Seiten anordnen und zuschneiden …** oder in der Bibliothek ⋮ an der Kachel → **Seiten anordnen …**. Reihenfolge am Griff ☰ ändern, Seiten **ausblenden** oder **doppelt zeigen** (z. B. für eine Wiederholung), **drehen** und **zuschneiden**. Im Zuschnitt-Fenster: Ecken und Kanten ziehen, **Ränder automatisch**, **Gerade richten** (für schief eingescannte Seiten), auf Wunsch **für alle Seiten**. **Ränder entfernen** oben schneidet die weissen Ränder aller Seiten auf einmal weg. Das PDF selbst bleibt unverändert, und deine Anmerkungen bleiben genau an ihrem Platz |
 | Zwei Seiten nebeneinander | Im **Querformat automatisch**. Eine Setlist verhält sich wie ein einziges, durchgehendes PDF: Jedes Umblättern geht genau eine Seite weiter, die rechte Seite rutscht nach links. So siehst du jeden Song vollständig und jeden Songwechsel. Umstellen über ⋮ → „Seiten: automatisch / immer eine / immer zwei“ |
 
 **Notenansicht – Bearbeiten**

@@ -12,7 +12,11 @@ import 'ink_controller.dart';
 import 'ink_layer.dart';
 import '../../core/ink/selection.dart';
 import 'layers_dialog.dart';
+import '../../core/library/page_setup.dart';
+import '../../core/library/sidecar_store.dart';
+import 'cropped_page.dart';
 import 'page_flow.dart';
+import 'page_setup_screen.dart';
 import 'pen_diagnostics.dart';
 import 'ruler_overlay.dart';
 import 'text_layer.dart';
@@ -69,12 +73,32 @@ class _Piece {
   String? error;
   late final Future<void> ready = _load();
 
-  int? get pageCount => cache?.pageCount ?? (error != null ? 0 : null);
+  /// Reihenfolge und Zuschnitt der Seiten (das PDF bleibt unverändert).
+  PageSetup setup = PageSetup.empty;
+
+  /// Angezeigte Seiten als PDF-Seitennummern.
+  List<int> get _shown => setup.pages(cache?.pageCount ?? 0);
+
+  /// Anzahl angezeigter Seiten (null, solange das Stück lädt).
+  int? get pageCount => cache == null ? (error != null ? 0 : null) : _shown.length;
+
+  /// PDF-Seite zur angezeigten Seite [display] (1-basiert).
+  int source(int display) {
+    final s = _shown;
+    if (s.isEmpty) return display;
+    return s[(display - 1).clamp(0, s.length - 1)];
+  }
+
+  PageCrop crop(int display) => setup.cropOf(source(display));
+
+  /// Seitenverhältnis der angezeigten Seite (nach Zuschnitt und Drehung).
+  double aspect(int display) => crop(display).displayAspect(cache!.aspectRatio(source(display)));
 
   Future<void> _load() async {
     try {
       final d = await PdfDocument.openFile(item.path);
       await ink.load();
+      setup = (await const SidecarStore().load(item.path)).pages;
       doc = d;
       cache = PageImageCache(d);
     } catch (e) {
@@ -137,7 +161,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
   }
 
   _Piece get _activePiece => _pieces[(_activeSlot ?? _left).piece] ?? _leftPiece!;
-  int get _activePage => (_activeSlot ?? _left).page;
+
+  /// PDF-Seite der zuletzt berührten Seite (dort liegen ihre Anmerkungen).
+  int get _activePage {
+    final slot = _activeSlot ?? _left;
+    return (_pieces[slot.piece] ?? _leftPiece!).source(slot.page);
+  }
 
   @override
   void initState() {
@@ -193,6 +222,30 @@ class _ViewerScreenState extends State<ViewerScreen> {
         _pieces.remove(k)?.dispose();
       }
     });
+  }
+
+  /// Seiten des zuletzt berührten Stücks anordnen und zuschneiden.
+  Future<void> _editPages() async {
+    final index = (_activeSlot ?? _left).piece;
+    final piece = _pieces[index];
+    final doc = piece?.doc;
+    if (piece == null || doc == null) return;
+    tools.clearSelection();
+    final result = await showPageSetup(context, doc: doc, setup: piece.setup, title: piece.item.title);
+    if (result == null || !mounted) return;
+    setState(() {
+      piece.setup = result;
+      _activeSlot = null;
+      final count = piece.pageCount ?? 1;
+      if (_left.piece == index && _left.page > count) _left = PageSlot(index, count);
+    });
+    try {
+      await const SidecarStore().save(piece.item.path, pages: result);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
+      }
+    }
   }
 
   /// Alles auf der zuletzt berührten Seite auswählen (Strg+A).
@@ -534,8 +587,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final availH = box.maxHeight - 2 * margin;
     final slots = [_left, ?_right];
     double aspectOf(PageSlot s) {
-      final c = _pieces[s.piece]?.cache;
-      return c == null ? (_leftPiece?.cache?.aspectRatio(_left.page) ?? 0.707) : c.aspectRatio(s.page);
+      final p = _pieces[s.piece];
+      if (p?.cache != null) return p!.aspect(s.page);
+      final l = _leftPiece;
+      return l?.cache == null ? 0.707 : l!.aspect(_left.page);
     }
 
     final aspects = [for (final s in slots) aspectOf(s)];
@@ -548,7 +603,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final visibleByPiece = <int, Set<int>>{};
     for (final s in slots) {
-      (visibleByPiece[s.piece] ??= {}).add(s.page);
+      final p = _pieces[s.piece];
+      if (p != null) (visibleByPiece[s.piece] ??= {}).add(p.source(s.page));
     }
     for (final e in visibleByPiece.entries) {
       _pieces[e.key]?.cache?.setVisiblePages(e.value);
@@ -562,10 +618,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
     }
     final before = _flow.before(_left);
     for (final s in [...upcoming, ?before]) {
-      final c = _pieces[s.piece]?.cache;
-      if (c == null) continue;
-      final w = h * c.aspectRatio(s.page);
-      c.preload([s.page], ((w * dpr / 128).ceil() * 128).clamp(128, 4096));
+      final p = _pieces[s.piece];
+      final c = p?.cache;
+      if (p == null || c == null) continue;
+      final full = CroppedPage.fullSizeFor(p.crop(s.page), Size(h * p.aspect(s.page), h));
+      c.preload([p.source(s.page)], ((full.width * dpr / 128).ceil() * 128).clamp(128, 4096));
     }
 
     return Center(
@@ -601,9 +658,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
         ),
       );
     }
+    final src = piece.source(slot.page);
+    final crop = piece.crop(slot.page);
+    final full = CroppedPage.fullSizeFor(crop, Size(w, h));
     // In 128-Pixel-Schritten rendern, damit nicht jede kleine
-    // Fensteränderung ein neues Rendern auslöst.
-    final pixelWidth = ((w * dpr / 128).ceil() * 128).clamp(128, 4096);
+    // Fensteränderung ein neues Rendern auslöst. Bei einem Ausschnitt wird
+    // die ganze Seite entsprechend grösser gerendert (bleibt scharf).
+    final pixelWidth = ((full.width * dpr / 128).ceil() * 128).clamp(128, 4096);
     final key = '${slot.piece}/${slot.page}';
 
     // RepaintBoundary: Jede Ebene wird nur neu gemalt, wenn sie sich selbst
@@ -618,36 +679,41 @@ class _ViewerScreenState extends State<ViewerScreen> {
         if (_activeSlot != slot) setState(() => _activeSlot = slot);
       },
       child: RepaintBoundary(
-        child: SizedBox(
-          width: w,
-          height: h,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Weisse Seite ohne Schatten (ein weicher Schatten kostet beim Malen viel Zeit).
-              const ColoredBox(color: Colors.white),
-              RepaintBoundary(
-                child: ListenableBuilder(
-                  listenable: cache,
-                  builder: (context, _) {
-                    final img = cache.imageFor(slot.page, pixelWidth);
-                    return img == null
-                        ? const SizedBox.shrink()
-                        : RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
-                  },
+        // Weisse Seite ohne Schatten (ein weicher Schatten kostet beim Malen viel Zeit).
+        child: ColoredBox(
+          color: Colors.white,
+          // Zuschnitt, Drehung und Geraderichten: Die Ebenen darin arbeiten
+          // immer mit der ganzen PDF-Seite [src].
+          child: CroppedPage(
+            crop: crop,
+            size: Size(w, h),
+            page: (_) => Stack(
+              fit: StackFit.expand,
+              children: [
+                const ColoredBox(color: Colors.white),
+                RepaintBoundary(
+                  child: ListenableBuilder(
+                    listenable: cache,
+                    builder: (context, _) {
+                      final img = cache.imageFor(src, pixelWidth);
+                      return img == null
+                          ? const SizedBox.shrink()
+                          : RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
+                    },
+                  ),
                 ),
-              ),
-              InkLayer(key: ValueKey('ink/$key'), page: slot.page, controller: piece.ink, tools: tools),
-              RepaintBoundary(
-                child: TextNotesLayer(
-                  key: ValueKey('text/$key'),
-                  page: slot.page,
-                  controller: piece.ink,
-                  tools: tools,
-                  onEditingChanged: (v) => setState(() => _editingText = v),
+                InkLayer(key: ValueKey('ink/$key'), page: src, controller: piece.ink, tools: tools),
+                RepaintBoundary(
+                  child: TextNotesLayer(
+                    key: ValueKey('text/$key'),
+                    page: src,
+                    controller: piece.ink,
+                    tools: tools,
+                    onEditingChanged: (v) => setState(() => _editingText = v),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -743,6 +809,14 @@ class _TopBar extends StatelessWidget {
                           child: Text(label),
                         ),
                       const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: state._editPages,
+                        child: const ListTile(
+                          leading: Icon(Icons.auto_stories_outlined),
+                          title: Text('Seiten anordnen und zuschneiden …'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                       PopupMenuItem(
                         value: () => showLayersDialog(context, state._activePiece.ink),
                         child: const ListTile(

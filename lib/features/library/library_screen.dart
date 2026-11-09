@@ -7,6 +7,11 @@ import '../../app/theme.dart';
 import '../../core/library/library_filter.dart';
 import '../../core/library/library_scanner.dart';
 import '../../core/library/score_importer.dart';
+
+import 'package:pdfrx/pdfrx.dart';
+
+import '../../core/library/sidecar_store.dart';
+import '../viewer/page_setup_screen.dart';
 import '../viewer/viewer_screen.dart';
 import 'edit_meta_dialog.dart';
 import 'library_controller.dart';
@@ -274,6 +279,27 @@ class _ScoresViewState extends State<_ScoresView> {
     if (changes != null) await lib.updateMeta(e, changes);
   }
 
+  /// Seiten anordnen und zuschneiden, ohne das Stück zu öffnen.
+  Future<void> _editPages(ScoreEntry e) async {
+    PdfDocument? doc;
+    try {
+      doc = await PdfDocument.openFile(e.path);
+      const store = SidecarStore();
+      final setup = (await store.load(e.path)).pages;
+      if (!mounted) return;
+      final result = await showPageSetup(context, doc: doc, setup: setup, title: e.title);
+      if (result == null) return;
+      await store.save(e.path, pages: result);
+      lib.onLocalChange?.call();
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Das ging nicht: $err')));
+      }
+    } finally {
+      await doc?.dispose();
+    }
+  }
+
   List<PopupMenuEntry<VoidCallback>> _menu(ScoreEntry e) => [
     PopupMenuItem(
       value: () => _open(e),
@@ -282,6 +308,10 @@ class _ScoresViewState extends State<_ScoresView> {
     PopupMenuItem(
       value: () => _edit(e),
       child: const ListTile(leading: Icon(Icons.edit_note), title: Text('Infos bearbeiten')),
+    ),
+    PopupMenuItem(
+      value: () => _editPages(e),
+      child: const ListTile(leading: Icon(Icons.auto_stories_outlined), title: Text('Seiten anordnen …')),
     ),
     PopupMenuItem(
       value: () => addToSetlistDialog(context, lib, e),

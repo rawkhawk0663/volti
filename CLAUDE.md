@@ -71,6 +71,11 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    **Leuchtstift immer zuunterst** (Wunsch des Besitzers): Alle Leuchtstift-Striche eingeblendeter Ebenen liegen in einem eigenen Bild unter allen Ebenen-Bildern (`_StrokesImage(highlights: true)`). Jeder Strich bleibt auf seiner Ebene. In diesem Bild wird *nicht* multipliziert, denn manche Grafikkarten zeigen beim Multiplizieren auf leeren Grund nichts, z. B. bei ganz waagrechten Strichen. Stattdessen wird das ganze Bild beim Anzeigen mit den Noten multipliziert (`_MultiplyImagePainter`). So bleiben schwarze Noten schwarz.
    Ebenen-Änderungen selbst sind nicht rückgängig machbar. Das Verschieben von Elementen zwischen Ebenen und das Löschen ihres Inhalts aber schon (beim Zurückholen landet der Inhalt einer gelöschten Ebene auf der Grund-Ebene).
 
+12. **Seiten anordnen und zuschneiden (Paket B):** `PageSetup` (Feld `pages` in der Zusatzdatei): `order` (PDF-Seiten in Anzeige-Reihenfolge, Lücken = ausgeblendet, doppelt erlaubt, `null` = natürlich) und `crops` pro PDF-Seite (`PageCrop`: Ausschnitt normiert, `quarterTurns`, `skew` ±5°). Beim Sync gewinnt die jüngste Fassung als Ganzes. Gespeichert über `SidecarStore.save(pages:)`.
+   Die Notenansicht zählt in *angezeigten* Seiten (`PageSlot.page`, Seitenzahl, Regler). `_Piece.source(display)` liefert die PDF-Seite. Strich-Ebene, Text-Ebene, Rückgängig, Einfügen und „Seite leeren“ arbeiten immer mit der PDF-Seite (`_activePage`). Anmerkungen bleiben deshalb in Koordinaten der ganzen, ungedrehten Seite.
+   `CroppedPage` baut die ganze Seite und zeigt sie geradegerichtet (Drehung um die Seitenmitte), verschoben, abgeschnitten und in Vierteldrehungen gedreht. Flutter rechnet Berührungen durch alle Schritte zurück. Bei einem Ausschnitt wird die ganze Seite entsprechend grösser gerendert, damit sie scharf bleibt.
+   „Ränder automatisch“ (`autoCropPage`, `findContentBounds`) rendert die Seite klein und sucht dunkle Punkte, Staub zählt nicht.
+
 ## Prüfen
 ```bash
 flutter analyze
