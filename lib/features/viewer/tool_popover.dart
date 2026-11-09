@@ -10,7 +10,7 @@ import '../../core/ink/text_note.dart';
 import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
-import 'layers_dialog.dart';
+import 'layers_panel.dart';
 import 'shapes.dart';
 import 'stamp_paint.dart';
 import 'text_layer.dart';
@@ -93,12 +93,17 @@ class ToolPopover extends StatelessWidget {
                     children: [
                       Icon(Icons.drag_indicator, size: 18, color: scheme.outline),
                       const SizedBox(width: 6),
-                      Expanded(child: Text(toolName(mode), style: Theme.of(context).textTheme.titleSmall)),
+                      Expanded(
+                        child: Text(
+                          tools.layersOpen ? 'Ebenen' : toolName(mode),
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
                       IconButton(
-                        tooltip: 'Werkzeug abwählen',
+                        tooltip: tools.layersOpen ? 'Ebenen schliessen' : 'Werkzeug abwählen',
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => tools.setMode(ToolMode.none),
+                        onPressed: () => tools.layersOpen ? tools.toggleLayers() : tools.setMode(ToolMode.none),
                       ),
                     ],
                   ),
@@ -106,20 +111,22 @@ class ToolPopover extends StatelessWidget {
               ),
             ),
             // Wohin gezeichnet wird – nur sichtbar, wenn es mehrere Ebenen gibt.
-            if (ink != null && mode != ToolMode.eraser) ActiveLayerChip(ink: ink!),
+            if (ink != null && mode != ToolMode.eraser && !tools.layersOpen) ActiveLayerChip(ink: ink!, tools: tools),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                child: switch (mode) {
-                  ToolMode.pen => _StrokeSettings(tools: tools, tool: InkTool.pen),
-                  ToolMode.highlighter => _StrokeSettings(tools: tools, tool: InkTool.highlighter),
-                  ToolMode.eraser => _EraserSettings(tools: tools),
-                  ToolMode.text => _TextSettings(tools: tools),
-                  ToolMode.stamp => _StampSettings(tools: tools),
-                  ToolMode.shape => _ShapeSettings(tools: tools),
-                  ToolMode.lasso => _LassoSettings(tools: tools, ink: ink, page: page),
-                  _ => const SizedBox.shrink(),
-                },
+                child: tools.layersOpen && ink != null
+                    ? LayersPanel(ink: ink!)
+                    : switch (mode) {
+                        ToolMode.pen => _StrokeSettings(tools: tools, tool: InkTool.pen),
+                        ToolMode.highlighter => _StrokeSettings(tools: tools, tool: InkTool.highlighter),
+                        ToolMode.eraser => _EraserSettings(tools: tools),
+                        ToolMode.text => _TextSettings(tools: tools),
+                        ToolMode.stamp => _StampSettings(tools: tools),
+                        ToolMode.shape => _ShapeSettings(tools: tools),
+                        ToolMode.lasso => _LassoSettings(tools: tools, ink: ink, page: page),
+                        _ => const SizedBox.shrink(),
+                      },
               ),
             ),
           ],
@@ -525,7 +532,7 @@ class _LassoSettings extends StatelessWidget {
                   action(Icons.delete_outline, 'Löschen', 'Entf', tools.deleteSelection),
                 ],
               ),
-              if (ink != null && ink!.layers.length > 1) ...[
+              if (ink != null && ink!.drawableLayers.length > 1) ...[
                 const SizedBox(height: 6),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -536,7 +543,15 @@ class _LassoSettings extends StatelessWidget {
                       if (s != null) s.controller.moveToLayer(s.live, id);
                     },
                     itemBuilder: (_) => [
-                      for (final l in ink!.layers.reversed) PopupMenuItem(value: l.id, child: Text(l.name)),
+                      for (final l in ink!.drawableLayers.reversed)
+                        PopupMenuItem(
+                          value: l.id,
+                          child: Text(
+                            ink!.annotations.groupOf(l) == null
+                                ? l.name
+                                : '${ink!.annotations.groupOf(l)!.name} › ${l.name}',
+                          ),
+                        ),
                     ],
                     child: IgnorePointer(
                       child: OutlinedButton.icon(

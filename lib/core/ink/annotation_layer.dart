@@ -15,6 +15,8 @@ class AnnotationLayer {
     required this.createdAt,
     this.modifiedAt,
     this.deleted = false,
+    this.parent,
+    this.isGroup = false,
   });
 
   /// Die Grund-Ebene, solange sie nie verändert wurde.
@@ -31,19 +33,37 @@ class AnnotationLayer {
   final DateTime? modifiedAt;
   final bool deleted;
 
+  /// Gruppe, zu der die Ebene gehört (null = keine).
+  final String? parent;
+
+  /// Eine Gruppe fasst Ebenen zusammen. Auf ihr selbst liegt nichts; ist sie
+  /// ausgeblendet, sind es alle Ebenen darin.
+  final bool isGroup;
+
   DateTime get lastChange => modifiedAt ?? createdAt;
   bool get isDefault => id == kDefaultLayer;
 
-  AnnotationLayer copyWith({String? name, double? order, bool? visible, DateTime? modifiedAt, bool? deleted}) =>
-      AnnotationLayer(
-        id: id,
-        name: name ?? this.name,
-        order: order ?? this.order,
-        visible: visible ?? this.visible,
-        createdAt: createdAt,
-        modifiedAt: modifiedAt ?? this.modifiedAt,
-        deleted: deleted ?? this.deleted,
-      );
+  static const _keep = Object();
+
+  /// [parent]: neue Gruppe; `null` = aus der Gruppe nehmen; weglassen = behalten.
+  AnnotationLayer copyWith({
+    String? name,
+    double? order,
+    bool? visible,
+    DateTime? modifiedAt,
+    bool? deleted,
+    Object? parent = _keep,
+  }) => AnnotationLayer(
+    id: id,
+    name: name ?? this.name,
+    order: order ?? this.order,
+    visible: visible ?? this.visible,
+    createdAt: createdAt,
+    modifiedAt: modifiedAt ?? this.modifiedAt,
+    deleted: deleted ?? this.deleted,
+    parent: identical(parent, _keep) ? this.parent : parent as String?,
+    isGroup: isGroup,
+  );
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -53,6 +73,8 @@ class AnnotationLayer {
     'created': createdAt.toUtc().toIso8601String(),
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
+    if (parent != null) 'parent': parent,
+    if (isGroup) 'group': true,
   };
 
   static AnnotationLayer fromJson(Map<String, dynamic> j) => AnnotationLayer(
@@ -63,5 +85,7 @@ class AnnotationLayer {
     createdAt: DateTime.parse(j['created'] as String),
     modifiedAt: j['modified'] == null ? null : DateTime.parse(j['modified'] as String),
     deleted: j['deleted'] == true,
+    parent: j['parent'] as String?,
+    isGroup: j['group'] == true,
   );
 }

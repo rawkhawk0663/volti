@@ -56,6 +56,30 @@ class ScoreAnnotations {
 
   AnnotationLayer? layer(String id) => _layers[id] ?? (id == kDefaultLayer ? AnnotationLayer.standard() : null);
 
+  /// Gruppe einer Ebene, falls es sie (noch) gibt.
+  AnnotationLayer? groupOf(AnnotationLayer l) {
+    final p = l.parent == null ? null : _layers[l.parent];
+    return p != null && p.isGroup && !p.deleted ? p : null;
+  }
+
+  /// Ebenen und Gruppen von oben nach unten, so wie sie in der Liste stehen:
+  /// Gruppen mit ihren Ebenen direkt darunter (Tiefe 1).
+  List<({AnnotationLayer layer, int depth})> outline() {
+    final all = layers;
+    final top = [
+      for (final l in all)
+        if (groupOf(l) == null) l,
+    ].reversed;
+    return [
+      for (final l in top) ...[
+        (layer: l, depth: 0),
+        if (l.isGroup)
+          for (final c in all.reversed)
+            if (c.parent == l.id && !c.isGroup) (layer: c, depth: 1),
+      ],
+    ];
+  }
+
   void putLayer(AnnotationLayer l) => _layers[l.id] = l;
 
   /// Auf welcher Ebene ein Element liegt. Fehlt die Ebene (gelöscht oder von
@@ -63,12 +87,21 @@ class ScoreAnnotations {
   String resolveLayer(String? id) {
     if (id == null || id == kDefaultLayer) return kDefaultLayer;
     final l = _layers[id];
-    return l == null || l.deleted ? kDefaultLayer : id;
+    return l == null || l.deleted || l.isGroup ? kDefaultLayer : id;
   }
 
   bool isLayerVisible(String id) => _layers[id]?.visible ?? true;
 
-  bool _shown(String? layer) => isLayerVisible(resolveLayer(layer));
+  /// Eingeblendet – die Ebene selbst und ihre Gruppe.
+  bool isLayerShown(String id) {
+    final l = layer(id);
+    if (l == null) return true;
+    if (!l.visible) return false;
+    final g = groupOf(l);
+    return g == null || g.visible;
+  }
+
+  bool _shown(String? layer) => isLayerShown(resolveLayer(layer));
 
   /// Alle Stempel inkl. gelöschter (für Speichern/Sync).
   Iterable<Stamp> get allStamps => _stamps.values;
@@ -154,10 +187,13 @@ class ScoreAnnotations {
     return a;
   }
 
+  /// Ebenen: Die jüngste Fassung gewinnt – auch beim Löschen. So kann
+  /// "Rückgängig" eine gelöschte Ebene zurückholen (anders als bei Strichen
+  /// braucht es dafür keine neue ID: Ebenen sind wenige, grosse Einträge).
   static AnnotationLayer _pickLayer(AnnotationLayer a, AnnotationLayer b) {
-    if (a.deleted != b.deleted) return a.deleted ? a : b;
     final c = a.lastChange.compareTo(b.lastChange);
     if (c != 0) return c > 0 ? a : b;
+    if (a.deleted != b.deleted) return a.deleted ? a : b;
     return a.name.compareTo(b.name) >= 0 ? a : b;
   }
 

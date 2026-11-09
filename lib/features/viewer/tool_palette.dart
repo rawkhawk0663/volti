@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import 'ink_controller.dart';
-import 'layers_dialog.dart';
+import 'layers_panel.dart';
 import 'tool_controller.dart';
 import 'tool_popover.dart';
 
@@ -87,7 +87,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
           listenable: Listenable.merge([tools, widget.ink]),
           builder: (context, _) {
             final mode = tools.mode;
-            final hasPopover = mode != ToolMode.read && mode != ToolMode.none;
+            final hasPopover = tools.layersOpen || (mode != ToolMode.read && mode != ToolMode.none);
             final offset = _clamp(tools.popoverOffset ?? _defaultOffset(screen), screen);
             return Stack(
               children: [
@@ -105,7 +105,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
                     valueListenable: _dragOffset,
                     child: RepaintBoundary(
                       child: ToolPopover(
-                        key: ValueKey(mode),
+                        key: ValueKey(tools.layersOpen ? 'layers' : mode),
                         tools: tools,
                         ink: widget.ink,
                         page: widget.page,
@@ -176,7 +176,8 @@ class _ToolOverlayState extends State<ToolOverlay> {
               _BarButton(
                 icon: Icons.layers_outlined,
                 tooltip: activeLayerLabel(ink) == null ? 'Ebenen' : 'Ebenen (aktiv: ${activeLayerLabel(ink)})',
-                onTap: () => showLayersDialog(context, ink),
+                selected: tools.layersOpen,
+                onTap: tools.toggleLayers,
               ),
               _BarButton(
                 icon: Icons.straighten,

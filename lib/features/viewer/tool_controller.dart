@@ -127,10 +127,30 @@ class ToolController extends ChangeNotifier {
   /// "Bearbeiten": mit dem zuletzt benutzten Werkzeug beginnen.
   void startEditing() => setMode(_lastTool);
 
+  /// Zeigt das Werkzeug-Fenster die Ebenen? (Am selben Ort wie die
+  /// Werkzeug-Einstellungen; das gewählte Werkzeug bleibt aktiv.)
+  bool layersOpen = false;
+
+  void toggleLayers() {
+    layersOpen = !layersOpen;
+    notifyListeners();
+  }
+
+  void openLayers() {
+    if (!editing) setMode(_lastTool);
+    layersOpen = true;
+    notifyListeners();
+  }
+
   void finishEditing() => setMode(ToolMode.read);
 
   void setMode(ToolMode m) {
-    if (_mode == m) return;
+    final closed = layersOpen;
+    layersOpen = false; // ein Werkzeug gewählt → wieder seine Einstellungen zeigen
+    if (_mode == m) {
+      if (closed) notifyListeners();
+      return;
+    }
     if (m != ToolMode.lasso) clearSelection();
     _mode = m;
     if (m != ToolMode.read && m != ToolMode.none) _lastTool = m;
@@ -139,7 +159,11 @@ class ToolController extends ChangeNotifier {
 
   /// Werkzeug in der Palette angetippt: wählen – oder, wenn es schon aktiv
   /// ist, abwählen (das Einstellungsfenster verschwindet dann).
-  void tapTool(ToolMode m) => setMode(_mode == m ? ToolMode.none : m);
+  void tapTool(ToolMode m) {
+    // Sind gerade die Ebenen offen, zeigt das Antippen wieder das Werkzeug.
+    if (layersOpen) return setMode(m);
+    setMode(_mode == m ? ToolMode.none : m);
+  }
 
   // ------------------------------------------------------ Einstellungen
   void setPen(DrawingPreset p) {

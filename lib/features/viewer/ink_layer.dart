@@ -625,7 +625,7 @@ class _InkLayerState extends State<InkLayer> {
                         ),
                       ),
                       for (final l in c.annotations.layers)
-                        if (l.visible)
+                        if (!l.isGroup && c.annotations.isLayerShown(l.id))
                           RepaintBoundary(
                             key: ValueKey('layer/${l.id}'),
                             child: _StrokesImage(

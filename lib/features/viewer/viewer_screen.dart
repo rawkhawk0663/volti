@@ -11,7 +11,6 @@ import 'fullscreen.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
 import '../../core/ink/selection.dart';
-import 'layers_dialog.dart';
 import '../../core/library/page_setup.dart';
 import '../../core/library/sidecar_store.dart';
 import 'cropped_page.dart';
@@ -829,7 +828,7 @@ class _TopBar extends StatelessWidget {
                         ),
                       ),
                       PopupMenuItem(
-                        value: () => showLayersDialog(context, state._activePiece.ink),
+                        value: tools.openLayers,
                         child: const ListTile(
                           leading: Icon(Icons.layers_outlined),
                           title: Text('Ebenen …'),

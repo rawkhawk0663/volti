@@ -25,6 +25,7 @@ class _UndoEntry {
     List<Stamp>? removedStamps,
     List<Stamp>? stampsBefore,
     List<Stroke>? strokesBefore,
+    List<AnnotationLayer>? layersBefore,
   }) : added = added ?? [],
        removed = removed ?? [],
        addedTexts = addedTexts ?? [],
@@ -33,7 +34,8 @@ class _UndoEntry {
        addedStamps = addedStamps ?? [],
        removedStamps = removedStamps ?? [],
        stampsBefore = stampsBefore ?? [],
-       strokesBefore = strokesBefore ?? [];
+       strokesBefore = strokesBefore ?? [],
+       layersBefore = layersBefore ?? [];
 
   final List<String> added;
   final List<Stroke> removed;
@@ -52,6 +54,9 @@ class _UndoEntry {
   /// Striche vor einer Änderung (verschoben, vergrössert, umgefärbt).
   final List<Stroke> strokesBefore;
 
+  /// Ebenen vor einer Änderung. Neu angelegte stehen hier als gelöscht.
+  final List<AnnotationLayer> layersBefore;
+
   bool get isEmpty =>
       added.isEmpty &&
       removed.isEmpty &&
@@ -61,7 +66,8 @@ class _UndoEntry {
       addedStamps.isEmpty &&
       removedStamps.isEmpty &&
       stampsBefore.isEmpty &&
-      strokesBefore.isEmpty;
+      strokesBefore.isEmpty &&
+      layersBefore.isEmpty;
 }
 
 /// Verwaltet die Anmerkungen eines Stücks: Zeichnen, Radieren,
@@ -158,9 +164,18 @@ class InkController extends ChangeNotifier {
 
   /// Alles bis [endBatch] wird ein einziger Schritt für "Rückgängig"
   /// (z. B. ein ganzer Radier-Zug).
-  void beginBatch() => _batch ??= _UndoEntry();
+  /// Bündel dürfen ineinander stecken (z. B. "Ebene löschen" löscht ihren
+  /// Inhalt mit "Auswahl löschen"); erst das äusserste schliesst den Schritt ab.
+  void beginBatch() {
+    _batch ??= _UndoEntry();
+    _batchDepth++;
+  }
+
+  int _batchDepth = 0;
 
   void endBatch() {
+    if (_batchDepth > 0) _batchDepth--;
+    if (_batchDepth > 0) return;
     final b = _batch;
     _batch = null;
     if (b == null) return;
@@ -347,70 +362,146 @@ class InkController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Alle Ebenen und Gruppen, von unten nach oben.
   List<AnnotationLayer> get layers => _annotations.layers;
 
-  /// Ebene für Neues. Ist sie ausgeblendet, wird sie eingeblendet – sonst
-  /// würde man ins Unsichtbare zeichnen.
+  /// Nur Ebenen (ohne Gruppen) – dort kann etwas liegen.
+  List<AnnotationLayer> get drawableLayers => [
+    for (final l in layers)
+      if (!l.isGroup) l,
+  ];
+
+  /// Ebene für Neues. Ist sie (oder ihre Gruppe) ausgeblendet, wird sie
+  /// eingeblendet – sonst würde man ins Unsichtbare zeichnen.
   String? _layerForNew() {
     final id = activeLayer;
-    if (!_annotations.isLayerVisible(id)) _putLayer(_annotations.layer(id)!.copyWith(visible: true));
+    final l = _annotations.layer(id)!;
+    if (!l.visible) _setLayer(l.copyWith(visible: true));
+    final g = _annotations.groupOf(l);
+    if (g != null && !g.visible) _setLayer(g.copyWith(visible: true));
     return id == kDefaultLayer ? null : id;
   }
 
-  void _putLayer(AnnotationLayer l) {
-    _annotations.putLayer(l.copyWith(modifiedAt: DateTime.now().toUtc()));
+  /// Ebene ändern, ohne Rückgängig (z. B. Einblenden).
+  void _setLayer(AnnotationLayer l) => _annotations.putLayer(l.copyWith(modifiedAt: DateTime.now().toUtc()));
+
+  /// Ebenen ändern – ein Rückgängig-Schritt.
+  void _changeLayers(Iterable<AnnotationLayer> after) {
+    final entry = _UndoEntry();
+    final now = DateTime.now().toUtc();
+    for (final l in after) {
+      entry.layersBefore.add(_annotations.layer(l.id) ?? l.copyWith(deleted: true));
+      _annotations.putLayer(l.copyWith(modifiedAt: now));
+    }
+    if (!entry.isEmpty) _push(entry);
   }
 
-  /// Neue Ebene ganz oben; sie wird gleich die aktive. Gibt die ID zurück.
-  String addLayer(String name) {
-    final top = layers.fold<double>(0, (m, l) => l.order > m ? l.order : m);
+  double _topOrder([String? parent]) => layers
+      .where(
+        (l) =>
+            (l.parent == parent && _annotations.groupOf(l) != null) ||
+            (parent == null && _annotations.groupOf(l) == null),
+      )
+      .fold<double>(0, (m, l) => l.order > m ? l.order : m);
+
+  /// Neue Ebene ganz oben (bzw. oben in der Gruppe [group]); sie wird gleich
+  /// die aktive. Gibt die ID zurück.
+  String addLayer(String name, {String? group}) {
     final l = AnnotationLayer(
       id: _uuid.v4(),
-      name: name.trim().isEmpty ? 'Ebene ${layers.length + 1}' : name.trim(),
-      order: top + 1,
+      name: name.trim().isEmpty ? 'Ebene ${drawableLayers.length + 1}' : name.trim(),
+      order: _topOrder(group) + 1,
       createdAt: DateTime.now().toUtc(),
+      parent: group,
     );
-    _annotations.putLayer(l);
     _activeLayer = l.id;
-    _changed();
+    _changeLayers([l]);
     return l.id;
+  }
+
+  /// Neue, leere Gruppe ganz oben.
+  String addGroup(String name) {
+    final g = AnnotationLayer(
+      id: _uuid.v4(),
+      name: name.trim().isEmpty ? 'Gruppe' : name.trim(),
+      order: _topOrder() + 1,
+      createdAt: DateTime.now().toUtc(),
+      isGroup: true,
+    );
+    _changeLayers([g]);
+    return g.id;
   }
 
   void renameLayer(String id, String name) {
     final l = _annotations.layer(id);
     if (l == null || name.trim().isEmpty || l.name == name.trim()) return;
-    _putLayer(l.copyWith(name: name.trim()));
-    _changed();
+    _changeLayers([l.copyWith(name: name.trim())]);
   }
 
+  /// Ein-/Ausblenden (bewusst ohne Rückgängig – das ist schnell wieder umgeschaltet).
   void setLayerVisible(String id, bool visible) {
     final l = _annotations.layer(id);
     if (l == null || l.visible == visible) return;
-    _putLayer(l.copyWith(visible: visible));
+    _setLayer(l.copyWith(visible: visible));
     _changed();
   }
 
-  /// Ebene an Position [index] setzen (0 = ganz unten).
+  /// Ebene an Position [index] setzen (0 = ganz unten), auf oberster Stufe.
   void moveLayer(String id, int index) {
-    final list = layers;
+    final list = [
+      for (final l in layers)
+        if (_annotations.groupOf(l) == null) l,
+    ];
     final from = list.indexWhere((l) => l.id == id);
     if (from < 0) return;
     final l = list.removeAt(from);
     list.insert(index.clamp(0, list.length), l);
-    for (final (i, x) in list.indexed) {
-      if (x.order != i.toDouble()) _putLayer(x.copyWith(order: i.toDouble()));
-    }
-    _changed();
+    _changeLayers([
+      for (final (i, x) in list.indexed)
+        if (x.order != i.toDouble()) x.copyWith(order: i.toDouble()),
+    ]);
   }
 
-  /// Wie viele Elemente (auf allen Seiten) auf der Ebene liegen.
+  /// Neue Anordnung aus der Liste (oben zuerst): jede Ebene mit ihrer Gruppe.
+  /// Ein Rückgängig-Schritt.
+  void arrangeLayers(List<({String id, String? parent})> topFirst) {
+    final changed = <AnnotationLayer>[];
+    final counters = <String?, int>{};
+    for (final e in topFirst.reversed) {
+      final l = _annotations.layer(e.id);
+      if (l == null) continue;
+      final parent = l.isGroup ? null : e.parent;
+      final order = (counters[parent] = (counters[parent] ?? -1) + 1).toDouble();
+      if (l.order != order || l.parent != parent) changed.add(l.copyWith(order: order, parent: parent));
+    }
+    _changeLayers(changed);
+  }
+
+  /// Ebene in eine Gruppe legen (oben hinein) oder herausnehmen (null).
+  void moveLayerToGroup(String id, String? group) {
+    final l = _annotations.layer(id);
+    if (l == null || l.isGroup || l.parent == group) return;
+    _changeLayers([l.copyWith(parent: group, order: _topOrder(group) + 1)]);
+  }
+
+  /// Wie viele Elemente (auf allen Seiten) auf der Ebene liegen – bei einer
+  /// Gruppe auf allen ihren Ebenen.
   int countOnLayer(String id) {
+    final l = _annotations.layer(id);
+    if (l != null && l.isGroup) {
+      return [for (final c in _childrenOf(id)) countOnLayer(c.id)].fold(0, (a, b) => a + b);
+    }
     final a = _annotations;
     bool on(String? layer, bool deleted) => !deleted && a.resolveLayer(layer) == id;
     return a.allStrokes.where((s) => on(s.layer, s.deleted)).length +
         a.allStamps.where((s) => on(s.layer, s.deleted)).length +
         a.allTexts.where((t) => on(t.layer, t.deleted)).length;
   }
+
+  List<AnnotationLayer> _childrenOf(String group) => [
+    for (final l in layers)
+      if (l.parent == group && !l.isGroup) l,
+  ];
 
   /// Alle Elemente einer Ebene (auf allen Seiten).
   SelectionIds _idsOnLayer(String id) {
@@ -435,65 +526,99 @@ class InkController extends ChangeNotifier {
   /// Legt Elemente auf eine andere Ebene – ein Rückgängig-Schritt.
   void moveToLayer(SelectionIds ids, String layer) {
     final target = _annotations.resolveLayer(layer);
-    final stored = target == kDefaultLayer ? kDefaultLayer : target;
     final now = DateTime.now().toUtc();
     final entry = _UndoEntry();
     for (final id in ids.strokes) {
       final s = _annotations[id];
       if (s == null || s.deleted || _annotations.resolveLayer(s.layer) == target) continue;
-      _annotations.put(s.copyWith(layer: stored, modifiedAt: now));
+      _annotations.put(s.copyWith(layer: target, modifiedAt: now));
       entry.strokesBefore.add(s);
     }
     for (final id in ids.stamps) {
       final st = _annotations.stamp(id);
       if (st == null || st.deleted || _annotations.resolveLayer(st.layer) == target) continue;
-      _annotations.putStamp(st.copyWith(layer: stored, modifiedAt: now));
+      _annotations.putStamp(st.copyWith(layer: target, modifiedAt: now));
       entry.stampsBefore.add(st);
     }
     for (final id in ids.texts) {
       final n = _annotations.text(id);
       if (n == null || n.deleted || _annotations.resolveLayer(n.layer) == target) continue;
-      _annotations.putText(n.copyWith(layer: stored, modifiedAt: now));
+      _annotations.putText(n.copyWith(layer: target, modifiedAt: now));
       entry.textsBefore.add(n);
     }
     if (!entry.isEmpty) _push(entry);
-    if (!_annotations.isLayerVisible(target)) setLayerVisible(target, true);
+    if (!_annotations.isLayerShown(target)) {
+      final l = _annotations.layer(target)!;
+      _setLayer(l.copyWith(visible: true));
+      final g = _annotations.groupOf(l);
+      if (g != null) _setLayer(g.copyWith(visible: true));
+      _changed();
+    }
   }
 
   /// Führt [from] in [into] zusammen: Alles wandert nach [into], [from]
   /// verschwindet. Die Grund-Ebene lässt sich nicht auflösen.
   void mergeLayer(String from, String into) {
     if (from == into || from == kDefaultLayer) return;
+    beginBatch();
     moveToLayer(_idsOnLayer(from), into);
-    _removeLayer(from);
+    _removeLayers([from]);
+    endBatch();
   }
 
-  /// Löscht eine Ebene mit allem, was darauf liegt. Das Gelöschte lässt sich
-  /// mit "Rückgängig" zurückholen (dann auf der Grund-Ebene).
+  /// Löscht eine Ebene mit allem, was darauf liegt – bei einer Gruppe auch
+  /// alle Ebenen darin. Ein Rückgängig-Schritt holt alles zurück.
   void deleteLayer(String id) {
     if (id == kDefaultLayer) return;
-    deleteSelection(_idsOnLayer(id));
-    _removeLayer(id);
-  }
-
-  void _removeLayer(String id) {
     final l = _annotations.layer(id);
     if (l == null) return;
-    _putLayer(l.copyWith(deleted: true));
-    if (_activeLayer == id) _activeLayer = kDefaultLayer;
-    _changed();
+    final ids = [
+      if (l.isGroup)
+        for (final c in _childrenOf(id))
+          if (!c.isDefault) c.id,
+      id,
+    ];
+    beginBatch();
+    for (final x in ids) {
+      deleteSelection(_idsOnLayer(x));
+    }
+    // Die Grund-Ebene in einer gelöschten Gruppe bleibt – ohne Gruppe.
+    if (l.isGroup) {
+      for (final c in _childrenOf(id)) {
+        if (c.isDefault) _changeLayers([c.copyWith(parent: null)]);
+      }
+    }
+    _removeLayers(ids);
+    endBatch();
+  }
+
+  /// Gruppe auflösen: Ihre Ebenen bleiben, nur ohne Gruppe.
+  void dissolveGroup(String id) {
+    final g = _annotations.layer(id);
+    if (g == null || !g.isGroup) return;
+    beginBatch();
+    final top = _topOrder();
+    _changeLayers([for (final (i, c) in _childrenOf(id).indexed) c.copyWith(parent: null, order: top + 1 + i)]);
+    _removeLayers([id]);
+    endBatch();
+  }
+
+  void _removeLayers(List<String> ids) {
+    _changeLayers([
+      for (final id in ids)
+        if (_annotations.layer(id) case final l?) l.copyWith(deleted: true),
+    ]);
+    if (ids.contains(_activeLayer)) _activeLayer = kDefaultLayer;
   }
 
   /// Kopie einer Ebene mit Kopien aller Elemente, direkt darüber.
   String duplicateLayer(String id) {
     final src = _annotations.layer(id);
-    if (src == null) return id;
-    final list = layers;
-    final index = list.indexWhere((l) => l.id == id);
-    final copyId = addLayer('${src.name} (Kopie)');
-    if (!src.visible) setLayerVisible(copyId, false);
-    final clip = copySelection(_idsOnLayer(id));
+    if (src == null || src.isGroup) return id;
     beginBatch();
+    final copyId = addLayer('${src.name} (Kopie)', group: _annotations.groupOf(src)?.id);
+    if (!src.visible) _setLayer(_annotations.layer(copyId)!.copyWith(visible: false));
+    final clip = copySelection(_idsOnLayer(id));
     for (final page in {
       ...clip.strokes.map((s) => s.page),
       ...clip.stamps.map((s) => s.page),
@@ -509,8 +634,16 @@ class InkController extends ChangeNotifier {
         layer: copyId,
       );
     }
+    // Direkt über das Original setzen.
+    final outline = _annotations.outline();
+    final rows = [
+      for (final r in outline) (id: r.layer.id, parent: r.layer.isGroup ? null : _annotations.groupOf(r.layer)?.id),
+    ];
+    final copyRow = rows.firstWhere((r) => r.id == copyId);
+    rows.remove(copyRow);
+    rows.insert(rows.indexWhere((r) => r.id == id), copyRow);
+    arrangeLayers(rows);
     endBatch();
-    moveLayer(copyId, index + 1);
     return copyId;
   }
 
@@ -762,6 +895,12 @@ class InkController extends ChangeNotifier {
       _annotations.putStamp(before.copyWith(modifiedAt: now));
       inverse.stampsBefore.add(current);
     }
+    for (final before in entry.layersBefore) {
+      final current = _annotations.layer(before.id) ?? before.copyWith(deleted: true);
+      _annotations.putLayer(before.copyWith(modifiedAt: now));
+      inverse.layersBefore.add(current);
+      if (before.deleted && _activeLayer == before.id) _activeLayer = kDefaultLayer;
+    }
     for (final before in entry.strokesBefore) {
       final current = _annotations[before.id];
       if (current == null || current.deleted) continue;
@@ -812,6 +951,10 @@ class InkController extends ChangeNotifier {
       b.addedStamps.addAll(e.addedStamps);
       b.stampsBefore.addAll(e.stampsBefore);
       b.strokesBefore.addAll(e.strokesBefore);
+      // Nur den ältesten Stand einer Ebene im Bündel merken.
+      for (final l in e.layersBefore) {
+        if (!b.layersBefore.any((x) => x.id == l.id)) b.layersBefore.add(l);
+      }
       _changed();
       return;
     }

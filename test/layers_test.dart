@@ -96,12 +96,13 @@ void main() {
     c.deleteLayer(copy);
     expect(c.annotations.visibleStrokesOn(1).length, 3);
     expect(c.layers.length, 2);
-    c.undo(); // Inhalt kommt zurück – auf der Grund-Ebene
+    c.undo(); // Ebene und Inhalt kommen zurück – in einem Schritt
     expect(c.annotations.visibleStrokesOn(1).length, 6);
-    expect(c.countOnLayer(kDefaultLayer), 3);
+    expect(c.layers.map((l) => l.name), ['Standard', 'A', 'A (Kopie)']);
+    expect(c.countOnLayer(copy), 3);
 
     c.deleteLayer(kDefaultLayer);
-    expect(c.layers.length, 2, reason: 'Grund-Ebene bleibt immer');
+    expect(c.layers.length, 3, reason: 'Grund-Ebene lässt sich nicht löschen');
     c.dispose();
   });
 
@@ -136,9 +137,70 @@ void main() {
     expect(m.layer(id)!.visible, isFalse);
     expect(ScoreAnnotations.merge(b, a).layer(id)!.visible, isFalse, reason: 'unabhängig von der Reihenfolge');
 
-    // Gelöscht bleibt gelöscht.
-    final del = ScoreAnnotations()..putLayer(base.copyWith(deleted: true, modifiedAt: DateTime.utc(2029)));
+    // Auch beim Löschen gewinnt die jüngste Fassung (so geht "Rückgängig").
+    final del = ScoreAnnotations()..putLayer(base.copyWith(deleted: true, modifiedAt: DateTime.utc(2031)));
     expect(ScoreAnnotations.merge(m, del).layers.map((l) => l.id), [kDefaultLayer]);
+    final older = ScoreAnnotations()..putLayer(base.copyWith(deleted: true, modifiedAt: DateTime.utc(2029)));
+    expect(ScoreAnnotations.merge(m, older).layer(id)!.deleted, isFalse);
+    c.dispose();
+  });
+
+  test('Gruppen: ausblenden blendet alle Ebenen darin aus; Rückgängig für Ebenen', () {
+    final c = InkController(pdfPath: '${dir.path}/x.pdf');
+    final g = c.addGroup('Probe');
+    final a = c.addLayer('Fingersätze', group: g);
+    line(c, 0.1);
+    final b = c.addLayer('Dynamik', group: g);
+    line(c, 0.2);
+    c.activeLayer = kDefaultLayer;
+    line(c, 0.3);
+    expect(c.annotations.outline().map((r) => '${'  ' * r.depth}${r.layer.name}'), [
+      'Probe',
+      '  Dynamik',
+      '  Fingersätze',
+      'Standard',
+    ]);
+    expect(c.countOnLayer(g), 2);
+
+    c.setLayerVisible(g, false);
+    expect(c.annotations.visibleStrokesOn(1).length, 1, reason: 'ganze Gruppe aus');
+    c.setLayerVisible(g, true);
+    c.setLayerVisible(b, false);
+    expect(c.annotations.visibleStrokesOn(1).length, 2, reason: 'einzelne Ebene in der Gruppe aus');
+    c.setLayerVisible(b, true);
+
+    // Aus der Gruppe nehmen und wieder zurück (rückgängig)
+    c.moveLayerToGroup(a, null);
+    expect(c.annotations.groupOf(c.annotations.layer(a)!), isNull);
+    c.undo();
+    expect(c.annotations.groupOf(c.annotations.layer(a)!)?.id, g);
+
+    // Umbenennen rückgängig
+    c.renameLayer(a, 'Finger');
+    c.undo();
+    expect(c.annotations.layer(a)!.name, 'Fingersätze');
+
+    // Gruppe löschen: Ebenen und Inhalt weg – ein Rückgängig holt alles zurück
+    c.deleteLayer(g);
+    expect(c.annotations.visibleStrokesOn(1).length, 1);
+    expect(c.layers.length, 1);
+    c.undo();
+    expect(c.annotations.visibleStrokesOn(1).length, 3);
+    expect(c.layers.length, 4);
+
+    // Auflösen: Ebenen bleiben, ohne Gruppe
+    c.dissolveGroup(g);
+    expect(c.layers.map((l) => l.name).toSet(), {'Standard', 'Fingersätze', 'Dynamik'});
+    expect(c.annotations.visibleStrokesOn(1).length, 3);
+    c.undo();
+    expect(c.annotations.layer(g)!.deleted, isFalse);
+
+    // Neue Ebene rückgängig: verschwindet wieder
+    final n = c.addLayer('Neu');
+    expect(c.activeLayer, n);
+    c.undo();
+    expect(c.layers.any((l) => l.id == n), isFalse);
+    expect(c.activeLayer, kDefaultLayer);
     c.dispose();
   });
 }
