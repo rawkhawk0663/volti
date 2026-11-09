@@ -44,11 +44,11 @@ Beim Öffnen siehst du nur die Noten auf anthrazitfarbenem Hintergrund. Die Leis
 | Sofort zeichnen | Mit dem **Stift aufsetzen und ziehen**. Kurz antippen blättert weiterhin. Ausschalten über ⋮ → „Mit dem Stift sofort zeichnen“ |
 | Radieren mit dem Surface Pen | Radierer-Ende des Stifts benutzen oder Seitentaste gedrückt halten, auch in der Spielansicht |
 | Seite springen | Leiste einblenden, dann den Regler unten ziehen |
-| Zwei Seiten nebeneinander | Im **Querformat automatisch**. In einer Setlist geht es über Songgrenzen hinweg: Ist ein Song nur eine Seite lang, steht rechts schon der nächste. Umstellen über ⋮ → „Seiten: automatisch / immer eine / immer zwei“ |
+| Zwei Seiten nebeneinander | Im **Querformat automatisch**. In einer Setlist geht es über Songgrenzen hinweg: Bei jedem Songwechsel siehst du die letzte Seite des alten und die erste Seite des neuen Songs nebeneinander. Umstellen über ⋮ → „Seiten: automatisch / immer eine / immer zwei“ |
 
 **Notenansicht – Bearbeiten**
 
-Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugleiste mit Stift, Textmarker, Radierer und Text.
+Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugleiste mit Stift, Textmarker, Radierer, Text, Stempel, Formen und Lineal.
 
 | Aktion | So geht's |
 |---|---|
@@ -67,7 +67,7 @@ Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugl
 | Leiste auf die andere Seite | Doppelpfeil unten in der Leiste |
 | Fertig | ✓ oben in der Leiste oder **Esc** |
 
-Beim Zeichnen werden Leiste und Fenster fast durchsichtig. Der Stift-Favorit „Abdecken“ (weiss) eignet sich, um Teile der Noten zu überdecken. Einstellungen und Favoriten werden mit deinen anderen Geräten abgeglichen.
+Der Stift-Favorit „Abdecken“ (weiss) eignet sich, um Teile der Noten zu überdecken. Einstellungen und Favoriten werden mit deinen anderen Geräten abgeglichen.
 
 Mit dem Finger wird nie gezeichnet. So hinterlässt der Handballen beim Schreiben keine Spuren.
 
