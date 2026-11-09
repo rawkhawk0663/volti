@@ -91,6 +91,11 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Lesezeichen mit Bereich (`page`..`endPage`) können als Setlist-Eintrag dienen (`SetlistItem.bookmark`/`label`, `ViewerItem.bookmark`). `_Piece._shown` zeigt dann nur diesen Bereich.
    Halbe Seitenwechsel (`ToolController.halfTurns`, nur bei einer Seite): `_half` zeigt oben die obere Hälfte der nächsten und unten die untere Hälfte der aktuellen Seite (`_buildHalf`). Weiter/zurück schaltet zwischen ganz und halb.
 
+15. **Spezial (Paket D):**
+   - **PDF-Export** (`page_export.dart`, Paket `pdf`): Jede Seite wird so gerendert, wie sie angezeigt wird (`renderPageAsShown`: Zuschnitt, Geraderichten, Vierteldrehung) und mit allen eingeblendeten Anmerkungen bemalt (`paintAnnotations`: Leuchtstift multipliziert, dann die Ebenen der Reihe nach, zuletzt der Text). Daraus entsteht ein neues PDF mit einem Bild pro Seite (`buildExportPdf`, `pw.RawImage`, rund 1800 px breit). Das Original wird nie verändert. Den Dialog zeigt `showExportDialog`: Speichern unter, unter Android im Dokumente-Ordner; Zum Drucken öffnen öffnet die Datei mit dem Standardprogramm. `shownPages` beachtet auch Lesezeichen-Bereiche.
+   - **Takte kopieren:** Das Lasso im Modus `ToolController.snippetMode` nimmt das Rechteck um die Linie als Bild auf (Seite + Anmerkungen) und speichert es als eigenen Stempel mit `snippet: true`. Solche Stempel erscheinen nicht im Tab „Eigene“, werden aber abgeglichen. Ein `Stamp` damit kommt in die Zwischenablage (`putOnClipboard`).
+   - **Endlosband** (`reflow_screen.dart`, `core/pdf/systems.dart`): `findSystems` sucht zuerst Notenlinien (Zeilen, die über 45 % der Breite dunkel sind, mindestens 4 in gleichem Abstand). Durchgehende Taktstriche verbinden Systeme (Klavier). Geschnitten wird an der hellsten Zeile dazwischen. Ohne Notenlinien wird an weissen Lücken getrennt. Der Titel bekommt einen eigenen Streifen.
+
 ## Prüfen
 ```bash
 flutter analyze

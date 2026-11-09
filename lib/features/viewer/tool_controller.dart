@@ -386,6 +386,23 @@ class ToolController extends ChangeNotifier {
   InkSelection? _clipSource;
   int _pasteCount = 0;
 
+  /// Lasso kopiert einen Notenausschnitt (als Bild) statt Anmerkungen.
+  bool snippetMode = false;
+
+  void setSnippetMode(bool v) {
+    snippetMode = v;
+    clearSelection();
+    notifyListeners();
+  }
+
+  /// Etwas Fertiges in die Zwischenablage legen (z. B. einen Notenausschnitt).
+  void putOnClipboard(InkClip clip, InkSelection source) {
+    _clipboard = clip;
+    _clipSource = source;
+    _pasteCount = 0;
+    notifyListeners();
+  }
+
   void select(InkSelection? s) => selection.value = (s == null || s.ids.isEmpty) ? null : s;
 
   void clearSelection() {
@@ -434,6 +451,7 @@ class ToolController extends ChangeNotifier {
     final samePlace = src != null && src.isOn(target, page);
     final step = samePlace ? ++_pasteCount * 0.02 : 0.0;
     final ids = target.paste(clip, page, offset: Offset(step, step));
+    snippetMode = false; // das Eingefügte gleich verschieben/vergrössern können
     if (_mode != ToolMode.lasso) setMode(ToolMode.lasso);
     select(InkSelection(target, page, ids));
   }

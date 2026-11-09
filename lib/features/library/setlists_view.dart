@@ -4,6 +4,8 @@ import '../../app/theme.dart';
 import '../../core/library/library_filter.dart';
 import '../../core/library/library_scanner.dart';
 import '../../core/library/setlist.dart';
+import '../viewer/export_dialog.dart';
+import '../viewer/page_export.dart';
 import '../viewer/viewer_screen.dart';
 import 'library_controller.dart';
 import 'open_scores.dart';
@@ -92,6 +94,22 @@ Future<void> playSetlist(BuildContext context, LibraryController library, Setlis
   return openScores(context, library, items, start: startIndex, setlistName: s.name);
 }
 
+/// Alle Stücke einer Setlist als ein PDF – in der Reihenfolge der Setlist.
+Future<void> _exportSetlist(BuildContext context, LibraryController library, Setlist s) async {
+  List<ExportPiece>? opened;
+  await showExportDialog(
+    context,
+    title: s.name,
+    load: () async => opened ??= await openExportPieces([
+      for (final item in s.items)
+        if (library.byRelativePath(item.relativePath) case final e?) (path: e.path, bookmark: item.bookmark),
+    ]),
+    release: () async {
+      if (opened != null) await closeExportPieces(opened!);
+    },
+  );
+}
+
 class SetlistDetailScreen extends StatelessWidget {
   const SetlistDetailScreen({super.key, required this.library, required this.setlist});
   final LibraryController library;
@@ -109,6 +127,11 @@ class SetlistDetailScreen extends StatelessWidget {
             appBar: AppBar(
               title: Text(s.name),
               actions: [
+                IconButton(
+                  tooltip: 'Ganze Setlist als PDF (z. B. für die Band)',
+                  icon: const Icon(Icons.ios_share),
+                  onPressed: s.items.isEmpty ? null : () => _exportSetlist(context, library, s),
+                ),
                 IconButton(
                   tooltip: 'Umbenennen',
                   icon: const Icon(Icons.edit_outlined),

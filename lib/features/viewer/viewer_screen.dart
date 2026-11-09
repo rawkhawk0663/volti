@@ -17,6 +17,9 @@ import '../../core/library/sidecar_store.dart';
 import 'cropped_page.dart';
 import '../../core/ink/navigation_marks.dart';
 import 'bookmarks_sheet.dart';
+import 'export_dialog.dart';
+import 'page_export.dart';
+import 'reflow_screen.dart';
 import 'links_layer.dart';
 import 'page_flow.dart';
 import 'page_setup_screen.dart';
@@ -88,18 +91,8 @@ class _Piece {
   PageSetup setup = PageSetup.empty;
 
   /// Angezeigte Seiten als PDF-Seitennummern.
-  List<int> get _shown {
-    final all = setup.pages(cache?.pageCount ?? 0);
-    final id = item.bookmark;
-    final b = id == null ? null : ink.annotations.bookmark(id);
-    if (b == null || b.deleted) return all;
-    // Nur der Bereich des Lesezeichens.
-    final start = all.indexOf(b.page);
-    if (start < 0) return all;
-    var end = all.indexOf(b.lastPage, start);
-    if (end < 0) end = start;
-    return all.sublist(start, end + 1);
-  }
+  /// Angezeigte Seiten – bei einem Lesezeichen nur dessen Bereich.
+  List<int> get _shown => shownPages(setup, cache?.pageCount ?? 0, ink.annotations, item.bookmark);
 
   /// Alle angezeigten Seiten des Stücks (ohne Lesezeichen-Bereich).
   List<int> get allShown => setup.pages(cache?.pageCount ?? 0);
@@ -338,6 +331,32 @@ class _ViewerScreenState extends State<ViewerScreen> {
     _returnTimer?.cancel();
     _flash.dispose();
     super.dispose();
+  }
+
+  /// Endlosband: Notenzeilen des aktuellen Stücks untereinander.
+  void _reflow() {
+    final piece = _activePiece;
+    final doc = piece.doc;
+    if (doc == null) return;
+    showReflow(
+      context,
+      title: piece.item.title,
+      piece: ExportPiece(doc: doc, annotations: piece.ink.annotations, setup: piece.setup, pages: piece._shown),
+    );
+  }
+
+  /// Das aktuelle Stück als PDF (mit Anmerkungen) speichern oder drucken.
+  void _export() {
+    final piece = _activePiece;
+    final doc = piece.doc;
+    if (doc == null) return;
+    showExportDialog(
+      context,
+      title: piece.item.title,
+      load: () async => [
+        ExportPiece(doc: doc, annotations: piece.ink.annotations, setup: piece.setup, pages: piece._shown),
+      ],
+    );
   }
 
   /// Lesezeichen des aktuellen Stücks.
@@ -1023,6 +1042,22 @@ class _TopBar extends StatelessWidget {
                           child: Text(label),
                         ),
                       const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: state._reflow,
+                        child: const ListTile(
+                          leading: Icon(Icons.view_day_outlined),
+                          title: Text('Endlosband (Notenzeilen untereinander)'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: state._export,
+                        child: const ListTile(
+                          leading: Icon(Icons.ios_share),
+                          title: Text('Als PDF teilen oder drucken …'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                       PopupMenuItem(
                         value: state._editPages,
                         child: const ListTile(

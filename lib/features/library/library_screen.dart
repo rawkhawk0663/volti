@@ -11,6 +11,8 @@ import '../../core/library/score_importer.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../../core/library/sidecar_store.dart';
+import '../viewer/export_dialog.dart';
+import '../viewer/page_export.dart';
 import '../viewer/page_setup_screen.dart';
 import '../viewer/tool_controller.dart';
 import '../viewer/viewer_screen.dart';
@@ -280,6 +282,19 @@ class _ScoresViewState extends State<_ScoresView> {
     if (changes != null) await lib.updateMeta(e, changes);
   }
 
+  /// Stück als PDF (mit Anmerkungen) speichern oder drucken.
+  Future<void> _export(ScoreEntry e) async {
+    List<ExportPiece>? opened;
+    await showExportDialog(
+      context,
+      title: e.title,
+      load: () async => opened ??= await openExportPieces([(path: e.path, bookmark: null)]),
+      release: () async {
+        if (opened != null) await closeExportPieces(opened!);
+      },
+    );
+  }
+
   /// Seiten anordnen und zuschneiden, ohne das Stück zu öffnen.
   Future<void> _editPages(ScoreEntry e) async {
     PdfDocument? doc;
@@ -309,6 +324,10 @@ class _ScoresViewState extends State<_ScoresView> {
     PopupMenuItem(
       value: () => _edit(e),
       child: const ListTile(leading: Icon(Icons.edit_note), title: Text('Infos bearbeiten')),
+    ),
+    PopupMenuItem(
+      value: () => _export(e),
+      child: const ListTile(leading: Icon(Icons.ios_share), title: Text('Als PDF teilen …')),
     ),
     PopupMenuItem(
       value: () => _editPages(e),

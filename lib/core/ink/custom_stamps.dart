@@ -20,10 +20,15 @@ class CustomStamp {
     required this.createdAt,
     this.modifiedAt,
     this.deleted = false,
+    this.snippet = false,
   });
 
   final String id;
   final String name;
+
+  /// Kopierter Notenausschnitt ("Takte kopieren") – erscheint nicht in der
+  /// Auswahl der eigenen Stempel.
+  final bool snippet;
 
   /// Punkt im Bild (0..1), der genau unter dem Stift liegt – z. B. die Mitte
   /// des Notenkopfs.
@@ -49,6 +54,7 @@ class CustomStamp {
         createdAt: createdAt,
         modifiedAt: modifiedAt ?? this.modifiedAt,
         deleted: deleted ?? this.deleted,
+        snippet: snippet,
       );
 
   Map<String, dynamic> toJson() => {
@@ -60,6 +66,7 @@ class CustomStamp {
     'created': createdAt.toUtc().toIso8601String(),
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
+    if (snippet) 'snippet': true,
   };
 
   static CustomStamp fromJson(Map<String, dynamic> j) => CustomStamp(
@@ -71,6 +78,7 @@ class CustomStamp {
     createdAt: DateTime.parse(j['created'] as String),
     modifiedAt: j['modified'] == null ? null : DateTime.parse(j['modified'] as String),
     deleted: j['deleted'] == true,
+    snippet: j['snippet'] == true,
   );
 }
 

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 import 'package:flutter/widgets.dart';
 
 import '../../core/ink/annotation_layer.dart';
@@ -15,6 +16,7 @@ import 'ink_controller.dart';
 import 'perf_meter.dart';
 import 'shapes.dart';
 import 'custom_stamp_registry.dart';
+import 'page_export.dart';
 import 'stamp_paint.dart';
 import 'tool_controller.dart';
 import 'text_layer.dart';
@@ -415,7 +417,9 @@ class _InkLayerState extends State<InkLayer> {
       for (final p in lasso) {
         extent = math.max(extent, (p - lasso.first).distance);
       }
-      if (lasso.length >= 3 && extent > 8) {
+      if (lasso.length >= 3 && extent > 8 && tools.snippetMode) {
+        _copySnippet(lasso, size);
+      } else if (lasso.length >= 3 && extent > 8) {
         final poly = [for (final p in lasso) Offset(p.dx / size.width, p.dy / size.height)];
         final ids = lassoSelect(
           c.annotations,
@@ -443,6 +447,65 @@ class _InkLayerState extends State<InkLayer> {
     _pointer = null;
     tools.isDrawing.value = false;
     _activeRepaint.value++;
+  }
+
+  /// Takte kopieren: das Rechteck um die Lasso-Linie als Bild (Noten samt
+  /// Anmerkungen) in die Zwischenablage legen. Eingefügt wird es als eigener
+  /// Stempel, den man verschieben und vergrössern kann.
+  Future<void> _copySnippet(List<Offset> lasso, Size size) async {
+    final page = widget.pageImage;
+    final registry = CustomStamps.instance;
+    if (page == null || registry == null) return;
+    var r = Rect.fromPoints(lasso.first, lasso.first);
+    for (final p in lasso) {
+      r = r.expandToInclude(Rect.fromPoints(p, p));
+    }
+    r = r.intersect(Offset.zero & size);
+    if (r.width < 8 || r.height < 8) return;
+    // In der Auflösung des Seitenbilds aufnehmen (scharf).
+    final scale = page.width / size.width;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)
+      ..scale(scale)
+      ..translate(-r.left, -r.top);
+    canvas.drawImageRect(
+      page,
+      Rect.fromLTWH(0, 0, page.width.toDouble(), page.height.toDouble()),
+      Offset.zero & size,
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+    paintAnnotations(canvas, size, c.annotations, widget.page);
+    final picture = recorder.endRecording();
+    final img = await picture.toImage((r.width * scale).ceil(), (r.height * scale).ceil());
+    picture.dispose();
+    final png = await img.toByteData(format: ui.ImageByteFormat.png);
+    img.dispose();
+    if (png == null || !mounted) return;
+    final s = await registry.add(
+      name: 'Notenausschnitt',
+      png: png.buffer.asUint8List(),
+      anchorX: 0.5,
+      anchorY: 0.5,
+      aspect: r.width / r.height,
+      snippet: true,
+    );
+    final stamp = Stamp(
+      id: 'clip',
+      page: widget.page,
+      x: r.center.dx / size.width,
+      y: r.center.dy / size.height,
+      glyph: 0,
+      size: r.height / size.width,
+      color: 0xFF000000,
+      createdAt: DateTime.now().toUtc(),
+      custom: s.id,
+    );
+    tools.putOnClipboard(InkClip(stamps: [stamp]), InkSelection(c, widget.page, const SelectionIds()));
+    if (mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Takte kopiert – jetzt eine Seite antippen und «Einfügen» (Strg+V).')),
+      );
+    }
   }
 
   // ----------------------------------------------------------------- Formen

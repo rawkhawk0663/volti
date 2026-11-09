@@ -26,7 +26,7 @@ class CustomStamps extends ChangeNotifier {
   /// Zur Auswahl angebotene Stempel (ohne entfernte), älteste zuerst.
   List<CustomStamp> get stamps => [
     for (final s in _all)
-      if (!s.deleted) s,
+      if (!s.deleted && !s.snippet) s,
   ];
 
   /// Auch entfernte – gesetzte Stempel brauchen sie weiterhin.
@@ -70,6 +70,7 @@ class CustomStamps extends ChangeNotifier {
     required double anchorX,
     required double anchorY,
     required double aspect,
+    bool snippet = false,
   }) async {
     final s = CustomStamp(
       id: _uuid.v4(),
@@ -78,6 +79,7 @@ class CustomStamps extends ChangeNotifier {
       anchorY: anchorY,
       aspect: aspect,
       createdAt: DateTime.now().toUtc(),
+      snippet: snippet,
     );
     await store.writeImage(s, png);
     final img = await _decode(png);

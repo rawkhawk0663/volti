@@ -650,7 +650,24 @@ class _LassoSettings extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 6),
-            if (count == 0)
+            // Was das Einkreisen tut: Anmerkungen auswählen oder Takte kopieren.
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, label: Text('Anmerkungen')),
+                ButtonSegment(value: true, label: Text('Takte kopieren')),
+              ],
+              selected: {tools.snippetMode},
+              onSelectionChanged: (v) => tools.setSnippetMode(v.first),
+            ),
+            const SizedBox(height: 8),
+            if (tools.snippetMode)
+              Text(
+                'Takte einkreisen: Sie werden samt Anmerkungen als Bild kopiert. Dann eine Seite antippen (auch in '
+                'einem anderen Stück) und «Einfügen». Danach lässt es sich wie ein Stempel verschieben und vergrössern.',
+                style: hint,
+              )
+            else if (count == 0)
               Text(
                 'Mit dem Stift oder der Maus einkreisen, was du auswählen möchtest. Strg+A wählt alles auf der Seite.',
                 style: hint,
