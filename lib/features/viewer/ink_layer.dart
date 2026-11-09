@@ -82,8 +82,9 @@ class _InkLayerState extends State<InkLayer> {
 
   /// Schon gemalter Anfang des entstehenden Strichs (als fertiges Bild), damit
   /// pro Bild nur die neuen Teilstücke gemalt werden – auch bei langen Strichen.
-  ui.Picture? _cachedStart;
+  ui.Image? _cachedStart;
   int _cachedPoints = 0;
+  double _dpr = 1;
 
   void _resetCache() {
     _cachedStart?.dispose();
@@ -268,6 +269,7 @@ class _InkLayerState extends State<InkLayer> {
 
   @override
   Widget build(BuildContext context) {
+    _dpr = MediaQuery.devicePixelRatioOf(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
@@ -280,12 +282,11 @@ class _InkLayerState extends State<InkLayer> {
           child: Stack(
             fit: StackFit.expand,
             children: [
+              // Fertige Striche als ein einziges Bild: Es wird nur neu erzeugt,
+              // wenn sich die Striche ändern. Bei jedem Bild wird dann nur noch
+              // dieses Bild gezeigt – statt alle Striche neu zu zeichnen.
               RepaintBoundary(
-                child: ListenableBuilder(
-                  listenable: c,
-                  builder: (context, _) =>
-                      CustomPaint(painter: StrokesPainter(c.annotations.visibleStrokesOn(widget.page))),
-                ),
+                child: _StrokesImage(controller: c, page: widget.page, size: size),
               ),
               // Eigene Ebene: Der entstehende Strich wird bei jeder Bewegung
               // neu gemalt, ohne alles andere mitzumalen.
@@ -297,6 +298,84 @@ class _InkLayerState extends State<InkLayer> {
         );
       },
     );
+  }
+}
+
+/// Fertige Striche einer Seite, vorgerendert als Bild in voller Auflösung.
+class _StrokesImage extends StatefulWidget {
+  const _StrokesImage({required this.controller, required this.page, required this.size});
+  final InkController controller;
+  final int page;
+  final Size size;
+
+  @override
+  State<_StrokesImage> createState() => _StrokesImageState();
+}
+
+class _StrokesImageState extends State<_StrokesImage> {
+  ui.Image? _image;
+  bool _dirty = true;
+  Size? _renderedSize;
+  double? _renderedDpr;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChanged);
+  }
+
+  @override
+  void didUpdateWidget(_StrokesImage old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onChanged);
+      widget.controller.addListener(_onChanged);
+      _dirty = true;
+    }
+    if (old.page != widget.page) _dirty = true;
+  }
+
+  // Höchstens ein neues Bild pro Bildschirm-Bild (auch beim schnellen Radieren).
+  void _onChanged() {
+    if (!_dirty) setState(() => _dirty = true);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChanged);
+    _image?.dispose();
+    super.dispose();
+  }
+
+  void _render(double dpr) {
+    final size = widget.size;
+    final strokes = widget.controller.annotations.visibleStrokesOn(widget.page);
+    _dirty = false;
+    _renderedSize = size;
+    _renderedDpr = dpr;
+    final old = _image;
+    if (strokes.isEmpty || size.isEmpty) {
+      _image = null;
+    } else {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder)..scale(dpr);
+      for (final s in strokes) {
+        paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points);
+      }
+      final picture = recorder.endRecording();
+      _image = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
+      picture.dispose();
+    }
+    // Das alte Bild erst nach dem nächsten Bild freigeben.
+    if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    if (_dirty || _renderedSize != widget.size || _renderedDpr != dpr) _render(dpr);
+    final img = _image;
+    return img == null ? const SizedBox.expand() : RawImage(image: img, fit: BoxFit.fill);
   }
 }
 
@@ -350,16 +429,28 @@ class _ActivePainter extends CustomPainter {
       if (opaquePen) _paintPrediction(canvas, size, preset, pts);
       return;
     }
-    if (pts.length - state._cachedPoints > 32) {
-      final recorder = ui.PictureRecorder();
-      final c = Canvas(recorder);
-      if (state._cachedStart != null) c.drawPicture(state._cachedStart!);
-      paintPenSegments(c, size, Color(preset.color), preset.width, pts, state._cachedPoints, pts.length);
-      state._cachedStart?.dispose();
-      state._cachedStart = recorder.endRecording();
-      state._cachedPoints = pts.length;
+    final dpr = state._dpr;
+    final dst = Offset.zero & size;
+    void drawCached(Canvas c) {
+      final img = state._cachedStart;
+      if (img == null) return;
+      c.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), dst, Paint());
     }
-    if (state._cachedStart != null) canvas.drawPicture(state._cachedStart!);
+
+    if (pts.length - state._cachedPoints > 24) {
+      final recorder = ui.PictureRecorder();
+      final c = Canvas(recorder)..scale(dpr);
+      drawCached(c);
+      paintPenSegments(c, size, Color(preset.color), preset.width, pts, state._cachedPoints, pts.length);
+      final picture = recorder.endRecording();
+      final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
+      picture.dispose();
+      final old = state._cachedStart;
+      state._cachedStart = img;
+      state._cachedPoints = pts.length;
+      if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
+    drawCached(canvas);
     paintPenSegments(canvas, size, Color(preset.color), preset.width, pts, state._cachedPoints, pts.length);
     _paintPrediction(canvas, size, preset, pts);
   }

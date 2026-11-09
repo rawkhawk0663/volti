@@ -69,6 +69,7 @@ class PenDiagnosticsPanel extends StatelessWidget {
           ],
         ];
         return Card(
+          elevation: 0,
           color: Colors.black.withValues(alpha: 0.82),
           child: Padding(
             padding: const EdgeInsets.all(12),

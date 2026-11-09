@@ -12,7 +12,6 @@ import 'tool_popover.dart';
 /// * Aktives Werkzeug nochmals antippen → abwählen, das Fenster verschwindet.
 /// * Das Fenster lässt sich frei verschieben; beim Werkzeugwechsel erscheint
 ///   das neue Fenster an derselben Stelle.
-/// * Während gezeichnet wird, werden Leiste und Fenster fast durchsichtig.
 ///
 /// Füllt den ganzen Bildschirm, fängt aber nur Berührungen auf Leiste und
 /// Fenster ab – alles andere geht an die Notenseite darunter.
@@ -100,11 +99,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
                   bottom: 0,
                   left: tools.paletteLeft ? _margin : null,
                   right: tools.paletteLeft ? null : _margin,
-                  child: Center(
-                    child: RepaintBoundary(
-                      child: _FadeWhileDrawing(tools: tools, child: _buildBar(context)),
-                    ),
-                  ),
+                  child: Center(child: RepaintBoundary(child: _buildBar(context))),
                 ),
                 if (hasPopover)
                   // Beim Ziehen ändert sich nur die Position (_dragOffset) – der
@@ -112,10 +107,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
                   ValueListenableBuilder<Offset?>(
                     valueListenable: _dragOffset,
                     child: RepaintBoundary(
-                      child: _FadeWhileDrawing(
-                        tools: tools,
-                        child: ToolPopover(key: ValueKey(mode), tools: tools, onDrag: (d) => _drag(d, screen)),
-                      ),
+                      child: ToolPopover(key: ValueKey(mode), tools: tools, onDrag: (d) => _drag(d, screen)),
                     ),
                     builder: (context, dragged, child) {
                       // dragged löst nur das Neuzeichnen aus; massgeblich ist die gemerkte Position.
@@ -191,20 +183,6 @@ class _ToolOverlayState extends State<ToolOverlay> {
       ),
     );
   }
-}
-
-class _FadeWhileDrawing extends StatelessWidget {
-  const _FadeWhileDrawing({required this.tools, required this.child});
-  final ToolController tools;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-    valueListenable: tools.isDrawing,
-    builder: (context, drawing, child) =>
-        AnimatedOpacity(duration: const Duration(milliseconds: 180), opacity: drawing ? 0.12 : 1, child: child),
-    child: child,
-  );
 }
 
 class _Sep extends StatelessWidget {

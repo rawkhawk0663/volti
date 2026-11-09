@@ -51,19 +51,36 @@ class PageFlow {
   /// Rechte Seite in der Doppelansicht (null = keine mehr).
   PageSlot? rightOf(PageSlot left) => after(left);
 
-  /// Nächste Ansicht. Bei zwei Seiten geht es um zwei Seiten weiter, über
-  /// Stückgrenzen hinweg: Ist ein Song nur eine Seite lang, steht rechts schon
-  /// der nächste.
+  /// Ist [s] die letzte Seite ihres Stücks, und kommt danach noch ein Stück?
+  bool _endsPieceBeforeAnother(PageSlot s) => s.page == pageCount(s.piece) && s.piece + 1 < pieceCount;
+
+  /// Nächste Ansicht.
+  ///
+  /// Eine Seite: einfach die nächste Seite.
+  ///
+  /// Zwei Seiten: innerhalb eines Stücks zwei Seiten weiter. Am Ende eines
+  /// Stücks gibt es aber **immer** eine Ansicht mit der letzten Seite des
+  /// alten und der ersten Seite des neuen Stücks nebeneinander – egal wie
+  /// viele Seiten die Stücke haben. Wichtig für Live-Musik: Man sieht den
+  /// Übergang.
   PageSlot? next(PageSlot left, {required bool twoUp}) {
     if (!twoUp) return after(left);
     final right = after(left);
-    return right == null ? null : after(right);
+    if (right == null) return null;
+    // Rechts steht die letzte Seite eines Stücks → sie kommt nach links,
+    // rechts erscheint der Anfang des nächsten Stücks.
+    if (_endsPieceBeforeAnother(right)) return right;
+    return after(right);
   }
 
-  /// Vorherige Ansicht (bei zwei Seiten zwei zurück, am Anfang eine).
+  /// Vorherige Ansicht – genau die Ansicht, von der aus "weiter" hierher
+  /// führen würde (Übergangsansichten inklusive).
   PageSlot? previous(PageSlot left, {required bool twoUp}) {
     final one = before(left);
     if (!twoUp || one == null) return one;
-    return before(one) ?? one;
+    final two = before(one);
+    if (two != null && next(two, twoUp: true) == left) return two;
+    if (next(one, twoUp: true) == left) return one;
+    return two ?? one;
   }
 }
