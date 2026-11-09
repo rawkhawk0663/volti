@@ -5,10 +5,12 @@ import 'package:pdfrx/pdfrx.dart';
 
 import 'app/theme.dart';
 import 'core/app_settings.dart';
+import 'core/ink/custom_stamps.dart';
 import 'core/ink/tool_settings.dart';
 import 'features/library/library_controller.dart';
 import 'features/library/library_screen.dart';
 import 'features/library/sync_controller.dart';
+import 'features/viewer/custom_stamp_registry.dart';
 import 'features/viewer/fullscreen.dart';
 import 'features/viewer/tool_controller.dart';
 
@@ -24,10 +26,17 @@ Future<void> main() async {
   final tools = ToolController(settings: settings, store: ToolStore(library.root));
   // Geänderte Stift-Vorlagen abgleichen; neue vom anderen Gerät übernehmen.
   tools.onSettingsChanged = sync.scheduleSoon;
-  sync.afterDownload = tools.load;
+  // Eigene Stempel (Bilder in Bibliothek/.volti/stamps), ebenfalls abgeglichen.
+  final stamps = CustomStamps.instance = CustomStamps(CustomStampStore(library.root));
+  stamps.onLocalChange = sync.scheduleSoon;
+  sync.afterDownload = () async {
+    await tools.load();
+    await stamps.load();
+  };
   // Bibliothek im Hintergrund einlesen, danach abgleichen.
   library.init().then((_) async {
     await tools.load();
+    await stamps.load();
     sync.start();
   });
   runApp(VoltiApp(library: library, sync: sync, tools: tools));

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:volti/core/ink/score_annotations.dart';
 import 'package:volti/core/ink/stroke.dart';
+import 'package:volti/core/library/page_setup.dart';
 import 'package:volti/core/library/score_importer.dart';
 import 'package:volti/core/library/score_meta.dart';
 import 'package:volti/core/library/setlist.dart';
@@ -84,6 +85,21 @@ void main() {
       final ids = (await d.sidecar('Bach.pdf')).annotations.visibleStrokesOn(1).map((s) => s.id).toSet();
       expect(ids, {'s', 'd'});
     }
+  });
+
+  test('Seiten-Einrichtung kommt auf dem anderen Gerät an', () async {
+    await importOn(surface, 'Bach.pdf');
+    await surface.sync();
+    await desktop.sync();
+    await const SidecarStore().save(
+      surface.pdfPath('Bach.pdf'),
+      pages: PageSetup.empty.withOrder([2, 1]).withCrop(1, const PageCrop(top: 0.1)),
+    );
+    await surface.sync();
+    await desktop.sync();
+    final pages = (await desktop.sidecar('Bach.pdf')).pages;
+    expect(pages.order, [2, 1]);
+    expect(pages.cropOf(1).top, 0.1);
   });
 
   test('Löschen auf einem Gerät löscht auf dem anderen – neu importiert bleibt', () async {

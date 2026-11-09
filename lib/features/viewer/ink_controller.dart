@@ -315,6 +315,7 @@ class InkController extends ChangeNotifier {
     required int glyph,
     required double size,
     required int color,
+    String? custom,
   }) {
     final st = Stamp(
       id: _uuid.v4(),
@@ -326,6 +327,7 @@ class InkController extends ChangeNotifier {
       color: color,
       createdAt: DateTime.now().toUtc(),
       layer: _layerForNew(),
+      custom: custom,
     );
     _annotations.putStamp(st);
     _push(_UndoEntry(addedStamps: [st.id]));
@@ -790,6 +792,7 @@ class InkController extends ChangeNotifier {
         color: st.color,
         createdAt: now,
         layer: layer ?? st.layer,
+        custom: st.custom,
       );
       _annotations.putStamp(copy);
       stamps.add(copy.id);

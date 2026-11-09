@@ -14,6 +14,7 @@ import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
 import 'perf_meter.dart';
 import 'shapes.dart';
+import 'custom_stamp_registry.dart';
 import 'stamp_paint.dart';
 import 'tool_controller.dart';
 import 'text_layer.dart';
@@ -286,8 +287,8 @@ class _InkLayerState extends State<InkLayer> {
       c.moveStamp(id, x, y);
     } else {
       final st = tools.stamp;
-      c.addStamp(page: widget.page, x: x, y: y, glyph: st.glyph, size: st.size, color: st.color);
-      tools.rememberStamp(st.glyph);
+      c.addStamp(page: widget.page, x: x, y: y, glyph: st.glyph, size: st.size, color: st.color, custom: st.custom);
+      if (st.custom == null) tools.rememberStamp(st.glyph);
     }
     _stampPos = null;
     _movingStampId = null;
@@ -719,6 +720,16 @@ class _StrokesImageState extends State<_StrokesImage> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onChanged);
+    CustomStamps.instance?.addListener(_onCustomStamps);
+  }
+
+  /// Ein eigenes Stempel-Bild ist (nach)geladen oder geändert → neu malen.
+  void _onCustomStamps() {
+    if (!mounted) return;
+    setState(() {
+      _baseSize = null;
+      _dirty = true;
+    });
   }
 
   @override
@@ -748,6 +759,7 @@ class _StrokesImageState extends State<_StrokesImage> {
   @override
   void dispose() {
     widget.controller.removeListener(_onChanged);
+    CustomStamps.instance?.removeListener(_onCustomStamps);
     _generation++;
     _base?.dispose();
     super.dispose();
@@ -1089,9 +1101,14 @@ class _ActivePainter extends CustomPainter {
     if (stampPos != null) {
       final moving = state._movingStampId == null ? null : state.c.annotations.stamp(state._movingStampId!);
       final glyph = moving?.glyph ?? tools.stamp.glyph;
+      final custom = moving == null ? tools.stamp.custom : moving.custom;
       final fs = (moving?.size ?? tools.stamp.size) * size.width;
       final color = Color(moving?.color ?? tools.stamp.color);
-      paintGlyph(canvas, glyph, stampPos, fs, color.withValues(alpha: color.a * 0.75));
+      if (custom != null) {
+        paintCustomStamp(canvas, custom, stampPos, fs, opacity: 0.75);
+      } else {
+        paintGlyph(canvas, glyph, stampPos, fs, color.withValues(alpha: color.a * 0.75));
+      }
       return;
     }
     // Form: Vorschau beim Aufziehen.

@@ -79,8 +79,12 @@ class SyncEngine {
     final base = await _loadBase();
 
     bool isPdf(String rel) => rel.startsWith('Noten/') && rel.toLowerCase().endsWith('.pdf');
-    // Setlists und Stift-Vorlagen: ganze Datei, die jüngste Fassung gewinnt.
-    bool isSetlist(String rel) => rel.startsWith('.volti/setlists/') || rel == '.volti/presets.json';
+    // Bilder eigener Stempel: wie PDFs (neu oder gelöscht, nie verändert).
+    bool isStampImage(String rel) => rel.startsWith('.volti/stamps/') && rel.endsWith('.png');
+    // Setlists, Stift-Vorlagen, Liste der eigenen Stempel: ganze Datei, die
+    // jüngste Fassung gewinnt.
+    bool isSetlist(String rel) =>
+        rel.startsWith('.volti/setlists/') || rel == '.volti/presets.json' || rel == '.volti/stamps.json';
 
     // ---------------------------------------------------- Sicherheitsbremse
     final localPdfs = localFiles.where(isPdf).toSet();
@@ -95,7 +99,7 @@ class SyncEngine {
     final newBase = <String>{};
 
     // -------------------------------------------------- PDFs und Setlists
-    final whole = {...localFiles, ...remoteFiles, ...base}.where((r) => isPdf(r) || isSetlist(r));
+    final whole = {...localFiles, ...remoteFiles, ...base}.where((r) => isPdf(r) || isSetlist(r) || isStampImage(r));
     for (final rel in whole) {
       final l = localFiles.contains(rel), r = remoteFiles.contains(rel), b = base.contains(rel);
       if (l && r) {
@@ -161,7 +165,7 @@ class SyncEngine {
     if (localJson == null || _encode(local!) != mergedJson) {
       // Über den SidecarStore, damit gleichzeitiges Speichern aus der
       // Notenansicht nicht verloren geht.
-      await _sidecars.save(localPdfPath, meta: merged.meta, annotations: merged.annotations);
+      await _sidecars.save(localPdfPath, meta: merged.meta, annotations: merged.annotations, pages: merged.pages);
       report.merged++;
     }
     if (remoteJson == null || _encode(rem!) != mergedJson) {

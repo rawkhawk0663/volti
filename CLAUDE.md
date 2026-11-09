@@ -78,6 +78,9 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    `CroppedPage` baut die ganze Seite und zeigt sie geradegerichtet (Drehung um die Seitenmitte), verschoben, abgeschnitten und in Vierteldrehungen gedreht. Flutter rechnet Berührungen durch alle Schritte zurück. Bei einem Ausschnitt wird die ganze Seite entsprechend grösser gerendert, damit sie scharf bleibt.
    „Ränder automatisch“ (`autoCropPage`, `findContentBounds`) rendert die Seite klein und sucht dunkle Punkte, Staub zählt nicht.
 
+13. **Eigene Stempel:** Bilder in `Bibliothek/.volti/stamps/<id>.png` (nie verändert oder gelöscht, gesetzte Stempel brauchen sie). Die Liste steht in `.volti/stamps.json` (`CustomStampStore`, Format `volti-stamps` v1, Sync wie Setlists: jüngste Fassung gewinnt). Die Bilder werden wie PDFs abgeglichen. Beim Import (`importCustomStamp`): weisser Hintergrund wird durchsichtig, Ränder werden weggeschnitten (`prepareStampPixels`), höchstens 600 px, Mittelpunkt `anchorX/Y` wird vom Besitzer gesetzt.
+   Ein gesetzter Stempel trägt `custom` (ID) statt `glyph`. Höhe = `size` × Seitenbreite, die Farbe wird nicht angewendet. Malen geht über die gemeinsame Instanz `CustomStamps.instance` (`paintCustomStamp`, `customStampRect`). Ist ein Bild nachgeladen, malt `_StrokesImage` neu.
+
 ## Prüfen
 ```bash
 flutter analyze

@@ -134,24 +134,35 @@ enum ShapeKind {
 
 /// Einstellungen für Stempel.
 class StampSetting {
-  const StampSetting({required this.glyph, required this.size, required this.color});
+  const StampSetting({required this.glyph, required this.size, required this.color, this.custom});
 
   /// Zeichen in der Schrift Bravura.
   final int glyph;
+
+  /// Eigener Stempel (ID) – hat Vorrang vor [glyph].
+  final String? custom;
 
   /// Schriftgrösse relativ zur Seitenbreite.
   final double size;
   final int color;
 
-  StampSetting copyWith({int? glyph, double? size, int? color}) =>
-      StampSetting(glyph: glyph ?? this.glyph, size: size ?? this.size, color: color ?? this.color);
+  static const _keep = Object();
 
-  Map<String, dynamic> toJson() => {'glyph': glyph, 'size': size, 'color': color};
+  /// Ein Zeichen wählen hebt einen eigenen Stempel auf ([custom] = null).
+  StampSetting copyWith({int? glyph, double? size, int? color, Object? custom = _keep}) => StampSetting(
+    glyph: glyph ?? this.glyph,
+    size: size ?? this.size,
+    color: color ?? this.color,
+    custom: identical(custom, _keep) ? (glyph != null ? null : this.custom) : custom as String?,
+  );
+
+  Map<String, dynamic> toJson() => {'glyph': glyph, 'size': size, 'color': color, 'custom': ?custom};
 
   static StampSetting fromJson(Map<String, dynamic> j) => StampSetting(
     glyph: j['glyph'] as int,
     size: (j['size'] as num).toDouble(),
     color: j['color'] as int? ?? 0xFF1B1B1B,
+    custom: j['custom'] as String?,
   );
 
   static const minSize = 0.02, maxSize = 0.09;

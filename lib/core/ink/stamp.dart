@@ -17,6 +17,7 @@ class Stamp {
     this.modifiedAt,
     this.deleted = false,
     this.layer,
+    this.custom,
   });
 
   final String id;
@@ -38,6 +39,10 @@ class Stamp {
 
   /// Ebene (null = Grund-Ebene [kDefaultLayer]).
   final String? layer;
+
+  /// Eigener Stempel (ID in der Liste der eigenen Stempel) statt eines
+  /// Zeichens aus Bravura. Dann ist [glyph] 0 und [color] ohne Bedeutung.
+  final String? custom;
 
   DateTime get lastChange => modifiedAt ?? createdAt;
 
@@ -64,6 +69,7 @@ class Stamp {
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted ?? this.deleted,
     layer: layer ?? this.layer,
+    custom: custom,
   );
 
   static double _round(double v) => (v * 100000).roundToDouble() / 100000;
@@ -80,6 +86,7 @@ class Stamp {
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
     if (layer != null && layer != kDefaultLayer) 'layer': layer,
+    if (custom != null) 'custom': custom,
   };
 
   static Stamp fromJson(Map<String, dynamic> j) => Stamp(
@@ -94,5 +101,6 @@ class Stamp {
     modifiedAt: j['modified'] == null ? null : DateTime.parse(j['modified'] as String),
     deleted: j['deleted'] == true,
     layer: j['layer'] as String?,
+    custom: j['custom'] as String?,
   );
 }

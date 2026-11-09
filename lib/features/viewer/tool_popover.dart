@@ -8,6 +8,9 @@ import '../../core/ink/stamp_catalog.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
 import '../../core/ink/tool_settings.dart';
+import '../../core/ink/custom_stamps.dart';
+import 'custom_stamp_editor.dart';
+import 'custom_stamp_registry.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
 import 'layers_panel.dart';
@@ -352,10 +355,11 @@ class _StampSettings extends StatefulWidget {
 }
 
 class _StampSettingsState extends State<_StampSettings> with SingleTickerProviderStateMixin {
+  // Letzter Tab: "Eigene" (selbst importierte Bilder).
   late final TabController _tabs = TabController(
-    length: stampCatalog.length,
+    length: stampCatalog.length + 1,
     vsync: this,
-    initialIndex: _categoryOf(widget.tools.stamp.glyph),
+    initialIndex: widget.tools.stamp.custom != null ? stampCatalog.length : _categoryOf(widget.tools.stamp.glyph),
   );
 
   /// Höhe der Symbol-Fläche: vier Reihen, mehr wird darin gescrollt.
@@ -379,7 +383,7 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
     final recent = tools.recentStamps;
     final scheme = Theme.of(context).colorScheme;
     Widget cell(int glyph) => _FavoriteChip(
-      selected: st.glyph == glyph,
+      selected: st.custom == null && st.glyph == glyph,
       tooltip: stampGlyph(glyph)?.label ?? '',
       onTap: () => tools.setStamp(st.copyWith(glyph: glyph)),
       child: SizedBox(width: 36, height: 36, child: CustomPaint(painter: _GlyphPainter(glyph, Color(st.color)))),
@@ -402,7 +406,10 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
           labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           unselectedLabelStyle: const TextStyle(fontSize: 13),
           dividerColor: scheme.outlineVariant,
-          tabs: [for (final c in stampCatalog) Tab(height: 34, text: c.name)],
+          tabs: [
+            for (final c in stampCatalog) Tab(height: 34, text: c.name),
+            const Tab(height: 34, text: 'Eigene'),
+          ],
         ),
         SizedBox(
           height: _gridHeight,
@@ -425,6 +432,7 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Wrap(spacing: 6, runSpacing: 6, children: [for (final g in c.glyphs) cell(g.codepoint)]),
                   ),
+                _CustomStampsTab(tools: tools),
               ],
             ),
           ),
@@ -442,22 +450,110 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
           value: st.size.clamp(StampSetting.minSize, StampSetting.maxSize),
           onChanged: (v) => tools.setStamp(st.copyWith(size: v)),
         ),
-        const _Label('Farbe'),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final c in penColors.where((c) => c != 0xFFFFFFFF))
-              _Swatch(
-                color: Color(c),
-                selected: st.color == c,
-                onTap: () => tools.setStamp(st.copyWith(color: c)),
-              ),
-          ],
-        ),
+        // Eigene Stempel behalten ihre Farben.
+        if (st.custom == null) ...[
+          const _Label('Farbe'),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final c in penColors.where((c) => c != 0xFFFFFFFF))
+                _Swatch(
+                  color: Color(c),
+                  selected: st.color == c,
+                  onTap: () => tools.setStamp(st.copyWith(color: c)),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
+}
+
+/// Tab "Eigene": selbst importierte Bilder als Stempel.
+class _CustomStampsTab extends StatelessWidget {
+  const _CustomStampsTab({required this.tools});
+  final ToolController tools;
+
+  @override
+  Widget build(BuildContext context) {
+    final registry = CustomStamps.instance;
+    if (registry == null) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: registry,
+      builder: (context, _) {
+        final st = tools.stamp;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final s in registry.stamps)
+                _FavoriteChip(
+                  selected: st.custom == s.id,
+                  tooltip: '${s.name} · lange drücken = ändern',
+                  onTap: () => tools.setStamp(st.copyWith(custom: s.id)),
+                  onLongPress: () => _menu(context, s),
+                  child: SizedBox(width: 36, height: 36, child: CustomPaint(painter: _CustomStampIcon(s.id))),
+                ),
+              _FavoriteChip(
+                selected: false,
+                tooltip: 'Eigenes Bild als Stempel importieren',
+                onTap: () => importCustomStamp(context, tools),
+                child: const Icon(Icons.add_photo_alternate_outlined, size: 22),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _menu(BuildContext context, CustomStamp s) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(s.name),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop('edit'),
+            child: const Text('Mittelpunkt und Name ändern …'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop('remove'),
+            child: const Text('Aus der Auswahl entfernen'),
+          ),
+        ],
+      ),
+    );
+    if (!context.mounted) return;
+    if (action == 'edit') await editCustomStamp(context, s);
+    if (action == 'remove') {
+      await CustomStamps.instance?.remove(s.id);
+      if (tools.stamp.custom == s.id) tools.setStamp(tools.stamp.copyWith(glyph: tools.stamp.glyph));
+    }
+  }
+}
+
+class _CustomStampIcon extends CustomPainter {
+  _CustomStampIcon(this.id);
+  final String id;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = CustomStamps.instance?.byId(id);
+    final aspect = s?.aspect ?? 1;
+    // So gross wie möglich in die Fläche einpassen.
+    final h = math.min(size.height * 0.9, size.width * 0.9 / aspect);
+    final rect = Rect.fromCenter(center: size.center(Offset.zero), width: h * aspect, height: h);
+    final at = Offset(rect.left + (s?.anchorX ?? 0.5) * rect.width, rect.top + (s?.anchorY ?? 0.5) * rect.height);
+    paintCustomStamp(canvas, id, at, h);
+  }
+
+  @override
+  bool shouldRepaint(_CustomStampIcon old) => true;
 }
 
 /// Ein Stempel-Symbol, eingepasst in seine Fläche.
