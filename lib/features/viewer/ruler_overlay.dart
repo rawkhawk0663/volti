@@ -7,10 +7,15 @@ import 'tool_controller.dart';
 
 /// Das Lineal: ein halbdurchsichtiger Streifen über den Noten.
 ///
-/// * Mit Finger oder Maus verschieben, mit zwei Fingern drehen – oder am
-///   runden Griff drehen. Bei 0°, 45°, 90° … rastet es ein.
-/// * Mit dem Stift nahe an einer Kante zeichnen ergibt eine gerade Linie
-///   (das erledigt die Stift-Ebene). Der Stift bewegt das Lineal daher nicht.
+/// * **Nur mit den Fingern** (oder der Maus) bewegen: ein Finger auf dem
+///   Lineal verschiebt es, ein zweiter Finger dazu dreht es – wie ein echtes
+///   Lineal unter zwei Fingern. Bei 0° und 90° rastet es leicht ein.
+///   Am Computer: mit der Maus ziehen, mit dem Mausrad drehen.
+/// * Der Stift bewegt das Lineal nie, er zeichnet daran entlang (das erledigt
+///   die Stift-Ebene, auch wenn man auf dem Lineal selbst ansetzt).
+///
+/// Technisch: Eine durchlässige Fläche über allem beobachtet die Finger,
+/// ohne etwas zu blockieren. Das Lineal selbst nimmt keine Berührungen an.
 class RulerOverlay extends StatefulWidget {
   const RulerOverlay({super.key, required this.tools});
   final ToolController tools;
@@ -21,16 +26,98 @@ class RulerOverlay extends StatefulWidget {
 
 class _RulerOverlayState extends State<RulerOverlay> {
   ToolController get tools => widget.tools;
-  double _startAngle = 0, _gestureAngle = 0;
+
+  /// Finger bzw. Maus, die das Lineal halten, mit ihrer letzten Position.
+  final Map<int, Offset> _held = {};
+
+  /// Ungerasteter Winkel (damit das Einrasten nicht "klebt").
+  double _rawAngle = 0;
+
+  /// Halten Finger das Lineal (und nicht die Maus)? Nur dann dreht ein zweiter.
+  bool _byFinger = false;
   bool _showAngle = false;
 
   static const _len = ToolController.rulerLength, _thick = ToolController.rulerThickness;
 
-  /// Rastet in der Nähe von Vielfachen von 45° ein.
+  /// Rastet nahe 0°, 90°, 180° und 270° ein.
   static double _snap(double a) {
-    const step = math.pi / 4, tolerance = 3 * math.pi / 180;
+    const step = math.pi / 2, tolerance = 2.5 * math.pi / 180;
     final nearest = (a / step).round() * step;
     return (a - nearest).abs() < tolerance ? nearest : a;
+  }
+
+  /// Liegt der Punkt (Bildschirm-Koordinaten) auf dem Lineal (mit etwas Rand)?
+  bool _onRuler(Offset global) {
+    final c = tools.rulerCenter;
+    if (c == null) return false;
+    final a = tools.rulerAngle;
+    final rel = global - c;
+    final along = rel.dx * math.cos(a) + rel.dy * math.sin(a);
+    final across = -rel.dx * math.sin(a) + rel.dy * math.cos(a);
+    return along.abs() <= _len / 2 + 16 && across.abs() <= _thick / 2 + 16;
+  }
+
+  void _down(PointerDownEvent e) {
+    final finger = e.kind == PointerDeviceKind.touch;
+    final mouse = e.kind == PointerDeviceKind.mouse && e.buttons == kPrimaryMouseButton;
+    if (!finger && !mouse) return;
+    // Erster Finger muss auf dem Lineal liegen, ein zweiter darf irgendwo sein.
+    final joins = finger && _held.length == 1 && _byFinger;
+    if (!_onRuler(e.position) && !joins) return;
+    if (_held.length >= 2) return;
+    if (_held.isEmpty) {
+      _rawAngle = tools.rulerAngle;
+      _byFinger = finger;
+    }
+    _held[e.pointer] = e.position;
+    tools.grabRuler(e.pointer);
+    if (!_showAngle) setState(() => _showAngle = true);
+  }
+
+  void _move(PointerMoveEvent e) {
+    final prev = _held[e.pointer];
+    if (prev == null) return;
+    final center = tools.rulerCenter!;
+    if (_held.length == 1) {
+      _held[e.pointer] = e.position;
+      tools.moveRuler(center + (e.position - prev), tools.rulerAngle);
+      return;
+    }
+    // Zwei Finger: Drehung und Verschiebung aus der Änderung seit dem letzten
+    // Ereignis (Schritt für Schritt – so folgt das Lineal den Fingern genau).
+    final other = _held.entries.firstWhere((x) => x.key != e.pointer).value;
+    final before = prev - other, after = e.position - other;
+    var turn = math.atan2(after.dy, after.dx) - math.atan2(before.dy, before.dx);
+    if (turn > math.pi) turn -= 2 * math.pi;
+    if (turn < -math.pi) turn += 2 * math.pi;
+    _rawAngle += turn;
+    // Ein Finger bewegt sich, der andere hält: Das Lineal dreht sich um den
+    // haltenden Finger. (Bewegen sich beide, kommen ihre Ereignisse einzeln
+    // nacheinander – zusammen ergibt das die ganze Bewegung.)
+    final rel = center - other;
+    final rotated = Offset(
+      rel.dx * math.cos(turn) - rel.dy * math.sin(turn),
+      rel.dx * math.sin(turn) + rel.dy * math.cos(turn),
+    );
+    _held[e.pointer] = e.position;
+    tools.moveRuler(other + rotated, _snap(_rawAngle));
+  }
+
+  void _up(PointerEvent e) {
+    if (_held.remove(e.pointer) == null) return;
+    tools.releaseRuler(e.pointer);
+    if (_held.isEmpty) {
+      setState(() => _showAngle = false);
+    } else {
+      _rawAngle = tools.rulerAngle;
+    }
+  }
+
+  void _wheel(PointerSignalEvent e) {
+    if (e is! PointerScrollEvent || !_onRuler(e.position)) return;
+    final step = (e.scrollDelta.dy > 0 ? 1 : -1) * 2 * math.pi / 180;
+    _rawAngle = tools.rulerAngle + step;
+    tools.moveRuler(tools.rulerCenter!, _snap(_rawAngle));
   }
 
   @override
@@ -43,74 +130,40 @@ class _RulerOverlayState extends State<RulerOverlay> {
         tools.rulerCenter ??= box != null && box.hasSize
             ? box.localToGlobal(screen.center(Offset.zero))
             : screen.center(Offset.zero);
-        return ValueListenableBuilder<int>(
-          valueListenable: tools.rulerChanged,
-          builder: (context, _, _) {
-            final local = box != null && box.hasSize ? box.globalToLocal(tools.rulerCenter!) : tools.rulerCenter!;
-            final angle = tools.rulerAngle;
-            final handle = local + Offset(math.cos(angle), math.sin(angle)) * (_len / 2 - 22);
-            return Stack(
-              children: [
-                Positioned(
+        return Stack(
+          children: [
+            // Beobachtet Finger und Maus, ohne etwas darunter zu blockieren.
+            Positioned.fill(
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: _down,
+                onPointerMove: _move,
+                onPointerUp: _up,
+                onPointerCancel: _up,
+                onPointerSignal: _wheel,
+              ),
+            ),
+            ValueListenableBuilder<int>(
+              valueListenable: tools.rulerChanged,
+              builder: (context, _, _) {
+                final local = box != null && box.hasSize ? box.globalToLocal(tools.rulerCenter!) : tools.rulerCenter!;
+                return Positioned(
                   left: local.dx - _len / 2,
                   top: local.dy - _thick / 2,
                   width: _len,
                   height: _thick,
-                  child: Transform.rotate(
-                    angle: angle,
-                    child: GestureDetector(
-                      // Nur Finger und Maus bewegen das Lineal – der Stift zeichnet daran entlang.
-                      supportedDevices: const {
-                        PointerDeviceKind.touch,
-                        PointerDeviceKind.mouse,
-                        PointerDeviceKind.trackpad,
-                      },
-                      onScaleStart: (_) => setState(() {
-                        _startAngle = tools.rulerAngle;
-                        _gestureAngle = 0;
-                        _showAngle = true;
-                      }),
-                      onScaleUpdate: (d) {
-                        _gestureAngle = d.rotation;
-                        tools.moveRuler(tools.rulerCenter! + d.focalPointDelta, _snap(_startAngle + _gestureAngle));
-                      },
-                      onScaleEnd: (_) => setState(() => _showAngle = false),
+                  child: IgnorePointer(
+                    child: Transform.rotate(
+                      angle: tools.rulerAngle,
                       child: CustomPaint(
-                        painter: _RulerPainter(showAngle: _showAngle, angle: angle),
+                        painter: _RulerPainter(showAngle: _showAngle, angle: tools.rulerAngle),
                       ),
                     ),
                   ),
-                ),
-                // Griff zum Drehen mit einem Finger, der Maus oder dem Stift.
-                Positioned(
-                  left: handle.dx - 16,
-                  top: handle.dy - 16,
-                  width: 32,
-                  height: 32,
-                  child: GestureDetector(
-                    onPanStart: (_) => setState(() => _showAngle = true),
-                    onPanUpdate: (d) {
-                      final center = box?.globalToLocal(tools.rulerCenter!) ?? tools.rulerCenter!;
-                      final v = d.localPosition + Offset(handle.dx - 16, handle.dy - 16) - center;
-                      tools.moveRuler(tools.rulerCenter!, _snap(math.atan2(v.dy, v.dx)));
-                    },
-                    onPanEnd: (_) => setState(() => _showAngle = false),
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.grab,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Theme.of(context).colorScheme.primary,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Icon(Icons.rotate_right, size: 18, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+                );
+              },
+            ),
+          ],
         );
       },
     );

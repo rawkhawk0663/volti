@@ -111,9 +111,22 @@ void main() {
       expect(flat.last.first.dy - flat.first.first.dy, closeTo(33, 0.01));
       expect(flat.first.first.dx, 100);
       expect(flat.first.last.dx, 500);
-      final tall = shapeGeometry(ShapeKind.staff, const Offset(100, 200), const Offset(500, 260), 2, pageWidth: 1000);
-      expect(tall.last.first.dy, 260, reason: 'Höhe aus dem Ziehen nach unten');
-      expect(tall[1].first.dy, 215);
+      final wobble = shapeGeometry(ShapeKind.staff, const Offset(100, 200), const Offset(500, 250), 2, pageWidth: 1000);
+      expect(wobble.last.first.dy, closeTo(233, 0.01), reason: '50 px nach unten reichen noch nicht');
+      final tall = shapeGeometry(ShapeKind.staff, const Offset(100, 200), const Offset(500, 300), 2, pageWidth: 1000);
+      expect(tall.last.first.dy, 300, reason: 'Höhe aus dem Ziehen nach unten');
+      expect(tall[1].first.dy, 225);
+      // Gabeln immer waagrecht
+      final hairpin = shapeGeometry(
+        ShapeKind.crescendo,
+        const Offset(0, 0),
+        const Offset(300, 80),
+        2,
+        pageWidth: 1000,
+      ).single;
+      expect(hairpin[1], Offset.zero);
+      expect((hairpin.first.dy + hairpin.last.dy) / 2, closeTo(0, 1e-9), reason: 'Mitte auf der Höhe des Starts');
+      expect(hairpin.first.dx, 300);
       // Zu kurz → keine Form
       expect(shapeGeometry(ShapeKind.line, Offset.zero, const Offset(1, 0), 2), isEmpty);
     });

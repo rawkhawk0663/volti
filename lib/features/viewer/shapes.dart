@@ -15,10 +15,16 @@ import '../../core/ink/tool_settings.dart';
 /// Seitenbreite; ≈ 7 mm auf A4, wie gedruckte Noten).
 const kStaffHeight = 0.033;
 
+/// Ab dieser senkrechten Bewegung (relativ zur Seitenbreite) bestimmt das
+/// Ziehen die Höhe der Notenlinien.
+const kStaffFreeHeight = 0.07;
+
 /// Öffnung von Crescendo/Decrescendo relativ zur Seitenbreite.
 const kHairpinOpening = 0.016;
 
 List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double strokePx, {double? pageWidth}) {
+  // Gabeln liegen immer waagrecht (sie werden nie schräg gebraucht).
+  if (kind == ShapeKind.crescendo || kind == ShapeKind.decrescendo) b = Offset(b.dx, a.dy);
   final d = b - a;
   final len = d.distance;
   if (len < 2) return const [];
@@ -71,8 +77,11 @@ List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double stro
       final w = pageWidth ?? 800;
       final dy = b.dy - a.dy;
       if ((b.dx - a.dx).abs() < 4) return const [];
-      final height = dy.abs() < w * 0.012 ? w * kStaffHeight : dy.abs();
-      final down = dy >= 0 || dy.abs() < w * 0.012 ? 1.0 : -1.0;
+      // Die Höhe ändert sich erst nach einer deutlichen Bewegung nach unten
+      // (oder oben). Kleines Wackeln beim waagrechten Ziehen bleibt ohne Folge.
+      final free = dy.abs() >= w * kStaffFreeHeight;
+      final height = free ? dy.abs() : w * kStaffHeight;
+      final down = dy >= 0 || !free ? 1.0 : -1.0;
       return [
         for (var i = 0; i < 5; i++)
           [Offset(a.dx, a.dy + down * height * i / 4), Offset(b.dx, a.dy + down * height * i / 4)],

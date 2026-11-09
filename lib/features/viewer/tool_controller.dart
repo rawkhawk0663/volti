@@ -264,6 +264,25 @@ class ToolController extends ChangeNotifier {
     rulerChanged.value++;
   }
 
+  /// Zeiger (Finger/Maus), die gerade das Lineal bewegen. Die Stift-Ebene
+  /// zeichnet mit ihnen nicht, und ein Antippen blättert nicht um.
+  final Set<int> rulerPointers = {};
+  DateTime _rulerTouched = DateTime(2000);
+
+  void grabRuler(int pointer) {
+    rulerPointers.add(pointer);
+    _rulerTouched = DateTime.now();
+  }
+
+  void releaseRuler(int pointer) {
+    rulerPointers.remove(pointer);
+    _rulerTouched = DateTime.now();
+  }
+
+  /// Wurde das Lineal gerade eben bewegt? (Dann ist ein Antippen kein Umblättern.)
+  bool get rulerRecentlyUsed =>
+      rulerPointers.isNotEmpty || DateTime.now().difference(_rulerTouched) < const Duration(milliseconds: 400);
+
   void moveRuler(Offset center, double angle) {
     rulerCenter = center;
     rulerAngle = angle;

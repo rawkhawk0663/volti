@@ -41,11 +41,15 @@ bool isEraserEvent(PointerEvent e) =>
 /// Ein kurzes Antippen mit dem Stift bleibt ein Antippen (blättert um) und
 /// hinterlässt keinen Punkt.
 class InkLayer extends StatefulWidget {
-  const InkLayer({super.key, required this.page, required this.controller, required this.tools});
+  const InkLayer({super.key, required this.page, required this.controller, required this.tools, this.pageImage});
 
   final int page;
   final InkController controller;
   final ToolController tools;
+
+  /// Bild der Notenseite. Der Leuchtstift wird damit fest zu einem Bild
+  /// verrechnet, damit beim Zeichnen nicht jedes Bild neu gemischt werden muss.
+  final ui.Image? pageImage;
 
   @override
   State<InkLayer> createState() => _InkLayerState();
@@ -140,6 +144,7 @@ class _InkLayerState extends State<InkLayer> {
 
   void _down(PointerDownEvent e, Size size) {
     if (_pointer != null || !_accepts(e)) return;
+    if (tools.rulerPointers.contains(e.pointer)) return; // die Maus schiebt gerade das Lineal
     final eraserEvent = isEraserEvent(e);
     final mode = tools.mode;
     final instant = mode == ToolMode.read && e.kind == PointerDeviceKind.stylus && tools.instantPen;
@@ -614,6 +619,7 @@ class _InkLayerState extends State<InkLayer> {
                           page: widget.page,
                           layer: null,
                           highlights: true,
+                          background: widget.pageImage,
                           size: size,
                           hidden: hidden,
                         ),
@@ -669,6 +675,7 @@ class _StrokesImage extends StatefulWidget {
     required this.size,
     this.layer = kDefaultLayer,
     this.highlights = false,
+    this.background,
     this.hidden = const {},
   });
   final InkController controller;
@@ -680,6 +687,9 @@ class _StrokesImage extends StatefulWidget {
 
   /// true: nur Leuchtstift-Striche. false: alles ausser Leuchtstift.
   final bool highlights;
+
+  /// Nur beim Leuchtstift: Notenseite, mit der er fest verrechnet wird.
+  final ui.Image? background;
 
   /// Nicht malen (gerade ausgewählt).
   final Set<String> hidden;
@@ -700,6 +710,9 @@ class _StrokesImageState extends State<_StrokesImage> {
 
   bool _dirty = true;
   bool _composing = false;
+
+  /// Leuchtstift-Bild enthält schon die Notenseite (dann normal anzeigen).
+  bool _withBackground = false;
   int _generation = 0;
 
   @override
@@ -722,6 +735,10 @@ class _StrokesImageState extends State<_StrokesImage> {
       _dirty = true;
     }
     if (!setEquals(old.hidden, widget.hidden)) _dirty = true;
+    if (!identical(old.background, widget.background)) {
+      _baseSize = null; // mit der neuen Notenseite ganz neu verrechnen
+      _dirty = true;
+    }
   }
 
   void _onChanged() {
@@ -786,10 +803,28 @@ class _StrokesImageState extends State<_StrokesImage> {
   /// Leuchtstift-Bild nicht: Dort gibt es nichts darunter (manche Grafikkarten
   /// zeigen dann gar nichts), das ganze Bild wird stattdessen beim Anzeigen
   /// mit den Noten multipliziert.
-  static ui.Picture _record(ui.Image? base, Iterable<Object> items, Size size, double dpr, {bool multiply = true}) {
+  static ui.Picture _record(
+    ui.Image? base,
+    Iterable<Object> items,
+    Size size,
+    double dpr, {
+    bool multiply = true,
+    ui.Image? background,
+  }) {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    if (base != null) canvas.drawImage(base, Offset.zero, Paint());
+    if (base != null) {
+      canvas.drawImage(base, Offset.zero, Paint());
+    } else if (background != null) {
+      // Notenseite als Grund: Der Leuchtstift wird darauf multipliziert und
+      // das Ergebnis ist ein fertiges, deckendes Bild.
+      canvas.drawImageRect(
+        background,
+        Rect.fromLTWH(0, 0, background.width.toDouble(), background.height.toDouble()),
+        Rect.fromLTWH(0, 0, size.width * dpr, size.height * dpr),
+        Paint()..filterQuality = FilterQuality.medium,
+      );
+    }
     canvas.scale(dpr);
     _paintItems(canvas, size, items, multiply: multiply);
     return recorder.endRecording();
@@ -825,7 +860,9 @@ class _StrokesImageState extends State<_StrokesImage> {
       _setBase(null, keys, size, dpr);
       return;
     }
-    final picture = _record(null, items, size, dpr, multiply: !widget.highlights);
+    final bg = widget.highlights ? widget.background : null;
+    _withBackground = bg != null;
+    final picture = _record(null, items, size, dpr, multiply: !widget.highlights || bg != null, background: bg);
     final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
     picture.dispose();
     _setBase(img, keys, size, dpr);
@@ -845,7 +882,7 @@ class _StrokesImageState extends State<_StrokesImage> {
     final keys = [..._baseKeys, for (final it in pending) _keyOf(it)];
     late final ui.Image img;
     try {
-      final picture = _record(_base, pending, size, dpr, multiply: !widget.highlights);
+      final picture = _record(_base, pending, size, dpr, multiply: !widget.highlights || _withBackground);
       img = await picture.toImage((size.width * dpr).ceil(), (size.height * dpr).ceil());
       picture.dispose();
     } finally {
@@ -872,7 +909,7 @@ class _StrokesImageState extends State<_StrokesImage> {
       fit: StackFit.expand,
       children: [
         if (img != null)
-          widget.highlights
+          widget.highlights && !_withBackground
               // Wie ein echter Leuchtstift: schwarze Noten darunter bleiben schwarz.
               ? CustomPaint(painter: _MultiplyImagePainter(img))
               : RawImage(image: img, fit: BoxFit.fill),
@@ -1096,7 +1133,9 @@ class _ActivePainter extends CustomPainter {
     // werden als Ganzes gemalt (sonst wären die Übergänge sichtbar).
     final opaquePen = preset.tool == InkTool.pen && Color(preset.color).a >= 1.0;
     if (!opaquePen || pts.length < 48) {
-      paintStroke(canvas, size, preset.tool, Color(preset.color), preset.width, pts);
+      // Leuchtstift beim Zeichnen nicht multiplizieren (das müsste bei jedem
+      // Bild den ganzen Hintergrund neu mischen); nach dem Absetzen schon.
+      paintStroke(canvas, size, preset.tool, Color(preset.color), preset.width, pts, multiply: false);
       if (opaquePen) _paintPrediction(canvas, size, preset, pts);
       return;
     }

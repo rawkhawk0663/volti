@@ -561,6 +561,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// Linkes Drittel: zurück. Rechtes Drittel: weiter. Mitte: Leiste ein/aus.
   void _onTap(TapUpDetails d) {
     if (d.kind == PointerDeviceKind.invertedStylus) return;
+    if (tools.rulerRecentlyUsed) return; // Finger war am Lineal
     final width = MediaQuery.sizeOf(context).width;
     final x = d.globalPosition.dx / width;
     if (x < 0.3) {
@@ -702,7 +703,17 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     },
                   ),
                 ),
-                InkLayer(key: ValueKey('ink/$key'), page: src, controller: piece.ink, tools: tools),
+                // Bekommt das Seitenbild, um den Leuchtstift fest damit zu verrechnen.
+                ListenableBuilder(
+                  listenable: cache,
+                  builder: (context, _) => InkLayer(
+                    key: ValueKey('ink/$key'),
+                    page: src,
+                    controller: piece.ink,
+                    tools: tools,
+                    pageImage: cache.imageFor(src, pixelWidth),
+                  ),
+                ),
                 RepaintBoundary(
                   child: TextNotesLayer(
                     key: ValueKey('text/$key'),
