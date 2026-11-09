@@ -116,6 +116,44 @@ class TextStyleSetting {
   static const minSize = 0.012, maxSize = 0.045;
 }
 
+/// Formen, die man mit dem Formen-Werkzeug aufziehen kann.
+enum ShapeKind {
+  line,
+  arrow,
+  rectangle,
+  ellipse,
+  crescendo,
+  decrescendo,
+  slur;
+
+  static ShapeKind fromName(String? n) => ShapeKind.values.firstWhere((k) => k.name == n, orElse: () => line);
+}
+
+/// Einstellungen für Stempel.
+class StampSetting {
+  const StampSetting({required this.glyph, required this.size, required this.color});
+
+  /// Zeichen in der Schrift Bravura.
+  final int glyph;
+
+  /// Schriftgrösse relativ zur Seitenbreite.
+  final double size;
+  final int color;
+
+  StampSetting copyWith({int? glyph, double? size, int? color}) =>
+      StampSetting(glyph: glyph ?? this.glyph, size: size ?? this.size, color: color ?? this.color);
+
+  Map<String, dynamic> toJson() => {'glyph': glyph, 'size': size, 'color': color};
+
+  static StampSetting fromJson(Map<String, dynamic> j) => StampSetting(
+    glyph: j['glyph'] as int,
+    size: (j['size'] as num).toDouble(),
+    color: j['color'] as int? ?? 0xFF1B1B1B,
+  );
+
+  static const minSize = 0.02, maxSize = 0.09;
+}
+
 /// Alle Werkzeug-Einstellungen und Favoriten. Gilt für alle Stücke und wird
 /// zwischen Geräten abgeglichen (`.volti/presets.json`, jüngste Fassung gewinnt).
 class ToolSettings {
@@ -128,7 +166,11 @@ class ToolSettings {
     required this.penFavorites,
     required this.highlighterFavorites,
     required this.textFavorites,
-  });
+    this.stamp = const StampSetting(glyph: 0xE52D, size: 0.045, color: 0xFF1B1B1B),
+    List<int>? recentStamps,
+    this.shape = const DrawingPreset(id: 'shape', tool: InkTool.pen, color: 0xFF1B1B1B, width: 0.0025),
+    this.shapeKind = ShapeKind.crescendo,
+  }) : recentStamps = recentStamps ?? [];
 
   DrawingPreset pen;
   DrawingPreset highlighter;
@@ -140,6 +182,14 @@ class ToolSettings {
   final List<DrawingPreset> penFavorites;
   final List<DrawingPreset> highlighterFavorites;
   final List<TextStyleSetting> textFavorites;
+
+  StampSetting stamp;
+
+  /// Zuletzt benutzte Stempel (neueste zuerst).
+  final List<int> recentStamps;
+
+  DrawingPreset shape;
+  ShapeKind shapeKind;
 
   static ToolSettings defaults() => ToolSettings(
     pen: const DrawingPreset(id: 'pen', tool: InkTool.pen, color: 0xFF1B1B1B, width: 0.003),
@@ -179,6 +229,10 @@ class ToolSettings {
     'penFavorites': [for (final f in penFavorites) f.toJson()],
     'highlighterFavorites': [for (final f in highlighterFavorites) f.toJson()],
     'textFavorites': [for (final f in textFavorites) f.toJson()],
+    'stamp': stamp.toJson(),
+    'recentStamps': recentStamps,
+    'shape': shape.toJson(),
+    'shapeKind': shapeKind.name,
   };
 
   static ToolSettings fromJson(Map<String, dynamic> j) {
@@ -218,6 +272,10 @@ class ToolSettings {
       textFavorites: j['textFavorites'] is List
           ? [for (final e in j['textFavorites'] as List) TextStyleSetting.fromJson(e as Map<String, dynamic>)]
           : d.textFavorites,
+      stamp: j['stamp'] is Map ? StampSetting.fromJson(j['stamp'] as Map<String, dynamic>) : d.stamp,
+      recentStamps: (j['recentStamps'] as List?)?.cast<int>().toList(),
+      shape: j['shape'] is Map ? DrawingPreset.fromJson(j['shape'] as Map<String, dynamic>) : d.shape,
+      shapeKind: ShapeKind.fromName(j['shapeKind'] as String?),
     );
   }
 }

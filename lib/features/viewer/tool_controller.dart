@@ -18,6 +18,8 @@ enum ToolMode {
   highlighter,
   eraser,
   text,
+  stamp,
+  shape,
 }
 
 /// Wie viele Seiten nebeneinander gezeigt werden.
@@ -192,6 +194,61 @@ class ToolController extends ChangeNotifier {
     }
   }
 
+  // ---------------------------------------------------------- Stempel/Formen
+  StampSetting get stamp => _s.stamp;
+  List<int> get recentStamps => List.unmodifiable(_s.recentStamps);
+  DrawingPreset get shape => _s.shape;
+  ShapeKind get shapeKind => _s.shapeKind;
+
+  void setStamp(StampSetting st) {
+    _s.stamp = st;
+    _changed();
+  }
+
+  /// Merkt sich einen benutzten Stempel (für "Zuletzt benutzt").
+  void rememberStamp(int glyph) {
+    _s.recentStamps
+      ..remove(glyph)
+      ..insert(0, glyph);
+    if (_s.recentStamps.length > 10) _s.recentStamps.removeLast();
+    _changed();
+  }
+
+  void setShape(DrawingPreset p) {
+    _s.shape = p;
+    _changed();
+  }
+
+  void setShapeKind(ShapeKind k) {
+    _s.shapeKind = k;
+    _changed();
+  }
+
+  // ---------------------------------------------------------------- Lineal
+  /// Lineal sichtbar? (Gilt nur für diese Sitzung.)
+  bool rulerVisible = false;
+
+  /// Mitte (Bildschirm-Koordinaten; null = Bildschirmmitte) und Drehwinkel.
+  Offset? rulerCenter;
+  double rulerAngle = 0;
+
+  /// Länge und Breite des Lineals in Bildpunkten.
+  static const rulerLength = 560.0, rulerThickness = 64.0;
+
+  final rulerChanged = ValueNotifier<int>(0);
+
+  void toggleRuler() {
+    rulerVisible = !rulerVisible;
+    notifyListeners();
+    rulerChanged.value++;
+  }
+
+  void moveRuler(Offset center, double angle) {
+    rulerCenter = center;
+    rulerAngle = angle;
+    rulerChanged.value++;
+  }
+
   // ------------------------------------------------------------ Speichern
   Timer? _saveTimer;
   Future<void> _saving = Future.value();
@@ -229,6 +286,7 @@ class ToolController extends ChangeNotifier {
   void dispose() {
     _saveTimer?.cancel();
     isDrawing.dispose();
+    rulerChanged.dispose();
     super.dispose();
   }
 }

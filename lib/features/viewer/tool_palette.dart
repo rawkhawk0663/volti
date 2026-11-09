@@ -86,11 +86,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
           listenable: Listenable.merge([tools, widget.ink]),
           builder: (context, _) {
             final mode = tools.mode;
-            final hasPopover =
-                mode == ToolMode.pen ||
-                mode == ToolMode.highlighter ||
-                mode == ToolMode.eraser ||
-                mode == ToolMode.text;
+            final hasPopover = mode != ToolMode.read && mode != ToolMode.none;
             final offset = _clamp(tools.popoverOffset ?? _defaultOffset(screen), screen);
             return Stack(
               children: [
@@ -163,6 +159,14 @@ class _ToolOverlayState extends State<ToolOverlay> {
               ),
               tool(ToolMode.eraser, Icons.auto_fix_normal, 'Radierer (E)'),
               tool(ToolMode.text, Icons.text_fields, 'Text (T)'),
+              tool(ToolMode.stamp, Icons.music_note, 'Stempel (S)'),
+              tool(ToolMode.shape, Icons.category_outlined, 'Formen (F)'),
+              _BarButton(
+                icon: Icons.straighten,
+                tooltip: 'Lineal (L)',
+                selected: tools.rulerVisible,
+                onTap: tools.toggleRuler,
+              ),
               const _Sep(),
               _BarButton(icon: Icons.undo, tooltip: 'Rückgängig (Strg+Z)', onTap: ink.canUndo ? ink.undo : null),
               _BarButton(icon: Icons.redo, tooltip: 'Wiederholen (Strg+Y)', onTap: ink.canRedo ? ink.redo : null),

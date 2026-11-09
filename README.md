@@ -59,6 +59,9 @@ Tippe in der Leiste auf **Bearbeiten**. Am Rand erscheint eine schmale Werkzeugl
 | Stift und Textmarker | Farbe, Breite und Deckkraft, mit Vorschau |
 | Radierer | **Ganze Elemente** (löscht berührte Striche und Notizen komplett) oder **Teilweise** (wie ein Radiergummi, in drei Grössen). Das Radierer-Ende des Surface Pen radiert genauso. Ein Radier-Zug lässt sich mit einem Mal rückgängig machen |
 | Text-Notiz | Auf die Stelle tippen und schreiben. **Enter** = fertig, **Umschalt+Enter** = neue Zeile, **Esc** = abbrechen. Im Fenster stellst du **Schrift** (Auswahlliste: Roboto, Noto Serif, Roboto Mono), **B** (Bold, fett), **I** (Italic, kursiv), Grösse, **Textfarbe** und **Hintergrund** ein (ohne, Weiss, Gelb, Grün, Blau, Rosa). Tippst du eine bestehende Notiz an, gelten Änderungen im Fenster für diese Notiz. Ziehen verschiebt sie |
+| Stempel | Symbol ♪ oder Taste **S**: Musiksymbole aus der Schrift Bravura in Gruppen (Dynamik, Artikulation, Vorzeichen, Form, Verzierungen, Streicher, Bläser & Gesang, Tasten, Gitarre, Weiteres). Auf die Seite tippen setzt den Stempel, einen gesetzten Stempel ziehen verschiebt ihn. Grösse und Farbe im Fenster, oben die zuletzt benutzten |
+| Formen | Symbol oder Taste **F**: Linie, Pfeil, Rechteck, Ellipse, Crescendo, Decrescendo, Bogen. Vom Anfang zum Ende ziehen. Farbe und Breite im Fenster |
+| Lineal | Symbol oder Taste **L**. Mit Finger oder Maus verschieben, mit zwei Fingern oder am runden Griff drehen (rastet bei 0°/45°/90° ein). Mit dem Stift nahe an einer Kante ziehen ergibt eine gerade Linie |
 | Rückgängig / Wiederholen | Pfeile in der Leiste oder **Strg+Z** / **Strg+Y** |
 | Seite leeren | Papierkorb-Symbol (lässt sich rückgängig machen) |
 | Leiste auf die andere Seite | Doppelpfeil unten in der Leiste |

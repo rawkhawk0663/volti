@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/ink/score_annotations.dart';
+import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
 import '../../core/library/sidecar_store.dart';
@@ -17,11 +18,17 @@ class _UndoEntry {
     List<String>? addedTexts,
     List<TextNote>? removedTexts,
     List<TextNote>? textsBefore,
+    List<String>? addedStamps,
+    List<Stamp>? removedStamps,
+    List<Stamp>? stampsBefore,
   }) : added = added ?? [],
        removed = removed ?? [],
        addedTexts = addedTexts ?? [],
        removedTexts = removedTexts ?? [],
-       textsBefore = textsBefore ?? [];
+       textsBefore = textsBefore ?? [],
+       addedStamps = addedStamps ?? [],
+       removedStamps = removedStamps ?? [],
+       stampsBefore = stampsBefore ?? [];
 
   final List<String> added;
   final List<Stroke> removed;
@@ -30,6 +37,22 @@ class _UndoEntry {
 
   /// Text-Notizen vor einer Änderung (Text bearbeitet oder verschoben).
   final List<TextNote> textsBefore;
+
+  final List<String> addedStamps;
+  final List<Stamp> removedStamps;
+
+  /// Stempel vor dem Verschieben.
+  final List<Stamp> stampsBefore;
+
+  bool get isEmpty =>
+      added.isEmpty &&
+      removed.isEmpty &&
+      addedTexts.isEmpty &&
+      removedTexts.isEmpty &&
+      textsBefore.isEmpty &&
+      addedStamps.isEmpty &&
+      removedStamps.isEmpty &&
+      stampsBefore.isEmpty;
 }
 
 /// Verwaltet die Anmerkungen eines Stücks: Zeichnen, Radieren,
@@ -130,11 +153,7 @@ class InkController extends ChangeNotifier {
     final b = _batch;
     _batch = null;
     if (b == null) return;
-    if (b.added.isEmpty &&
-        b.removed.isEmpty &&
-        b.addedTexts.isEmpty &&
-        b.removedTexts.isEmpty &&
-        b.textsBefore.isEmpty) {
+    if (b.isEmpty) {
       return;
     }
     _undo.add(b);
@@ -242,18 +261,67 @@ class InkController extends ChangeNotifier {
     final now = DateTime.now().toUtc();
     final strokes = _annotations.visibleStrokesOn(page);
     final texts = _annotations.visibleTextsOn(page);
-    if (strokes.isEmpty && texts.isEmpty) return;
+    final stamps = _annotations.visibleStampsOn(page);
+    if (strokes.isEmpty && texts.isEmpty && stamps.isEmpty) return;
+    for (final st in stamps) {
+      _annotations.putStamp(st.copyWith(deleted: true, modifiedAt: now));
+    }
     for (final s in strokes) {
       _annotations.put(s.markDeleted(now));
     }
     for (final t in texts) {
       _annotations.putText(t.copyWith(deleted: true, modifiedAt: now));
     }
-    _push(_UndoEntry(removed: strokes, removedTexts: texts));
+    _push(_UndoEntry(removed: strokes, removedTexts: texts, removedStamps: stamps));
   }
 
   bool pageHasAnnotations(int page) =>
-      _annotations.visibleStrokesOn(page).isNotEmpty || _annotations.visibleTextsOn(page).isNotEmpty;
+      _annotations.visibleStrokesOn(page).isNotEmpty ||
+      _annotations.visibleTextsOn(page).isNotEmpty ||
+      _annotations.visibleStampsOn(page).isNotEmpty;
+
+  // ---------------------------------------------------------------- Stempel
+  String addStamp({
+    required int page,
+    required double x,
+    required double y,
+    required int glyph,
+    required double size,
+    required int color,
+  }) {
+    final st = Stamp(
+      id: _uuid.v4(),
+      page: page,
+      x: x,
+      y: y,
+      glyph: glyph,
+      size: size,
+      color: color,
+      createdAt: DateTime.now().toUtc(),
+    );
+    _annotations.putStamp(st);
+    _push(_UndoEntry(addedStamps: [st.id]));
+    return st.id;
+  }
+
+  void moveStamp(String id, double x, double y) {
+    final before = _annotations.stamp(id);
+    if (before == null || before.deleted || (before.x == x && before.y == y)) return;
+    _annotations.putStamp(before.copyWith(x: x, y: y, modifiedAt: DateTime.now().toUtc()));
+    _push(_UndoEntry(stampsBefore: [before]));
+  }
+
+  void deleteStamps(Iterable<Stamp> stamps) {
+    final now = DateTime.now().toUtc();
+    final removed = <Stamp>[];
+    for (final st in stamps) {
+      if (st.deleted) continue;
+      _annotations.putStamp(st.copyWith(deleted: true, modifiedAt: now));
+      removed.add(st);
+    }
+    if (removed.isEmpty) return;
+    _push(_UndoEntry(removedStamps: removed));
+  }
 
   // ------------------------------------------------- Rückgängig/Wiederholen
 
@@ -310,6 +378,25 @@ class InkController extends ChangeNotifier {
       _annotations.putText(before.copyWith(modifiedAt: now));
       inverse.textsBefore.add(current);
     }
+    for (final id in entry.addedStamps) {
+      final st = _annotations.stamp(id);
+      if (st != null && !st.deleted) {
+        _annotations.putStamp(st.copyWith(deleted: true, modifiedAt: now));
+        inverse.removedStamps.add(st);
+      }
+    }
+    for (final st in entry.removedStamps) {
+      final copy = st.copyWith(id: _uuid.v4(), modifiedAt: now, deleted: false);
+      _annotations.putStamp(copy);
+      inverse.addedStamps.add(copy.id);
+      _renameInHistory(st.id, copy.id);
+    }
+    for (final before in entry.stampsBefore) {
+      final current = _annotations.stamp(before.id);
+      if (current == null || current.deleted) continue;
+      _annotations.putStamp(before.copyWith(modifiedAt: now));
+      inverse.stampsBefore.add(current);
+    }
     to.add(inverse);
     _changed();
   }
@@ -318,12 +405,15 @@ class InkController extends ChangeNotifier {
   /// damit z. B. "Zeichnen rückgängig" danach den wiederhergestellten Strich trifft.
   void _renameInHistory(String oldId, String newId) {
     for (final e in [..._undo, ..._redo]) {
-      for (final list in [e.added, e.addedTexts]) {
+      for (final list in [e.added, e.addedTexts, e.addedStamps]) {
         final i = list.indexOf(oldId);
         if (i >= 0) list[i] = newId;
       }
       for (var i = 0; i < e.textsBefore.length; i++) {
         if (e.textsBefore[i].id == oldId) e.textsBefore[i] = e.textsBefore[i].copyWith(id: newId);
+      }
+      for (var i = 0; i < e.stampsBefore.length; i++) {
+        if (e.stampsBefore[i].id == oldId) e.stampsBefore[i] = e.stampsBefore[i].copyWith(id: newId);
       }
     }
   }
@@ -342,6 +432,11 @@ class InkController extends ChangeNotifier {
       }
       b.addedTexts.addAll(e.addedTexts);
       b.textsBefore.addAll(e.textsBefore);
+      for (final r in e.removedStamps) {
+        if (!b.addedStamps.remove(r.id)) b.removedStamps.add(r);
+      }
+      b.addedStamps.addAll(e.addedStamps);
+      b.stampsBefore.addAll(e.stampsBefore);
       _changed();
       return;
     }

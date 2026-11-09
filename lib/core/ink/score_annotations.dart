@@ -1,3 +1,4 @@
+import 'stamp.dart';
 import 'stroke.dart';
 import 'text_note.dart';
 
@@ -6,7 +7,14 @@ import 'text_note.dart';
 /// Das ist die Einheit, die als Datei neben dem PDF gespeichert und später
 /// zwischen Geräten synchronisiert wird.
 class ScoreAnnotations {
-  ScoreAnnotations([Iterable<Stroke> strokes = const [], Iterable<TextNote> texts = const []]) {
+  ScoreAnnotations([
+    Iterable<Stroke> strokes = const [],
+    Iterable<TextNote> texts = const [],
+    Iterable<Stamp> stamps = const [],
+  ]) {
+    for (final st in stamps) {
+      _stamps[st.id] = st;
+    }
     for (final s in strokes) {
       _strokes[s.id] = s;
     }
@@ -19,6 +27,19 @@ class ScoreAnnotations {
 
   final Map<String, Stroke> _strokes = {};
   final Map<String, TextNote> _texts = {};
+  final Map<String, Stamp> _stamps = {};
+
+  /// Alle Stempel inkl. gelöschter (für Speichern/Sync).
+  Iterable<Stamp> get allStamps => _stamps.values;
+
+  /// Sichtbare Stempel einer Seite.
+  List<Stamp> visibleStampsOn(int page) =>
+      _stamps.values.where((s) => s.page == page && !s.deleted).toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  void putStamp(Stamp s) => _stamps[s.id] = s;
+
+  Stamp? stamp(String id) => _stamps[id];
 
   /// Alle Text-Notizen inkl. gelöschter (für Speichern/Sync).
   Iterable<TextNote> get allTexts => _texts.values;
@@ -45,7 +66,10 @@ class ScoreAnnotations {
     return list;
   }
 
-  bool get isEmpty => _strokes.values.every((s) => s.deleted) && _texts.values.every((t) => t.deleted);
+  bool get isEmpty =>
+      _strokes.values.every((s) => s.deleted) &&
+      _texts.values.every((t) => t.deleted) &&
+      _stamps.values.every((s) => s.deleted);
 
   void put(Stroke stroke) => _strokes[stroke.id] = stroke;
 
@@ -61,7 +85,11 @@ class ScoreAnnotations {
   /// Das Ergebnis ist unabhängig von der Reihenfolge: `a.merge(b)` und
   /// `b.merge(a)` ergeben denselben Stand.
   static ScoreAnnotations merge(ScoreAnnotations a, ScoreAnnotations b) {
-    final result = ScoreAnnotations(a.allStrokes, a.allTexts);
+    final result = ScoreAnnotations(a.allStrokes, a.allTexts, a.allStamps);
+    for (final other in b.allStamps) {
+      final mine = result.stamp(other.id);
+      result.putStamp(mine == null ? other : _pickStamp(mine, other));
+    }
     for (final other in b.allStrokes) {
       final mine = result[other.id];
       result.put(mine == null ? other : _pick(mine, other));
@@ -80,6 +108,13 @@ class ScoreAnnotations {
     return a;
   }
 
+  static Stamp _pickStamp(Stamp a, Stamp b) {
+    if (a.deleted != b.deleted) return a.deleted ? a : b;
+    final c = a.lastChange.compareTo(b.lastChange);
+    if (c != 0) return c > 0 ? a : b;
+    return a.id.compareTo(b.id) >= 0 ? a : b;
+  }
+
   static TextNote _pickText(TextNote a, TextNote b) {
     if (a.deleted != b.deleted) return a.deleted ? a : b;
     final c = a.lastChange.compareTo(b.lastChange);
@@ -91,6 +126,8 @@ class ScoreAnnotations {
     'format': 'volti-annotations',
     'version': formatVersion,
     'strokes': (_strokes.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((s) => s.toJson()).toList(),
+    if (_stamps.isNotEmpty)
+      'stamps': (_stamps.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((t) => t.toJson()).toList(),
     if (_texts.isNotEmpty)
       'texts': (_texts.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((t) => t.toJson()).toList(),
   };
@@ -102,6 +139,7 @@ class ScoreAnnotations {
     final texts = (json['texts'] as List<dynamic>? ?? const []).map(
       (t) => TextNote.fromJson(t as Map<String, dynamic>),
     );
-    return ScoreAnnotations(strokes, texts);
+    final stamps = (json['stamps'] as List<dynamic>? ?? const []).map((t) => Stamp.fromJson(t as Map<String, dynamic>));
+    return ScoreAnnotations(strokes, texts, stamps);
   }
 }

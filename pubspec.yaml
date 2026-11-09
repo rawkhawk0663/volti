@@ -38,6 +38,9 @@ flutter:
         - asset: assets/fonts/NotoSerif.ttf
         - asset: assets/fonts/NotoSerif-Italic.ttf
           style: italic
+    - family: Bravura
+      fonts:
+        - asset: assets/fonts/Bravura.otf
     - family: VoltiMono
       fonts:
         - asset: assets/fonts/RobotoMono.ttf

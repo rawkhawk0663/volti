@@ -56,6 +56,9 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Stift-Verzögerung: Im Windows-Runner (`flutter_window.cpp`, `DisablePenDelays`) sind die Windows-Stiftkomfortfunktionen abgeschaltet (Gedrückt-halten-Rechtsklick, Tipp-Kreise, Flicks). Der entstehende Strich malt pro Bild nur die neuen Teilstücke (Zwischenbild) und zeigt eine kurze Vorhersage (~18 ms, nur Anzeige). Die Messung steht im Stift-Test (`PerfMeter`: Verzögerung und Bild-Zeiten).
    Beim Ziehen des Einstellungsfensters ändert sich nur die Position (`ValueListenableBuilder`), nicht der Inhalt. Die Notenansicht baut sich bei Werkzeug-Änderungen nur neu auf, wenn sich das Werkzeug selbst ändert.
 
+9. **Stempel, Formen, Lineal (Paket 1b):** Stempel sind eigene Elemente (`Stamp`, Feld `stamps` in der Zusatzdatei) mit Zeichen aus **Bravura** (SMuFL, `assets/fonts/Bravura.otf`, OFL). Die Sammlung `lib/core/ink/stamp_catalog.dart` wird mit `tool/make_stamps.py` erzeugt und enthält die Tinten-Ausdehnung jedes Zeichens, damit Stempel genau mittig sitzen (`paintGlyph`).
+   Formen werden als gewöhnliche Striche gespeichert (`shapeGeometry`), eine Form ist ein Rückgängig-Schritt. Das Lineal (`RulerOverlay`) lässt sich nur mit Finger oder Maus bewegen. Der Stift zeichnet nahe einer Kante gerade daran entlang (`_nearRulerEdge`). Stempel werden ins Strich-Bild mitgemalt.
+
 ## Prüfen
 ```bash
 flutter analyze

@@ -12,6 +12,7 @@ import 'ink_controller.dart';
 import 'ink_layer.dart';
 import 'page_flow.dart';
 import 'pen_diagnostics.dart';
+import 'ruler_overlay.dart';
 import 'text_layer.dart';
 import 'tool_controller.dart';
 import 'tool_palette.dart';
@@ -148,12 +149,17 @@ class _ViewerScreenState extends State<ViewerScreen> {
   ToolMode? _lastMode;
   bool? _lastPaletteLeft;
   PageLayout? _lastLayout;
+  bool? _lastRuler;
 
   /// Die ganze Ansicht nur neu aufbauen, wenn sich das Werkzeug wechselt –
   /// nicht bei jeder Bewegung eines Reglers im Einstellungsfenster.
   void _onToolsChanged() {
     if (!mounted) return;
-    if (tools.mode != _lastMode || tools.paletteLeft != _lastPaletteLeft || tools.pageLayout != _lastLayout) {
+    if (tools.mode != _lastMode ||
+        tools.paletteLeft != _lastPaletteLeft ||
+        tools.pageLayout != _lastLayout ||
+        tools.rulerVisible != _lastRuler) {
+      _lastRuler = tools.rulerVisible;
       _lastMode = tools.mode;
       _lastPaletteLeft = tools.paletteLeft;
       _lastLayout = tools.pageLayout;
@@ -324,6 +330,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
       tools.setMode(ToolMode.eraser);
     } else if (down && key == LogicalKeyboardKey.keyT) {
       tools.setMode(ToolMode.text);
+    } else if (down && key == LogicalKeyboardKey.keyS) {
+      tools.setMode(ToolMode.stamp);
+    } else if (down && key == LogicalKeyboardKey.keyF) {
+      tools.setMode(ToolMode.shape);
+    } else if (down && key == LogicalKeyboardKey.keyL) {
+      tools.toggleRuler();
     } else if (down && _digits.contains(key)) {
       tools.applyFavoriteIndex(_digits.indexOf(key));
     } else if (key == LogicalKeyboardKey.escape) {
@@ -397,6 +409,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
                   ),
                 ),
               ),
+            // Lineal über den Noten (unter der Werkzeugleiste).
+            if (tools.rulerVisible && _leftPiece?.cache != null) Positioned.fill(child: RulerOverlay(tools: tools)),
             if (editing && _leftPiece?.cache != null)
               Positioned.fill(
                 child: SafeArea(

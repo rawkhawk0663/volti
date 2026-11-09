@@ -1,12 +1,16 @@
 import 'dart:math' as math;
+import 'dart:ui' show PointMode;
 
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/ink/stamp_catalog.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
 import '../../core/ink/tool_settings.dart';
 import 'ink_layer.dart';
+import 'shapes.dart';
+import 'stamp_paint.dart';
 import 'text_layer.dart';
 import 'tool_controller.dart';
 
@@ -35,6 +39,8 @@ String toolName(ToolMode m) => switch (m) {
   ToolMode.highlighter => 'Textmarker',
   ToolMode.eraser => 'Radierer',
   ToolMode.text => 'Text',
+  ToolMode.stamp => 'Stempel',
+  ToolMode.shape => 'Formen',
   _ => '',
 };
 
@@ -96,6 +102,8 @@ class ToolPopover extends StatelessWidget {
                   ToolMode.highlighter => _StrokeSettings(tools: tools, tool: InkTool.highlighter),
                   ToolMode.eraser => _EraserSettings(tools: tools),
                   ToolMode.text => _TextSettings(tools: tools),
+                  ToolMode.stamp => _StampSettings(tools: tools),
+                  ToolMode.shape => _ShapeSettings(tools: tools),
                   _ => const SizedBox.shrink(),
                 },
               ),
@@ -314,6 +322,198 @@ class _EraserSettings extends StatelessWidget {
       ],
     );
   }
+}
+
+// ------------------------------------------------------------------- Stempel
+class _StampSettings extends StatefulWidget {
+  const _StampSettings({required this.tools});
+  final ToolController tools;
+
+  @override
+  State<_StampSettings> createState() => _StampSettingsState();
+}
+
+class _StampSettingsState extends State<_StampSettings> {
+  late int _category = _categoryOf(widget.tools.stamp.glyph);
+
+  static int _categoryOf(int glyph) {
+    final i = stampCatalog.indexWhere((c) => c.glyphs.any((g) => g.codepoint == glyph));
+    return i < 0 ? 0 : i;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tools = widget.tools;
+    final st = tools.stamp;
+    final recent = tools.recentStamps;
+    Widget cell(int glyph) => _FavoriteChip(
+      selected: st.glyph == glyph,
+      tooltip: stampGlyph(glyph)?.label ?? '',
+      onTap: () => tools.setStamp(st.copyWith(glyph: glyph)),
+      child: SizedBox(width: 36, height: 36, child: CustomPaint(painter: _GlyphPainter(glyph, Color(st.color)))),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (recent.isNotEmpty) ...[
+          const _Label('Zuletzt benutzt'),
+          Wrap(spacing: 6, runSpacing: 6, children: [for (final g in recent.take(6)) cell(g)]),
+        ],
+        const _Label('Symbole'),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            for (final (i, c) in stampCatalog.indexed)
+              ChoiceChip(
+                label: Text(c.name, style: const TextStyle(fontSize: 12)),
+                selected: _category == i,
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                onSelected: (_) => setState(() => _category = i),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 6, runSpacing: 6, children: [for (final g in stampCatalog[_category].glyphs) cell(g.codepoint)]),
+        const SizedBox(height: 4),
+        Text(
+          'Auf die Seite tippen, um den Stempel zu setzen. Einen gesetzten Stempel ziehen, um ihn zu verschieben.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+        const _Label('Grösse'),
+        Slider(
+          min: StampSetting.minSize,
+          max: StampSetting.maxSize,
+          value: st.size.clamp(StampSetting.minSize, StampSetting.maxSize),
+          onChanged: (v) => tools.setStamp(st.copyWith(size: v)),
+        ),
+        const _Label('Farbe'),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final c in penColors.where((c) => c != 0xFFFFFFFF))
+              _Swatch(
+                color: Color(c),
+                selected: st.color == c,
+                onTap: () => tools.setStamp(st.copyWith(color: c)),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Ein Stempel-Symbol, eingepasst in seine Fläche.
+class _GlyphPainter extends CustomPainter {
+  _GlyphPainter(this.glyph, this.color);
+  final int glyph;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final g = stampGlyph(glyph);
+    final fs = g == null ? 24.0 : math.min(30.0, math.min(size.width * 0.9 / g.width, size.height * 0.9 / g.height));
+    paintGlyph(canvas, glyph, size.center(Offset.zero), fs, color);
+  }
+
+  @override
+  bool shouldRepaint(_GlyphPainter old) => old.glyph != glyph || old.color != color;
+}
+
+// -------------------------------------------------------------------- Formen
+const _shapeNames = {
+  ShapeKind.line: 'Linie',
+  ShapeKind.arrow: 'Pfeil',
+  ShapeKind.rectangle: 'Rechteck',
+  ShapeKind.ellipse: 'Ellipse',
+  ShapeKind.crescendo: 'Crescendo',
+  ShapeKind.decrescendo: 'Decrescendo',
+  ShapeKind.slur: 'Bogen',
+};
+
+class _ShapeSettings extends StatelessWidget {
+  const _ShapeSettings({required this.tools});
+  final ToolController tools;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = tools.shape;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Label('Form'),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final k in ShapeKind.values)
+              _FavoriteChip(
+                selected: tools.shapeKind == k,
+                tooltip: _shapeNames[k]!,
+                onTap: () => tools.setShapeKind(k),
+                child: SizedBox(width: 30, height: 30, child: CustomPaint(painter: _ShapeIconPainter(k))),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Auf der Seite vom Anfang zum Ende ziehen.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+        const _Label('Farbe'),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final c in penColors)
+              _Swatch(
+                color: Color(c),
+                selected: style.color == c,
+                onTap: () => tools.setShape(style.copyWith(color: c)),
+              ),
+          ],
+        ),
+        const _Label('Breite'),
+        Slider(
+          min: DrawingPreset.minPenWidth,
+          max: DrawingPreset.maxPenWidth,
+          value: style.width.clamp(DrawingPreset.minPenWidth, DrawingPreset.maxPenWidth),
+          onChanged: (v) => tools.setShape(style.copyWith(width: v)),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShapeIconPainter extends CustomPainter {
+  _ShapeIconPainter(this.kind);
+  final ShapeKind kind;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xDD1B1B1B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final (a, b) = switch (kind) {
+      ShapeKind.rectangle || ShapeKind.ellipse => (const Offset(3, 7), Offset(size.width - 3, size.height - 7)),
+      ShapeKind.line || ShapeKind.arrow => (Offset(3, size.height - 5), Offset(size.width - 3, 5)),
+      _ => (Offset(2, size.height / 2 + 4), Offset(size.width - 2, size.height / 2 + 4)),
+    };
+    for (final piece in shapeGeometry(kind, a, b, 1.5)) {
+      canvas.drawPoints(PointMode.polygon, piece, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ShapeIconPainter old) => old.kind != kind;
 }
 
 // ---------------------------------------------------------------------- Text

@@ -9,6 +9,8 @@ import '../../app/theme.dart';
 import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
 import 'perf_meter.dart';
+import 'shapes.dart';
+import 'stamp_paint.dart';
 import 'tool_controller.dart';
 import 'text_layer.dart';
 
@@ -57,6 +59,17 @@ class _InkLayerState extends State<InkLayer> {
   final List<InkPoint> _points = [];
   Offset? _eraserPos;
   final _activeRepaint = ValueNotifier<int>(0);
+
+  /// Stempel: Vorschau-Position, oder ein Stempel, der gerade verschoben wird.
+  Offset? _stampPos;
+  String? _movingStampId;
+  Offset _stampGrab = Offset.zero;
+
+  /// Formen: Start- und Endpunkt beim Aufziehen.
+  Offset? _shapeStart, _shapeEnd;
+
+  /// Lineal: Kante, an der entlang gerade gezeichnet wird (Seiten-Koordinaten).
+  (Offset, Offset)? _rulerEdge;
 
   /// Zeitpunkt des letzten Stift-Ereignisses (für die Verzögerungsmessung).
   Duration _lastEventTime = Duration.zero;
@@ -119,8 +132,20 @@ class _InkLayerState extends State<InkLayer> {
     final eraserEvent = isEraserEvent(e);
     final mode = tools.mode;
     final instant = mode == ToolMode.read && e.kind == PointerDeviceKind.stylus && tools.instantPen;
+    if (!eraserEvent && mode == ToolMode.stamp) {
+      _beginStamp(e, size);
+      return;
+    }
+    if (!eraserEvent && mode == ToolMode.shape) {
+      _pointer = e.pointer;
+      _shapeStart = _shapeEnd = e.localPosition;
+      tools.isDrawing.value = true;
+      _activeRepaint.value++;
+      return;
+    }
     final drawing = mode == ToolMode.pen || mode == ToolMode.highlighter;
     if (!eraserEvent && !drawing && mode != ToolMode.eraser && !instant) return;
+    _rulerEdge = !eraserEvent && mode != ToolMode.eraser ? _nearRulerEdge(e.position) : null;
     _pointer = e.pointer;
     _erasing = eraserEvent || mode == ToolMode.eraser;
     _provisional = instant && !eraserEvent;
@@ -137,6 +162,16 @@ class _InkLayerState extends State<InkLayer> {
 
   void _move(PointerEvent e, Size size) {
     if (e.pointer != _pointer) return;
+    if (_stampPos != null) {
+      _stampPos = e.localPosition - _stampGrab;
+      _activeRepaint.value++;
+      return;
+    }
+    if (_shapeStart != null) {
+      _shapeEnd = e.localPosition;
+      _activeRepaint.value++;
+      return;
+    }
     if (_provisional && (e.localPosition - _start).distance > kTouchSlop) {
       _provisional = false;
       tools.isDrawing.value = true;
@@ -146,6 +181,14 @@ class _InkLayerState extends State<InkLayer> {
 
   void _up(PointerEvent e, Size size) {
     if (e.pointer != _pointer) return;
+    if (_stampPos != null) {
+      _endStamp(size);
+      return;
+    }
+    if (_shapeStart != null) {
+      _endShape(size);
+      return;
+    }
     final preset = _preset;
     if (!_erasing && !_provisional && _points.isNotEmpty && preset != null) {
       c.addStroke(
@@ -158,6 +201,7 @@ class _InkLayerState extends State<InkLayer> {
     }
     if (_erasing) c.endBatch();
     _pointer = null;
+    _rulerEdge = null;
     _provisional = false;
     _points.clear();
     _resetCache();
@@ -174,10 +218,109 @@ class _InkLayerState extends State<InkLayer> {
       _eraserPos = e.localPosition;
       _eraseAt(e.localPosition, size);
     } else {
-      final p = e.localPosition;
+      var p = e.localPosition;
+      final edge = _rulerEdge;
+      if (edge != null) p = _projectOnLine(p, edge.$1, edge.$2);
       _points.add(InkPoint(p.dx / size.width, p.dy / size.height, normalizedPressure(e)));
     }
     _activeRepaint.value++;
+  }
+
+  // ---------------------------------------------------------------- Stempel
+  void _beginStamp(PointerDownEvent e, Size size) {
+    _pointer = e.pointer;
+    final pos = e.localPosition;
+    // Auf einen vorhandenen Stempel getippt → verschieben, sonst neu setzen.
+    final hit = c.annotations
+        .visibleStampsOn(widget.page)
+        .reversed
+        .where((s) => stampRect(s, size).inflate(8).contains(pos))
+        .firstOrNull;
+    if (hit != null) {
+      _movingStampId = hit.id;
+      final center = Offset(hit.x * size.width, hit.y * size.height);
+      _stampGrab = pos - center;
+      _stampPos = center;
+    } else {
+      _movingStampId = null;
+      _stampGrab = Offset.zero;
+      _stampPos = pos;
+    }
+    tools.isDrawing.value = true;
+    _activeRepaint.value++;
+  }
+
+  void _endStamp(Size size) {
+    final pos = _stampPos!;
+    final x = (pos.dx / size.width).clamp(0.0, 1.0), y = (pos.dy / size.height).clamp(0.0, 1.0);
+    final id = _movingStampId;
+    if (id != null) {
+      c.moveStamp(id, x, y);
+    } else {
+      final st = tools.stamp;
+      c.addStamp(page: widget.page, x: x, y: y, glyph: st.glyph, size: st.size, color: st.color);
+      tools.rememberStamp(st.glyph);
+    }
+    _stampPos = null;
+    _movingStampId = null;
+    _pointer = null;
+    tools.isDrawing.value = false;
+    _activeRepaint.value++;
+  }
+
+  // ----------------------------------------------------------------- Formen
+  void _endShape(Size size) {
+    final a = _shapeStart!, b = _shapeEnd!;
+    final style = tools.shape;
+    final pieces = shapeGeometry(tools.shapeKind, a, b, style.width * size.width);
+    if (pieces.isNotEmpty && (b - a).distance > 6) {
+      c.beginBatch(); // eine Form = ein Rückgängig-Schritt
+      for (final piece in pieces) {
+        c.addStroke(
+          page: widget.page,
+          tool: InkTool.pen,
+          color: style.color,
+          width: style.width,
+          points: [for (final p in piece) InkPoint(p.dx / size.width, p.dy / size.height, 0.5)],
+        );
+      }
+      c.endBatch();
+    }
+    _shapeStart = _shapeEnd = null;
+    _pointer = null;
+    tools.isDrawing.value = false;
+    _activeRepaint.value++;
+  }
+
+  // ----------------------------------------------------------------- Lineal
+  /// Liegt der Stift nahe an einer Kante des Lineals? Dann wird an dieser
+  /// Kante entlang gezeichnet (gerade Linie).
+  (Offset, Offset)? _nearRulerEdge(Offset global) {
+    if (!tools.rulerVisible || tools.rulerCenter == null) return null;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return null;
+    final c0 = tools.rulerCenter!, a = tools.rulerAngle;
+    final u = Offset(math.cos(a), math.sin(a)), n = Offset(-math.sin(a), math.cos(a));
+    const half = ToolController.rulerLength / 2, thick = ToolController.rulerThickness / 2;
+    final rel = global - c0;
+    final along = rel.dx * u.dx + rel.dy * u.dy;
+    final across = rel.dx * n.dx + rel.dy * n.dy;
+    if (along.abs() > half + 20) return null;
+    // Innerhalb der oberen bzw. unteren Hälfte oder bis 36 px ausserhalb.
+    if (across.abs() > thick + 36) return null;
+    final side = across >= 0 ? 1.0 : -1.0;
+    final edgeOffset = n * ((thick + 2) * side);
+    final p0 = box.globalToLocal(c0 - u * (half + 400) + edgeOffset);
+    final p1 = box.globalToLocal(c0 + u * (half + 400) + edgeOffset);
+    return (p0, p1);
+  }
+
+  static Offset _projectOnLine(Offset p, Offset a, Offset b) {
+    final ab = b - a;
+    final len2 = ab.dx * ab.dx + ab.dy * ab.dy;
+    if (len2 == 0) return a;
+    final t = ((p - a).dx * ab.dx + (p - a).dy * ab.dy) / len2;
+    return a + ab * t;
   }
 
   /// Ganze Elemente: kleiner, fester Fangradius. Teilweise: gewählte Grösse.
@@ -198,6 +341,9 @@ class _InkLayerState extends State<InkLayer> {
     final eraser = Rect.fromCircle(center: pos, radius: r);
     final textHits = c.annotations.visibleTextsOn(widget.page).where((t) => textNoteBounds(t, size).overlaps(eraser));
     if (textHits.isNotEmpty) c.deleteTexts(textHits.toList());
+    // Stempel werden immer ganz gelöscht.
+    final stampHits = c.annotations.visibleStampsOn(widget.page).where((st) => stampRect(st, size).overlaps(eraser));
+    if (stampHits.isNotEmpty) c.deleteStamps(stampHits.toList());
   }
 
   /// Schnelle Vorprüfung über das umgebende Rechteck, dann genau.
@@ -350,17 +496,21 @@ class _StrokesImageState extends State<_StrokesImage> {
   void _render(double dpr) {
     final size = widget.size;
     final strokes = widget.controller.annotations.visibleStrokesOn(widget.page);
+    final stamps = widget.controller.annotations.visibleStampsOn(widget.page);
     _dirty = false;
     _renderedSize = size;
     _renderedDpr = dpr;
     final old = _image;
-    if (strokes.isEmpty || size.isEmpty) {
+    if ((strokes.isEmpty && stamps.isEmpty) || size.isEmpty) {
       _image = null;
     } else {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder)..scale(dpr);
       for (final s in strokes) {
         paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points);
+      }
+      for (final st in stamps) {
+        paintStamp(canvas, size, st);
       }
       final picture = recorder.endRecording();
       _image = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
@@ -401,6 +551,32 @@ class _ActivePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final tools = state.tools;
+    // Stempel: Vorschau an der Stiftposition.
+    final stampPos = state._stampPos;
+    if (stampPos != null) {
+      final moving = state._movingStampId == null ? null : state.c.annotations.stamp(state._movingStampId!);
+      final glyph = moving?.glyph ?? tools.stamp.glyph;
+      final fs = (moving?.size ?? tools.stamp.size) * size.width;
+      final color = Color(moving?.color ?? tools.stamp.color);
+      paintGlyph(canvas, glyph, stampPos, fs, color.withValues(alpha: color.a * 0.75));
+      return;
+    }
+    // Form: Vorschau beim Aufziehen.
+    final a = state._shapeStart, b = state._shapeEnd;
+    if (a != null && b != null) {
+      final style = tools.shape;
+      final paint = Paint()
+        ..color = Color(style.color)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(0.8, style.width * size.width)
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      for (final piece in shapeGeometry(tools.shapeKind, a, b, style.width * size.width)) {
+        canvas.drawPoints(ui.PointMode.polygon, piece, paint);
+      }
+      return;
+    }
     if (state._erasing) {
       final pos = state._eraserPos;
       if (pos != null) {
