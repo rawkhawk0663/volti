@@ -124,8 +124,18 @@ class _InkLayerState extends State<InkLayer> {
   InkController get c => widget.controller;
   ToolController get tools => widget.tools;
 
+  /// Setzt die Bilder der Ebenen zu einem einzigen Bild zusammen.
+  final _composer = _Composer();
+
+  /// Für Tests: Bild eines Teils (`highlights` oder `layer/<id>`) und Reihenfolge.
+  @visibleForTesting
+  ui.Image? debugImageOf(String part) => _composer.parts[part]?._base;
+  @visibleForTesting
+  List<String> get debugOrder => _composer.order;
+
   @override
   void dispose() {
+    _composer.dispose();
     _resetCache();
     _activeRepaint.dispose();
     super.dispose();
@@ -468,7 +478,8 @@ class _InkLayerState extends State<InkLayer> {
     if (box == null) return null;
     final c0 = tools.rulerCenter!, a = tools.rulerAngle;
     final u = Offset(math.cos(a), math.sin(a)), n = Offset(-math.sin(a), math.cos(a));
-    const half = ToolController.rulerLength / 2, thick = ToolController.rulerThickness / 2;
+    final half = tools.rulerLength / 2;
+    const thick = ToolController.rulerThickness / 2;
     final rel = global - c0;
     final along = rel.dx * u.dx + rel.dy * u.dy;
     final across = rel.dx * n.dx + rel.dy * n.dy;
@@ -608,35 +619,43 @@ class _InkLayerState extends State<InkLayer> {
                   final hidden = sel != null && sel.isOn(c, widget.page)
                       ? {...sel.ids.strokes, ...sel.ids.stamps}
                       : const <String>{};
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Leuchtstift immer zuunterst – hinter allem anderen,
-                      // auf allen Ebenen (jeder Strich bleibt auf seiner Ebene).
-                      RepaintBoundary(
-                        key: const ValueKey('highlights'),
-                        child: _StrokesImage(
+                  final parts = <Widget>[
+                    // Leuchtstift immer zuunterst – hinter allem anderen,
+                    // auf allen Ebenen (jeder Strich bleibt auf seiner Ebene).
+                    _StrokesImage(
+                      key: const ValueKey('highlights'),
+                      composer: _composer,
+                      partKey: 'highlights',
+                      controller: c,
+                      page: widget.page,
+                      layer: null,
+                      highlights: true,
+                      background: widget.pageImage,
+                      size: size,
+                      hidden: hidden,
+                    ),
+                    for (final l in c.annotations.layers)
+                      if (!l.isGroup && c.annotations.isLayerShown(l.id))
+                        _StrokesImage(
+                          key: ValueKey('layer/${l.id}'),
+                          composer: _composer,
+                          partKey: 'layer/${l.id}',
                           controller: c,
                           page: widget.page,
-                          layer: null,
-                          highlights: true,
-                          background: widget.pageImage,
+                          layer: l.id,
                           size: size,
                           hidden: hidden,
                         ),
-                      ),
-                      for (final l in c.annotations.layers)
-                        if (!l.isGroup && c.annotations.isLayerShown(l.id))
-                          RepaintBoundary(
-                            key: ValueKey('layer/${l.id}'),
-                            child: _StrokesImage(
-                              controller: c,
-                              page: widget.page,
-                              layer: l.id,
-                              size: size,
-                              hidden: hidden,
-                            ),
-                          ),
+                  ];
+                  _composer.order = [for (final w in parts) (w as _StrokesImage).partKey];
+                  _composer.pageImage = widget.pageImage;
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Die Ebenen-Bilder selbst sind unsichtbar; gezeigt wird
+                      // ein einziges zusammengesetztes Bild (siehe _Composer).
+                      ...parts,
+                      RepaintBoundary(child: CustomPaint(painter: _CompositePainter(_composer))),
                     ],
                   );
                 },
@@ -671,6 +690,9 @@ class _InkLayerState extends State<InkLayer> {
 ///   andere Seite, Text), passiert gar nichts.
 class _StrokesImage extends StatefulWidget {
   const _StrokesImage({
+    super.key,
+    required this.composer,
+    required this.partKey,
     required this.controller,
     required this.page,
     required this.size,
@@ -679,6 +701,8 @@ class _StrokesImage extends StatefulWidget {
     this.background,
     this.hidden = const {},
   });
+  final _Composer composer;
+  final String partKey;
   final InkController controller;
   final int page;
   final Size size;
@@ -721,6 +745,7 @@ class _StrokesImageState extends State<_StrokesImage> {
     super.initState();
     widget.controller.addListener(_onChanged);
     CustomStamps.instance?.addListener(_onCustomStamps);
+    widget.composer.parts[widget.partKey] = this;
   }
 
   /// Ein eigenes Stempel-Bild ist (nach)geladen oder geändert → neu malen.
@@ -760,8 +785,15 @@ class _StrokesImageState extends State<_StrokesImage> {
   void dispose() {
     widget.controller.removeListener(_onChanged);
     CustomStamps.instance?.removeListener(_onCustomStamps);
+    if (identical(widget.composer.parts[widget.partKey], this)) {
+      widget.composer.parts.remove(widget.partKey);
+      widget.composer.changed();
+    }
     _generation++;
-    _base?.dispose();
+    // Erst nach dem nächsten Bild freigeben (das zusammengesetzte Bild
+    // könnte es in diesem Bild noch malen).
+    final b = _base;
+    if (b != null) WidgetsBinding.instance.addPostFrameCallback((_) => b.dispose());
     super.dispose();
   }
 
@@ -868,11 +900,13 @@ class _StrokesImageState extends State<_StrokesImage> {
     // Etwas ist verschwunden oder hat sich verändert → ganz neu erzeugen.
     _generation++;
     _pending = const [];
-    if (items.isEmpty || size.isEmpty) {
+    final bg = widget.highlights ? widget.background : null;
+    // Das Leuchtstift-Bild enthält immer die Notenseite (auch ohne Leuchtstift),
+    // damit pro Seite am Ende nur ein einziges Bild gezeigt werden muss.
+    if ((items.isEmpty && bg == null) || size.isEmpty) {
       _setBase(null, keys, size, dpr);
       return;
     }
-    final bg = widget.highlights ? widget.background : null;
     _withBackground = bg != null;
     final picture = _record(null, items, size, dpr, multiply: !widget.highlights || bg != null, background: bg);
     final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
@@ -915,53 +949,133 @@ class _StrokesImageState extends State<_StrokesImage> {
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     if (_dirty || _baseSize != widget.size || _baseDpr != dpr) _update(dpr);
-    final img = _base;
-    final pending = _pending;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (img != null)
-          widget.highlights && !_withBackground
-              // Wie ein echter Leuchtstift: schwarze Noten darunter bleiben schwarz.
-              ? CustomPaint(painter: _MultiplyImagePainter(img))
-              : RawImage(image: img, fit: BoxFit.fill),
-        if (pending.isNotEmpty) CustomPaint(painter: _ItemsPainter(pending)),
-      ],
-    );
+    // Nicht selbst malen – der _CompositePainter zeigt alles zusammen.
+    widget.composer.parts[widget.partKey] = this;
+    widget.composer.changed();
+    return const SizedBox.shrink();
   }
 }
 
-/// Zeigt das Leuchtstift-Bild, mit den Noten darunter multipliziert.
-class _MultiplyImagePainter extends CustomPainter {
-  _MultiplyImagePainter(this.image);
-  final ui.Image image;
+/// Setzt die Bilder aller Ebenen einer Seite zu **einem** Bild zusammen.
+///
+/// Gemessen: Bei jedem Bild bis zu sechs seitengrosse Bilder übereinander zu
+/// legen (Leuchtstift + Ebenen, bei zwei Seiten doppelt), kostet auf dem
+/// Surface viel Zeit. Darum wird daraus ein Bild gemacht, sobald sich etwas
+/// geändert hat. Bis es fertig ist (ein, zwei Bilder lang), werden die
+/// Einzelbilder gezeigt – nie etwas Falsches.
+class _Composer extends ChangeNotifier {
+  final Map<String, _StrokesImageState> parts = {};
+  List<String> order = const [];
+
+  /// Notenseite – gemalt, solange sie noch in keinem Bild steckt.
+  ui.Image? pageImage;
+
+  /// Steckt die Notenseite schon im Leuchtstift-Bild?
+  bool get pageIncluded => ordered.any((p) => p.widget.highlights && p._base != null && p._withBackground);
+
+  ui.Image? _composite;
+  List<ui.Image> _compositeOf = const [];
+  bool _composing = false;
+  bool _disposed = false;
+
+  List<_StrokesImageState> get ordered => [for (final k in order) ?parts[k]];
+
+  void changed() {
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Bilder, die gerade gezeigt werden müssen (unten zuerst).
+  List<ui.Image> currentBases() => [for (final p in ordered) ?p._base];
+
+  /// Kann zusammengesetzt werden? Ein Leuchtstift-Bild ohne Notenseite muss
+  /// beim Anzeigen multipliziert werden – das geht nicht in einem fertigen Bild.
+  bool get _composable => ordered.every((p) => !(p.widget.highlights && p._base != null && !p._withBackground));
+
+  ui.Image? compositeFor(List<ui.Image> bases) {
+    final c = _composite;
+    if (c == null || bases.length != _compositeOf.length) return null;
+    for (var i = 0; i < bases.length; i++) {
+      if (!identical(bases[i], _compositeOf[i])) return null;
+    }
+    return c;
+  }
+
+  /// Im Hintergrund ein neues Gesamtbild erzeugen.
+  void schedule(List<ui.Image> bases, Size size) {
+    if (_composing || bases.length < 2 || !_composable || size.isEmpty) return;
+    _composing = true;
+    final w = bases.first.width, h = bases.first.height;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final dst = Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble());
+    for (final b in bases) {
+      canvas.drawImageRect(b, Rect.fromLTWH(0, 0, b.width.toDouble(), b.height.toDouble()), dst, Paint());
+    }
+    final picture = recorder.endRecording();
+    picture.toImage(w, h).then((img) {
+      picture.dispose();
+      _composing = false;
+      if (_disposed) {
+        img.dispose();
+        return;
+      }
+      final old = _composite;
+      _composite = img;
+      _compositeOf = bases;
+      if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    final c = _composite;
+    if (c != null) WidgetsBinding.instance.addPostFrameCallback((_) => c.dispose());
+    super.dispose();
+  }
+}
+
+/// Malt das Gesamtbild – oder, solange es noch entsteht, die Einzelbilder –
+/// und darüber die neuen Elemente, die noch in keinem Bild sind.
+class _CompositePainter extends CustomPainter {
+  _CompositePainter(this.composer) : super(repaint: composer);
+  final _Composer composer;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      Offset.zero & size,
-      Paint()
-        ..blendMode = BlendMode.multiply
-        ..filterQuality = FilterQuality.low,
-    );
+    final parts = composer.ordered;
+    final bases = composer.currentBases();
+    final dst = Offset.zero & size;
+    final composite = bases.length < 2 ? null : composer.compositeFor(bases);
+    final page = composer.pageImage;
+    if (!composer.pageIncluded && page != null) _draw(canvas, page, dst, Paint()..filterQuality = FilterQuality.medium);
+    if (composite != null) {
+      _draw(canvas, composite, dst, Paint());
+    } else {
+      for (final p in parts) {
+        final b = p._base;
+        if (b == null) continue;
+        final multiply = p.widget.highlights && !p._withBackground;
+        // Wie ein echter Leuchtstift: schwarze Noten darunter bleiben schwarz.
+        _draw(canvas, b, dst, Paint()..blendMode = multiply ? BlendMode.multiply : BlendMode.srcOver);
+      }
+      composer.schedule(bases, size);
+    }
+    for (final p in parts) {
+      if (p._pending.isNotEmpty) _StrokesImageState._paintItems(canvas, size, p._pending);
+    }
   }
 
-  @override
-  bool shouldRepaint(_MultiplyImagePainter old) => !identical(old.image, image);
-}
-
-/// Malt wenige neue Elemente direkt, bis sie im Bild sind.
-class _ItemsPainter extends CustomPainter {
-  _ItemsPainter(this.items);
-  final List<Object> items;
+  static void _draw(Canvas canvas, ui.Image img, Rect dst, Paint paint) => canvas.drawImageRect(
+    img,
+    Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+    dst,
+    paint.filterQuality == FilterQuality.medium ? paint : (paint..filterQuality = FilterQuality.none),
+  );
 
   @override
-  void paint(Canvas canvas, Size size) => _StrokesImageState._paintItems(canvas, size, items);
-
-  @override
-  bool shouldRepaint(_ItemsPainter old) => !identical(old.items, items);
+  bool shouldRepaint(_CompositePainter old) => !identical(old.composer, composer);
 }
 
 enum _SelectDrag { move, scale }
@@ -1145,30 +1259,30 @@ class _ActivePainter extends CustomPainter {
     if (pts.isEmpty || preset == null || state._provisional) return;
     PerfMeter.instance.recordStrokeFrame(state._lastEventTime);
 
-    // Deckende Stifte: den Anfang als fertiges Bild wiederverwenden und nur
-    // die neuen Teilstücke malen. Textmarker und halbtransparente Stifte
-    // werden als Ganzes gemalt (sonst wären die Übergänge sichtbar).
-    final opaquePen = preset.tool == InkTool.pen && Color(preset.color).a >= 1.0;
-    if (!opaquePen || pts.length < 48) {
-      // Leuchtstift beim Zeichnen nicht multiplizieren (das müsste bei jedem
-      // Bild den ganzen Hintergrund neu mischen); nach dem Absetzen schon.
-      paintStroke(canvas, size, preset.tool, Color(preset.color), preset.width, pts, multiply: false);
-      if (opaquePen) _paintPrediction(canvas, size, preset, pts);
+    // Den Anfang des Strichs als fertiges Bild wiederverwenden und pro Bild
+    // nur die neuen Teilstücke malen. Leuchtstift und halbtransparente Stifte
+    // werden dafür in voller Farbe gemalt und als Ganzes durchsichtig gemacht
+    // (sonst wären die Übergänge sichtbar) – nie als durchsichtige Fläche, die
+    // bei jedem Bild ganz neu berechnet werden müsste (gemessen: sehr langsam).
+    final color = Color(preset.color);
+    final hl = preset.tool == InkTool.highlighter;
+    final translucent = hl || color.a < 1.0;
+    final solid = color.withValues(alpha: 1);
+    void segments(Canvas c, int from, int to) => hl
+        ? paintHighlighterSegments(c, size, solid, preset.width, pts, from, to)
+        : paintPenSegments(c, size, solid, preset.width, pts, from, to);
+    if (pts.length < 2) {
+      paintStroke(canvas, size, preset.tool, color, preset.width, pts, multiply: false);
       return;
     }
     final dpr = state._dpr;
     final dst = Offset.zero & size;
-    void drawCached(Canvas c) {
-      final img = state._cachedStart;
-      if (img == null) return;
-      c.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), dst, Paint());
-    }
-
     if (pts.length - state._cachedPoints > 24) {
+      // Ganz neu aufnehmen (ohne das vorige Bild hineinzumalen): So hält das
+      // neue Bild nicht alle früheren im Speicher fest.
       final recorder = ui.PictureRecorder();
       final c = Canvas(recorder)..scale(dpr);
-      drawCached(c);
-      paintPenSegments(c, size, Color(preset.color), preset.width, pts, state._cachedPoints, pts.length);
+      segments(c, 1, pts.length);
       final picture = recorder.endRecording();
       final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
       picture.dispose();
@@ -1177,9 +1291,26 @@ class _ActivePainter extends CustomPainter {
       state._cachedPoints = pts.length;
       if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
     }
-    drawCached(canvas);
-    paintPenSegments(canvas, size, Color(preset.color), preset.width, pts, state._cachedPoints, pts.length);
-    _paintPrediction(canvas, size, preset, pts);
+    if (translucent) {
+      // Nur so gross wie der Strich (spart Arbeit beim Durchsichtig-Machen).
+      var l = double.infinity, tp = double.infinity, r = -double.infinity, b = -double.infinity;
+      for (final p in pts) {
+        l = math.min(l, p.x);
+        r = math.max(r, p.x);
+        tp = math.min(tp, p.y);
+        b = math.max(b, p.y);
+      }
+      final pad = preset.width * size.width * 2 + 2;
+      final bounds = Rect.fromLTRB(l * size.width, tp * size.height, r * size.width, b * size.height).inflate(pad);
+      canvas.saveLayer(bounds, Paint()..color = Color.fromRGBO(0, 0, 0, color.a));
+    }
+    final img = state._cachedStart;
+    if (img != null) {
+      canvas.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), dst, Paint());
+    }
+    segments(canvas, img == null ? 1 : state._cachedPoints, pts.length);
+    if (!hl) _paintPrediction(canvas, size, preset.copyWith(color: solid.toARGB32()), pts);
+    if (translucent) canvas.restore();
   }
 
   /// Kurzes vorhergesagtes Stück am Ende des Strichs (nur Anzeige).
@@ -1253,6 +1384,28 @@ void paintPenSegments(Canvas canvas, Size size, Color color, double width, List<
     ..strokeCap = StrokeCap.round
     ..isAntiAlias = true;
   _drawSegments(canvas, size, paint, width * size.width, pts, math.max(1, from), to);
+}
+
+/// Malt die Teilstücke [from]..[to] eines entstehenden Leuchtstift-Strichs
+/// (gleichmässig breit, in voller Farbe – durchsichtig wird er als Ganzes).
+void paintHighlighterSegments(
+  Canvas canvas,
+  Size size,
+  Color color,
+  double width,
+  List<InkPoint> pts,
+  int from,
+  int to,
+) {
+  final paint = Paint()
+    ..color = color
+    ..strokeCap = StrokeCap.round
+    ..strokeWidth = width * size.width
+    ..isAntiAlias = true;
+  for (var i = math.max(1, from); i < to; i++) {
+    final a = pts[i - 1], b = pts[i];
+    canvas.drawLine(Offset(a.x * size.width, a.y * size.height), Offset(b.x * size.width, b.y * size.height), paint);
+  }
 }
 
 void _drawSegments(Canvas canvas, Size size, Paint paint, double w, List<InkPoint> pts, int from, int to) {

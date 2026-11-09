@@ -37,7 +37,8 @@ class _RulerOverlayState extends State<RulerOverlay> {
   bool _byFinger = false;
   bool _showAngle = false;
 
-  static const _len = ToolController.rulerLength, _thick = ToolController.rulerThickness;
+  static const _thick = ToolController.rulerThickness;
+  double get _len => tools.rulerLength;
 
   /// Rastet nahe 0°, 90°, 180° und 270° ein.
   static double _snap(double a) {
@@ -125,6 +126,9 @@ class _RulerOverlayState extends State<RulerOverlay> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final screen = constraints.biggest;
+        // Lang genug, um in jeder Drehung und von jeder Stelle aus über den
+        // ganzen Bildschirm zu reichen.
+        tools.rulerLength = 2 * screen.longestSide * math.sqrt2;
         final box = context.findRenderObject() as RenderBox?;
         // Mitte in Bildschirm-Koordinaten (die Stift-Ebene rechnet damit).
         tools.rulerCenter ??= box != null && box.hasSize

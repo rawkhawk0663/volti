@@ -278,7 +278,11 @@ class ToolController extends ChangeNotifier {
   double rulerAngle = 0;
 
   /// Länge und Breite des Lineals in Bildpunkten.
-  static const rulerLength = 560.0, rulerThickness = 64.0;
+  static const rulerThickness = 64.0;
+
+  /// Länge des Lineals: so lang, dass es in jeder Drehung über die ganze
+  /// Seite bzw. den ganzen Bildschirm reicht (wird beim Anzeigen gesetzt).
+  double rulerLength = 2400;
 
   final rulerChanged = ValueNotifier<int>(0);
 

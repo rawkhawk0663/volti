@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../core/ink/annotation_layer.dart';
+import '../../core/ink/layer_drop.dart';
 import 'ink_controller.dart';
 import 'tool_controller.dart';
 
@@ -22,67 +24,43 @@ class _LayersPanelState extends State<LayersPanel> {
   /// Zugeklappte Gruppen (nur auf diesem Gerät, nur solange das Fenster lebt).
   final Set<String> _collapsed = {};
 
+  /// Fläche jeder Zeile (für die Ablage beim Ziehen).
+  final Map<String, RenderBox> _rowBoxes = {};
+
   /// Sichtbare Zeilen: oben zuerst, Ebenen zugeklappter Gruppen fehlen.
   List<({AnnotationLayer layer, int depth})> _rows() => [
     for (final r in ink.annotations.outline())
       if (r.depth == 0 || !_collapsed.contains(r.layer.parent)) r,
   ];
 
-  /// Neue Anordnung nach dem Ziehen. Eine Ebene kommt in die Gruppe, wenn sie
-  /// direkt unter einem Gruppen-Kopf oder einer Ebene dieser Gruppe landet.
-  void _reorder(int from, int to) {
-    final rows = _rows();
-    final moved = rows[from];
-    final all = ink.annotations.outline();
-    // Gezogene Gruppe nimmt ihre (auch zugeklappten) Ebenen mit.
-    final block = [
-      for (final r in all)
-        if (r.layer.id == moved.layer.id || (moved.layer.isGroup && r.depth == 1 && r.layer.parent == moved.layer.id))
-          r,
-    ];
-    final rest = [
-      for (final r in rows)
-        if (!block.any((b) => b.layer.id == r.layer.id)) r,
-    ];
-    // [to] zählt in [rows] ohne das gezogene Element; ausgeblendete
-    // Gruppen-Ebenen des Blocks davor herausrechnen.
-    var at = to;
-    for (var i = 0; i < to && i < rows.length; i++) {
-      if (i != from && block.any((b) => b.layer.id == rows[i].layer.id)) at--;
-    }
-    at = at.clamp(0, rest.length);
-    String? parent;
-    if (!moved.layer.isGroup && at > 0) {
-      final above = rest[at - 1].layer;
-      parent = above.isGroup ? above.id : ink.annotations.groupOf(above)?.id;
-    }
-    if (moved.layer.isGroup) {
-      // Gruppen nur zwischen oberste Einträge setzen, nicht mitten in eine Gruppe.
-      while (at > 0 && at < rest.length && rest[at].depth == 1) {
-        at++;
-      }
-    }
-    final newRows = [...rest]..insertAll(at, block);
-    // Zugeklappte Ebenen wieder hinter ihren Gruppen-Kopf setzen.
-    final full = <({AnnotationLayer layer, int depth})>[];
-    for (final r in newRows) {
-      if (full.any((f) => f.layer.id == r.layer.id)) continue;
-      full.add(r);
-      if (r.layer.isGroup && _collapsed.contains(r.layer.id)) {
-        for (final c in all) {
-          if (c.depth == 1 && c.layer.parent == r.layer.id && !full.any((f) => f.layer.id == c.layer.id)) full.add(c);
-        }
-      }
-    }
-    ink.arrangeLayers([
-      for (final r in full)
-        (
-          id: r.layer.id,
-          parent: r.layer.id == moved.layer.id
-              ? parent
-              : (r.layer.isGroup ? null : ink.annotations.groupOf(r.layer)?.id),
-        ),
-    ]);
+  /// Zeilen für die Ablage-Berechnung (alle, auch in zugeklappten Gruppen).
+  List<LayerRow> _allRows() => [
+    for (final r in ink.annotations.outline())
+      (id: r.layer.id, isGroup: r.layer.isGroup, group: r.depth == 1 ? r.layer.parent : null),
+  ];
+
+  /// Gerade gezogene Ebene und wohin sie fallen würde (für die Vorschau).
+  String? _dragging;
+  LayerDrop? _drop;
+
+  void _hover(String target, Offset local, Size size) {
+    final moved = _dragging;
+    if (moved == null) return;
+    final drop = moved == target
+        ? null
+        : planLayerDrop(_allRows(), moved, target, lowerHalf: local.dy > size.height / 2, outdent: local.dx < 40);
+    if (drop != _drop) setState(() => _drop = drop);
+  }
+
+  void _accept() {
+    final moved = _dragging, drop = _drop;
+    setState(() {
+      _dragging = null;
+      _drop = null;
+    });
+    if (moved == null || drop == null) return;
+    if (drop.group != null) _collapsed.remove(drop.group);
+    ink.arrangeLayers(applyLayerDrop(_allRows(), moved, drop));
   }
 
   @override
@@ -118,28 +96,41 @@ class _LayersPanelState extends State<LayersPanel> {
                 ),
               ],
             ),
-            ReorderableListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: false,
-              itemCount: rows.length,
-              onReorderItem: _reorder,
-              itemBuilder: (context, i) {
-                final r = rows[i];
-                return _Row(
-                  key: ValueKey(r.layer.id),
+            for (final r in rows)
+              DragTarget<String>(
+                key: ValueKey(r.layer.id),
+                onWillAcceptWithDetails: (_) => true,
+                onMove: (d) {
+                  final rowBox = _rowBoxes[r.layer.id];
+                  if (rowBox == null || !rowBox.attached) return;
+                  _hover(r.layer.id, rowBox.globalToLocal(d.offset), rowBox.size);
+                },
+                onAcceptWithDetails: (_) => _accept(),
+                builder: (context, _, _) => _Row(
                   ink: ink,
                   layer: r.layer,
                   depth: r.depth,
-                  index: i,
                   active: r.layer.id == active,
                   collapsed: _collapsed.contains(r.layer.id),
+                  dragging: _dragging == r.layer.id,
+                  // Vorschau: Linie über/unter der Zeile, eingerückt, wenn die
+                  // Ebene in eine Gruppe kommt.
+                  dropLine: _drop?.target == r.layer.id ? (after: _drop!.after, indented: _drop!.group != null) : null,
+                  onBox: (b) => _rowBoxes[r.layer.id] = b,
+                  onDragStart: () => setState(() => _dragging = r.layer.id),
+                  onDragEnd: () {
+                    if (_dragging != null) {
+                      setState(() {
+                        _dragging = null;
+                        _drop = null;
+                      });
+                    }
+                  },
                   onToggle: () => setState(
                     () => _collapsed.contains(r.layer.id) ? _collapsed.remove(r.layer.id) : _collapsed.add(r.layer.id),
                   ),
-                );
-              },
-            ),
+                ),
+              ),
             const SizedBox(height: 6),
             Text(
               'Antippen: darauf zeichnen. Am Griff ziehen: Reihenfolge ändern, auch in eine Gruppe hinein. '
@@ -155,23 +146,30 @@ class _LayersPanelState extends State<LayersPanel> {
 
 class _Row extends StatelessWidget {
   const _Row({
-    super.key,
     required this.ink,
     required this.layer,
     required this.depth,
-    required this.index,
     required this.active,
     required this.collapsed,
     required this.onToggle,
+    required this.dragging,
+    required this.dropLine,
+    required this.onBox,
+    required this.onDragStart,
+    required this.onDragEnd,
   });
 
   final InkController ink;
   final AnnotationLayer layer;
   final int depth;
-  final int index;
   final bool active;
   final bool collapsed;
   final VoidCallback onToggle;
+  final bool dragging;
+  final ({bool after, bool indented})? dropLine;
+  final ValueChanged<RenderBox> onBox;
+  final VoidCallback onDragStart;
+  final VoidCallback onDragEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -182,6 +180,33 @@ class _Row extends StatelessWidget {
       for (final l in ink.layers.reversed)
         if (l.isGroup) l,
     ];
+    final line = dropLine;
+    Widget indicator(bool show) => SizedBox(
+      height: 3,
+      child: show
+          ? Padding(
+              padding: EdgeInsets.only(left: line!.indented ? 28 : 0),
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(2)),
+              ),
+            )
+          : null,
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        indicator(line != null && !line.after),
+        _BoxReporter(
+          onBox: onBox,
+          child: Opacity(opacity: dragging ? 0.4 : 1, child: _rowBody(context, scheme, shown, count, groups)),
+        ),
+        indicator(line != null && line.after),
+      ],
+    );
+  }
+
+  Widget _rowBody(BuildContext context, ColorScheme scheme, bool shown, int count, List<AnnotationLayer> groups) {
     return Padding(
       padding: EdgeInsets.only(left: depth * 16.0, bottom: 2),
       child: Material(
@@ -194,12 +219,32 @@ class _Row extends StatelessWidget {
             height: 42,
             child: Row(
               children: [
-                ReorderableDragStartListener(
-                  index: index,
+                Draggable<String>(
+                  data: layer.id,
+                  dragAnchorStrategy: pointerDragAnchorStrategy,
+                  onDragStarted: onDragStart,
+                  onDragEnd: (_) => onDragEnd(),
+                  onDraggableCanceled: (_, _) => onDragEnd(),
+                  feedback: Material(
+                    elevation: 0,
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(layer.isGroup ? Icons.folder_outlined : Icons.layers_outlined, size: 18),
+                          const SizedBox(width: 8),
+                          Text(layer.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
                   child: const MouseRegion(
                     cursor: SystemMouseCursors.grab,
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 10),
                       child: Icon(Icons.drag_indicator, size: 18),
                     ),
                   ),
@@ -378,4 +423,27 @@ class ActiveLayerChip extends StatelessWidget {
       );
     },
   );
+}
+
+/// Meldet die Fläche einer Zeile (für die Ablage beim Ziehen).
+class _BoxReporter extends SingleChildRenderObjectWidget {
+  const _BoxReporter({required this.onBox, required super.child});
+  final ValueChanged<RenderBox> onBox;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderBoxReporter(onBox);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderBoxReporter renderObject) => renderObject.onBox = onBox;
+}
+
+class _RenderBoxReporter extends RenderProxyBox {
+  _RenderBoxReporter(this.onBox);
+  ValueChanged<RenderBox> onBox;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    onBox(this);
+  }
 }

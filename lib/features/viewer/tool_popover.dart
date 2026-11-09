@@ -500,9 +500,10 @@ class _CustomStampsTab extends StatelessWidget {
                 ),
               _FavoriteChip(
                 selected: false,
+                plain: true,
                 tooltip: 'Eigenes Bild als Stempel importieren',
                 onTap: () => importCustomStamp(context, tools),
-                child: const Icon(Icons.add_photo_alternate_outlined, size: 22),
+                child: Icon(Icons.add_photo_alternate_outlined, size: 22, color: Theme.of(context).colorScheme.primary),
               ),
             ],
           ),
@@ -1042,7 +1043,11 @@ class _FavoriteChip extends StatelessWidget {
     required this.onTap,
     required this.child,
     this.onLongPress,
+    this.plain = false,
   });
+
+  /// Ohne weissen Grund (z. B. für den Knopf "Importieren").
+  final bool plain;
 
   final bool selected;
   final String tooltip;
@@ -1065,7 +1070,7 @@ class _FavoriteChip extends StatelessWidget {
           height: 40,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? scheme.primaryContainer : Colors.white,
+            color: selected ? scheme.primaryContainer : (plain ? Colors.transparent : Colors.white),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: selected ? scheme.primary : scheme.outlineVariant, width: selected ? 2 : 1),
           ),

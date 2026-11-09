@@ -53,6 +53,10 @@ ThemeData buildVoltiTheme(Brightness brightness) {
     scaffoldBackgroundColor: dark ? const Color(0xFF151C1A) : const Color(0xFFECF7F4),
     navigationRailTheme: const NavigationRailThemeData(backgroundColor: Colors.transparent),
     appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, surfaceTintColor: Colors.transparent),
+    // Langes Drücken mit Finger oder Stift ist überall der "Rechtsklick"
+    // (Menüs, Favoriten entfernen …). Hinweise sollen ihn nicht abfangen; mit
+    // der Maus erscheinen sie weiterhin beim Darüberfahren.
+    tooltipTheme: const TooltipThemeData(triggerMode: TooltipTriggerMode.manual),
   );
 }
 

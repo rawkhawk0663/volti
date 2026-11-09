@@ -691,18 +691,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
               fit: StackFit.expand,
               children: [
                 const ColoredBox(color: Colors.white),
-                RepaintBoundary(
-                  child: ListenableBuilder(
-                    listenable: cache,
-                    builder: (context, _) {
-                      final img = cache.imageFor(src, pixelWidth);
-                      return img == null
-                          ? const SizedBox.shrink()
-                          : RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
-                    },
-                  ),
-                ),
-                // Bekommt das Seitenbild, um den Leuchtstift fest damit zu verrechnen.
+                // Die Stift-Ebene malt auch die Notenseite: Seite, Leuchtstift und
+                // alle Ebenen werden dort zu einem einzigen Bild (schneller).
                 ListenableBuilder(
                   listenable: cache,
                   builder: (context, _) => InkLayer(

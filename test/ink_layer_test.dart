@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -166,7 +167,7 @@ void main() {
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
         await t.pump();
       }
-      final img = t.widget<RawImage>(find.byType(RawImage)).image!;
+      final img = (t.state(find.byType(InkLayer)) as dynamic).debugImageOf('layer/standard') as ui.Image;
       final bytes = (await t.runAsync(() => img.toByteData()))!;
       final px = (x * img.width).round(), py = (y * img.height).round();
       return bytes.getUint8((py * img.width + px) * 4 + 3);
@@ -211,21 +212,10 @@ void main() {
     }
     expect(c.annotations[c.annotations.visibleStrokesOn(1).first.id]!.layer, hl, reason: 'bleibt auf seiner Ebene');
     // Das Leuchtstift-Bild kommt vor (= unter) allen Ebenen-Bildern.
-    final stack = t.widget<Stack>(
-      find.ancestor(of: find.byKey(const ValueKey('highlights')), matching: find.byType(Stack)).first,
-    );
-    expect(stack.children.first.key, const ValueKey('highlights'));
-    expect(
-      find.descendant(of: find.byKey(const ValueKey('highlights')), matching: find.byType(CustomPaint)),
-      findsWidgets,
-      reason: 'das Leuchtstift-Bild ist da',
-    );
-
-    expect(
-      find.descendant(of: find.byKey(const ValueKey('layer/$kDefaultLayer')), matching: find.byType(RawImage)),
-      findsOneWidget,
-      reason: 'der Stift ist im Bild der Grund-Ebene',
-    );
+    final layer = t.state(find.byType(InkLayer)) as dynamic;
+    expect((layer.debugOrder as List<String>).first, 'highlights');
+    expect(layer.debugImageOf('highlights'), isNotNull, reason: 'das Leuchtstift-Bild ist da');
+    expect(layer.debugImageOf('layer/$kDefaultLayer'), isNotNull, reason: 'der Stift ist im Bild der Grund-Ebene');
     c.dispose();
   });
 }
