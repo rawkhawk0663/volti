@@ -593,6 +593,7 @@ const _shapeNames = {
   ShapeKind.crescendo: 'Crescendo',
   ShapeKind.decrescendo: 'Decrescendo',
   ShapeKind.slur: 'Bogen',
+  ShapeKind.staff: 'Notenlinien',
 };
 
 class _ShapeSettings extends StatelessWidget {
@@ -621,7 +622,9 @@ class _ShapeSettings extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Auf der Seite vom Anfang zum Ende ziehen.',
+          tools.shapeKind == ShapeKind.staff
+              ? 'Vom Anfang zum Ende ziehen. Nach unten ziehen bestimmt die Höhe, nur waagrecht ergibt die übliche Höhe.'
+              : 'Auf der Seite vom Anfang zum Ende ziehen.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         const _Label('Farbe'),
@@ -664,6 +667,7 @@ class _ShapeIconPainter extends CustomPainter {
     final (a, b) = switch (kind) {
       ShapeKind.rectangle || ShapeKind.ellipse => (const Offset(3, 7), Offset(size.width - 3, size.height - 7)),
       ShapeKind.line || ShapeKind.arrow => (Offset(3, size.height - 5), Offset(size.width - 3, 5)),
+      ShapeKind.staff => (const Offset(2, 7), Offset(size.width - 2, size.height - 7)),
       _ => (Offset(2, size.height / 2 + 4), Offset(size.width - 2, size.height / 2 + 4)),
     };
     for (final piece in shapeGeometry(kind, a, b, 1.5, pageWidth: size.width * 28)) {

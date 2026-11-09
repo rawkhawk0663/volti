@@ -605,6 +605,19 @@ class _InkLayerState extends State<InkLayer> {
                   return Stack(
                     fit: StackFit.expand,
                     children: [
+                      // Leuchtstift immer zuunterst – hinter allem anderen,
+                      // auf allen Ebenen (jeder Strich bleibt auf seiner Ebene).
+                      RepaintBoundary(
+                        key: const ValueKey('highlights'),
+                        child: _StrokesImage(
+                          controller: c,
+                          page: widget.page,
+                          layer: null,
+                          highlights: true,
+                          size: size,
+                          hidden: hidden,
+                        ),
+                      ),
                       for (final l in c.annotations.layers)
                         if (l.visible)
                           RepaintBoundary(
@@ -655,14 +668,18 @@ class _StrokesImage extends StatefulWidget {
     required this.page,
     required this.size,
     this.layer = kDefaultLayer,
+    this.highlights = false,
     this.hidden = const {},
   });
   final InkController controller;
   final int page;
   final Size size;
 
-  /// Nur Elemente dieser Ebene.
-  final String layer;
+  /// Nur Elemente dieser Ebene (null = alle eingeblendeten Ebenen).
+  final String? layer;
+
+  /// true: nur Leuchtstift-Striche. false: alles ausser Leuchtstift.
+  final bool highlights;
 
   /// Nicht malen (gerade ausgewählt).
   final Set<String> hidden;
@@ -700,7 +717,7 @@ class _StrokesImageState extends State<_StrokesImage> {
       _baseSize = null; // ganz neu erzeugen
       _dirty = true;
     }
-    if (old.page != widget.page || old.layer != widget.layer) {
+    if (old.page != widget.page || old.layer != widget.layer || old.highlights != widget.highlights) {
       _baseSize = null;
       _dirty = true;
     }
@@ -724,9 +741,13 @@ class _StrokesImageState extends State<_StrokesImage> {
     final a = widget.controller.annotations;
     final hidden = widget.hidden;
     final layer = widget.layer;
+    final hl = widget.highlights;
+    bool onLayer(String? l) => layer == null || a.resolveLayer(l) == layer;
     final items = <Object>[
-      ...a.visibleStrokesOn(widget.page).where((s) => !hidden.contains(s.id) && a.resolveLayer(s.layer) == layer),
-      ...a.visibleStampsOn(widget.page).where((s) => !hidden.contains(s.id) && a.resolveLayer(s.layer) == layer),
+      ...a
+          .visibleStrokesOn(widget.page)
+          .where((s) => !hidden.contains(s.id) && onLayer(s.layer) && (s.tool == InkTool.highlighter) == hl),
+      if (!hl) ...a.visibleStampsOn(widget.page).where((s) => !hidden.contains(s.id) && onLayer(s.layer)),
     ];
     items.sort((x, y) {
       final c = _created(x).compareTo(_created(y));
@@ -749,10 +770,10 @@ class _StrokesImageState extends State<_StrokesImage> {
     return true;
   }
 
-  static void _paintItems(Canvas canvas, Size size, Iterable<Object> items) {
+  static void _paintItems(Canvas canvas, Size size, Iterable<Object> items, {bool multiply = true}) {
     for (final it in items) {
       if (it is Stroke) {
-        paintStroke(canvas, size, it.tool, Color(it.color), it.width, it.points);
+        paintStroke(canvas, size, it.tool, Color(it.color), it.width, it.points, multiply: multiply);
       } else if (it is Stamp) {
         paintStamp(canvas, size, it);
       }
@@ -760,12 +781,17 @@ class _StrokesImageState extends State<_StrokesImage> {
   }
 
   /// Bild aus [base] (in Pixeln) plus [items] aufnehmen.
-  static ui.Picture _record(ui.Image? base, Iterable<Object> items, Size size, double dpr) {
+  ///
+  /// [multiply]: Leuchtstift im Bild "multiplizieren". Im eigenen
+  /// Leuchtstift-Bild nicht: Dort gibt es nichts darunter (manche Grafikkarten
+  /// zeigen dann gar nichts), das ganze Bild wird stattdessen beim Anzeigen
+  /// mit den Noten multipliziert.
+  static ui.Picture _record(ui.Image? base, Iterable<Object> items, Size size, double dpr, {bool multiply = true}) {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     if (base != null) canvas.drawImage(base, Offset.zero, Paint());
     canvas.scale(dpr);
-    _paintItems(canvas, size, items);
+    _paintItems(canvas, size, items, multiply: multiply);
     return recorder.endRecording();
   }
 
@@ -799,7 +825,7 @@ class _StrokesImageState extends State<_StrokesImage> {
       _setBase(null, keys, size, dpr);
       return;
     }
-    final picture = _record(null, items, size, dpr);
+    final picture = _record(null, items, size, dpr, multiply: !widget.highlights);
     final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
     picture.dispose();
     _setBase(img, keys, size, dpr);
@@ -819,7 +845,7 @@ class _StrokesImageState extends State<_StrokesImage> {
     final keys = [..._baseKeys, for (final it in pending) _keyOf(it)];
     late final ui.Image img;
     try {
-      final picture = _record(_base, pending, size, dpr);
+      final picture = _record(_base, pending, size, dpr, multiply: !widget.highlights);
       img = await picture.toImage((size.width * dpr).ceil(), (size.height * dpr).ceil());
       picture.dispose();
     } finally {
@@ -845,11 +871,36 @@ class _StrokesImageState extends State<_StrokesImage> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (img != null) RawImage(image: img, fit: BoxFit.fill),
+        if (img != null)
+          widget.highlights
+              // Wie ein echter Leuchtstift: schwarze Noten darunter bleiben schwarz.
+              ? CustomPaint(painter: _MultiplyImagePainter(img))
+              : RawImage(image: img, fit: BoxFit.fill),
         if (pending.isNotEmpty) CustomPaint(painter: _ItemsPainter(pending)),
       ],
     );
   }
+}
+
+/// Zeigt das Leuchtstift-Bild, mit den Noten darunter multipliziert.
+class _MultiplyImagePainter extends CustomPainter {
+  _MultiplyImagePainter(this.image);
+  final ui.Image image;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      Offset.zero & size,
+      Paint()
+        ..blendMode = BlendMode.multiply
+        ..filterQuality = FilterQuality.low,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MultiplyImagePainter old) => !identical(old.image, image);
 }
 
 /// Malt wenige neue Elemente direkt, bis sie im Bild sind.
@@ -1089,7 +1140,15 @@ class _ActivePainter extends CustomPainter {
 }
 
 /// Gemeinsame Zeichenroutine für fertige und gerade entstehende Striche.
-void paintStroke(Canvas canvas, Size size, InkTool tool, Color color, double width, List<InkPoint> pts) {
+void paintStroke(
+  Canvas canvas,
+  Size size,
+  InkTool tool,
+  Color color,
+  double width,
+  List<InkPoint> pts, {
+  bool multiply = true,
+}) {
   if (pts.isEmpty) return;
   final w = width * size.width;
   Offset at(InkPoint p) => Offset(p.x * size.width, p.y * size.height);
@@ -1107,7 +1166,7 @@ void paintStroke(Canvas canvas, Size size, InkTool tool, Color color, double wid
         ..strokeWidth = w
         ..strokeCap = StrokeCap.square
         ..strokeJoin = StrokeJoin.round
-        ..blendMode = BlendMode.multiply
+        ..blendMode = multiply ? BlendMode.multiply : BlendMode.srcOver
         ..color = color,
     );
     return;

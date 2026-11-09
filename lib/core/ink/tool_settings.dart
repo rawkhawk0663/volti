@@ -124,7 +124,10 @@ enum ShapeKind {
   ellipse,
   crescendo,
   decrescendo,
-  slur;
+  slur,
+
+  /// Fünf waagrechte Notenlinien.
+  staff;
 
   static ShapeKind fromName(String? n) => ShapeKind.values.firstWhere((k) => k.name == n, orElse: () => line);
 }

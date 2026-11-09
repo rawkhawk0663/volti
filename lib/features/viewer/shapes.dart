@@ -11,6 +11,10 @@ import '../../core/ink/tool_settings.dart';
 ///
 /// Formen werden als gewöhnliche Striche gespeichert – Radieren, Rückgängig
 /// und Sync funktionieren dadurch wie bei allem anderen.
+/// Höhe eines Notensystems, wenn man nur waagrecht zieht (relativ zur
+/// Seitenbreite; ≈ 7 mm auf A4, wie gedruckte Noten).
+const kStaffHeight = 0.033;
+
 /// Öffnung von Crescendo/Decrescendo relativ zur Seitenbreite.
 const kHairpinOpening = 0.016;
 
@@ -59,6 +63,19 @@ List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double stro
       final open = kind == ShapeKind.crescendo ? b : a;
       return [
         [open + normal * h, tip, open - normal * h],
+      ];
+    case ShapeKind.staff:
+      // Immer waagrecht. Die Länge kommt vom Ziehen nach links/rechts, die
+      // Höhe vom Ziehen nach unten (oder oben). Fast nur waagrecht gezogen
+      // → übliche Systemhöhe.
+      final w = pageWidth ?? 800;
+      final dy = b.dy - a.dy;
+      if ((b.dx - a.dx).abs() < 4) return const [];
+      final height = dy.abs() < w * 0.012 ? w * kStaffHeight : dy.abs();
+      final down = dy >= 0 || dy.abs() < w * 0.012 ? 1.0 : -1.0;
+      return [
+        for (var i = 0; i < 5; i++)
+          [Offset(a.dx, a.dy + down * height * i / 4), Offset(b.dx, a.dy + down * height * i / 4)],
       ];
     case ShapeKind.slur:
       // Bogen nach oben (bzw. zur linken Seite der Zugrichtung).

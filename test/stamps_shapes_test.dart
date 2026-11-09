@@ -104,6 +104,16 @@ void main() {
       final dim = shapeGeometry(ShapeKind.decrescendo, Offset.zero, const Offset(400, 0), 2, pageWidth: 1000).single;
       expect(dim[1], const Offset(400, 0), reason: 'Decrescendo: Spitze am Ende');
       expect((dim.first - dim.last).distance, closeTo(16, 0.01));
+      // Notenlinien: 5 waagrechte Linien; nur waagrecht gezogen → übliche Höhe
+      final flat = shapeGeometry(ShapeKind.staff, const Offset(100, 200), const Offset(500, 203), 2, pageWidth: 1000);
+      expect(flat.length, 5);
+      expect(flat.every((l) => l.first.dy == l.last.dy), isTrue, reason: 'immer waagrecht');
+      expect(flat.last.first.dy - flat.first.first.dy, closeTo(33, 0.01));
+      expect(flat.first.first.dx, 100);
+      expect(flat.first.last.dx, 500);
+      final tall = shapeGeometry(ShapeKind.staff, const Offset(100, 200), const Offset(500, 260), 2, pageWidth: 1000);
+      expect(tall.last.first.dy, 260, reason: 'Höhe aus dem Ziehen nach unten');
+      expect(tall[1].first.dy, 215);
       // Zu kurz → keine Form
       expect(shapeGeometry(ShapeKind.line, Offset.zero, const Offset(1, 0), 2), isEmpty);
     });

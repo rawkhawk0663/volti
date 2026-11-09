@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:volti/core/ink/annotation_layer.dart';
 import 'package:volti/core/ink/stroke.dart';
 import 'package:volti/features/viewer/ink_controller.dart';
 import 'package:volti/features/viewer/ink_layer.dart';
@@ -183,6 +184,48 @@ void main() {
     await t.pump();
     expect(await alphaAt(0.5, 0.25), 0, reason: 'radierter Strich ist weg');
     expect(await alphaAt(0.5, 0.75), greaterThan(200));
+    c.dispose();
+  });
+
+  testWidgets('Leuchtstift liegt immer hinter allem anderen', (t) async {
+    await pump(t);
+    final hl = c.addLayer('Oben');
+    c.addStroke(
+      page: 1,
+      tool: InkTool.highlighter,
+      color: 0x66FFEB3B,
+      width: 0.03,
+      points: [InkPoint(0.2, 0.5, 0.5), InkPoint(0.8, 0.5, 0.5)],
+    );
+    c.activeLayer = kDefaultLayer;
+    c.addStroke(
+      page: 1,
+      tool: InkTool.pen,
+      color: 0xFF1565C0,
+      width: 0.005,
+      points: [InkPoint(0.5, 0.2, 0.5), InkPoint(0.5, 0.8, 0.5)],
+    );
+    for (var i = 0; i < 10; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    expect(c.annotations[c.annotations.visibleStrokesOn(1).first.id]!.layer, hl, reason: 'bleibt auf seiner Ebene');
+    // Das Leuchtstift-Bild kommt vor (= unter) allen Ebenen-Bildern.
+    final stack = t.widget<Stack>(
+      find.ancestor(of: find.byKey(const ValueKey('highlights')), matching: find.byType(Stack)).first,
+    );
+    expect(stack.children.first.key, const ValueKey('highlights'));
+    expect(
+      find.descendant(of: find.byKey(const ValueKey('highlights')), matching: find.byType(CustomPaint)),
+      findsWidgets,
+      reason: 'das Leuchtstift-Bild ist da',
+    );
+
+    expect(
+      find.descendant(of: find.byKey(const ValueKey('layer/$kDefaultLayer')), matching: find.byType(RawImage)),
+      findsOneWidget,
+      reason: 'der Stift ist im Bild der Grund-Ebene',
+    );
     c.dispose();
   });
 }
