@@ -139,7 +139,7 @@ class SyncEngine {
             await _deleteLocal(rel);
             report.deletedHere++;
           });
-        } else if (await _safely(rel, report, () => remote.writeStream(rel, _local.openRead(rel)))) {
+        } else if (await _safely(rel, report, () => _transfer(_local, remote, rel))) {
           report.uploaded++;
           newBase.add(rel);
         }
@@ -150,7 +150,7 @@ class SyncEngine {
             if (isPdf(rel)) await remote.delete('$rel${SidecarStore.suffix}');
             report.deletedThere++;
           });
-        } else if (await _safely(rel, report, () => _local.writeStream(rel, remote.openRead(rel)))) {
+        } else if (await _safely(rel, report, () => _transfer(remote, _local, rel))) {
           report.downloaded++;
           newBase.add(rel);
         }
@@ -184,6 +184,23 @@ class SyncEngine {
     report.failed.add(rel);
     report.reasons[rel] = '$last';
     return false;
+  }
+
+  /// Eine Datei von [from] nach [to] bringen. Zwischen zwei Ordnern wird die
+  /// ganze Datei kopiert (wie beim Import) – Proton Drive verweigerte beim
+  /// Besitzer das stückweise Lesen neuer Dateien, das Kopieren aber nicht.
+  /// Klappt das Kopieren nicht, wird stückweise gelesen.
+  Future<void> _transfer(SyncStore from, SyncStore to, String rel) async {
+    final src = from.localPath(rel);
+    if (src != null && to is FolderSyncStore) {
+      try {
+        await to.copyFromFile(rel, src);
+        return;
+      } catch (_) {
+        // weiter mit dem zweiten Weg
+      }
+    }
+    await to.writeStream(rel, from.openRead(rel));
   }
 
   /// Pause vor dem zweiten Versuch (in Tests kürzer).

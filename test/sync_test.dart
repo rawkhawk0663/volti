@@ -264,4 +264,7 @@ class _FailingStore implements SyncStore {
   Future<void> writeStream(String rel, Stream<List<int>> data) => inner.writeStream(rel, data);
   @override
   Future<void> delete(String rel) => inner.delete(rel);
+  // Kein Ordner: so wird wirklich stückweise gelesen (und kann abbrechen).
+  @override
+  String? localPath(String rel) => null;
 }

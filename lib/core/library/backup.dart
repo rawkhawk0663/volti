@@ -116,4 +116,6 @@ class _ReadOnly implements SyncStore {
   Future<void> writeStream(String rel, Stream<List<int>> data) async {}
   @override
   Future<void> delete(String rel) async {}
+  @override
+  String? localPath(String rel) => inner.localPath(rel);
 }

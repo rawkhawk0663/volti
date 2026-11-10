@@ -19,6 +19,10 @@ abstract class SyncStore {
   Stream<List<int>> openRead(String rel);
   Future<void> writeStream(String rel, Stream<List<int>> data);
   Future<void> delete(String rel);
+
+  /// Pfad der Datei auf diesem Gerät, falls der Speicher ein Ordner ist
+  /// (dann kann ganz kopiert statt gelesen werden). Sonst null.
+  String? localPath(String rel);
 }
 
 /// Welche Dateien zum Abgleich gehören.
@@ -65,7 +69,43 @@ class FolderSyncStore implements SyncStore {
   Future<bool> exists(String rel) => File(_abs(rel)).exists();
 
   @override
-  Future<String> readString(String rel) => File(_abs(rel)).readAsString();
+  String? localPath(String rel) => _abs(rel);
+
+  /// Lesen; verweigert der Cloud-Dienst das (Proton Drive gibt Dateien beim
+  /// Lesen in Stücken manchmal nicht frei), über eine Kopie – so wie der
+  /// Import, der beim Besitzer funktioniert.
+  @override
+  Future<String> readString(String rel) async {
+    try {
+      return await File(_abs(rel)).readAsString();
+    } on FileSystemException {
+      final tmp = File(p.join(Directory.systemTemp.path, 'volti-sync-${DateTime.now().microsecondsSinceEpoch}.tmp'));
+      try {
+        await File(_abs(rel)).copy(tmp.path);
+        return await tmp.readAsString();
+      } finally {
+        try {
+          if (await tmp.exists()) await tmp.delete();
+        } catch (_) {}
+      }
+    }
+  }
+
+  /// Eine ganze Datei hierher kopieren (erst als .tmp, dann umbenennen).
+  Future<void> copyFromFile(String rel, String source) async {
+    final target = File(_abs(rel));
+    await target.parent.create(recursive: true);
+    final tmp = File('${target.path}.tmp');
+    try {
+      await File(source).copy(tmp.path);
+      await tmp.rename(target.path);
+    } catch (_) {
+      try {
+        if (await tmp.exists()) await tmp.delete();
+      } catch (_) {}
+      rethrow;
+    }
+  }
 
   @override
   Future<void> writeString(String rel, String content) => writeStream(rel, Stream.value(utf8.encode(content)));
