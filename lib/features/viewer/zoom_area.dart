@@ -27,12 +27,8 @@ class PageZoom {
   final ValueNotifier<int> settled = ValueNotifier(0);
 
   /// Sichtbarer Bereich in Koordinaten der (unvergrösserten) Fläche.
-  Rect get visibleContent => Rect.fromLTWH(
-    -_offset.dx / _scale,
-    -_offset.dy / _scale,
-    _area.width / _scale,
-    _area.height / _scale,
-  );
+  Rect get visibleContent =>
+      Rect.fromLTWH(-_offset.dx / _scale, -_offset.dy / _scale, _area.width / _scale, _area.height / _scale);
 
   double _scale = 1;
   Offset _offset = Offset.zero;

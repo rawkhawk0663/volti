@@ -124,7 +124,7 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 25. **Werkzeugleiste und Einstellungsfenster werden beim Zeichnen eingefroren** (`FreezeWhileDrawing`): Solange der Stift schreibt, wird nur ein Bild davon gezeigt. Gemessen (Linux): Malen pro Bild 23 → 10 ms, im Zoom 31 → 14 ms. Im Zoom werden nur sichtbare Seiten scharf gerendert (`PageZoom.visibleContent`, `settled`).
 
-26. **Sync robuster:** Lässt sich eine Datei nicht lesen oder schreiben (z. B. Proton Drive lädt sie gerade), wird sie nach 2 s nochmals versucht und sonst übersprungen (`_safely`, `SyncReport.failed`). Der Rest wird abgeglichen, sie kommt beim nächsten Mal wieder dran (sie landet nicht in der Basis, also wird nichts fälschlich gelöscht). Halbe `.tmp`-Dateien werden weggeräumt. Hinweise mit „Rückgängig“ verschwinden nach 6 s (`persist: false`, sonst bleiben sie seit Flutter 3.x stehen).
+26. **Sync robuster:** Lässt sich eine Datei nicht lesen oder schreiben (z. B. Proton Drive lädt sie gerade), wird sie nach 2 s nochmals versucht und sonst übersprungen (`_safely`, `SyncReport.failed`). Der Rest wird abgeglichen, sie kommt beim nächsten Mal wieder dran (sie landet nicht in der Basis, also wird nichts fälschlich gelöscht). Halbe `.tmp`-Dateien werden weggeräumt. Das gilt auch beim Aufräumen von Konflikt-Kopien ganz am Anfang (`_resolveRemoteConflictCopies`). Normale Setlists (`<uuid>.json`) werden dort gar nicht gelesen. Beim Besitzer verweigerte Proton Drive den Zugriff auf eine Setlist („Zugriff auf die Clouddatei verweigert“, errno 395), und der ganze Abgleich brach ab, bevor die neuen Noten kamen. Hinweise mit „Rückgängig“ verschwinden nach 6 s (`persist: false`, sonst bleiben sie seit Flutter 3.x stehen).
 
 ## Prüfen
 ```bash

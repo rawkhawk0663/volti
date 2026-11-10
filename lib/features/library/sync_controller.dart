@@ -78,6 +78,18 @@ class SyncController extends ChangeNotifier {
     _debounce = Timer(const Duration(seconds: 4), syncNow);
   }
 
+  /// Verständlicher Name einer Datei für die Meldung.
+  String _describe(String rel) {
+    if (rel.startsWith('.volti/setlists/')) {
+      final id = p.basenameWithoutExtension(rel);
+      final s = library.setlists.where((x) => x.id == id).firstOrNull;
+      return s == null ? 'eine Setlist' : 'Setlist „${s.name}“';
+    }
+    if (rel.startsWith('.volti/stamps')) return 'eigene Stempel';
+    if (rel.startsWith('.volti/')) return 'Einstellungen (${p.basename(rel)})';
+    return '„${p.basename(rel).replaceAll(RegExp(r'\.volti\.json$'), '').replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '')}“';
+  }
+
   /// Nur einzelne Dateien fehlten beim letzten Abgleich (der Rest ging).
   bool partialFailure = false;
 
@@ -100,7 +112,7 @@ class SyncController extends ChangeNotifier {
       if (report.failed.isNotEmpty) {
         partialFailure = true;
         // Das meiste ist abgeglichen; einzelne Dateien kommen beim nächsten Mal.
-        final names = {for (final f in report.failed) p.basename(f).replaceAll(RegExp(r'\.volti\.json$'), '')}.toList();
+        final names = {for (final f in report.failed) _describe(f)}.toList();
         final list = names.take(5).join(', ') + (names.length > 5 ? ' …' : '');
         error =
             '${names.length == 1 ? 'Eine Datei konnte' : '${names.length} Dateien konnten'} diesmal nicht abgeglichen werden: '

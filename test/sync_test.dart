@@ -207,20 +207,48 @@ void main() {
     expect(surface.has('Kaputt.pdf'), isTrue);
     expect(File(p.join(cloud, 'Noten', 'Kaputt.pdf')).existsSync(), isTrue);
   });
+
+  test('Gesperrte Setlist im Sync-Ordner: die neuen Noten kommen trotzdem an', () async {
+    final s = Setlist.create('Gottesdienst');
+    await SetlistStore(desktop.root).save(s);
+    for (final n in ['A.pdf', 'B.pdf', 'C.pdf', 'D.pdf']) {
+      await importOn(desktop, n, '%PDF-1.4 $n');
+    }
+    await desktop.sync();
+    final locked = _FailingStore(FolderSyncStore(cloud), '.volti/setlists/${s.id}.json', readFails: true);
+    final engine = SyncEngine(
+      localRoot: surface.root,
+      remote: locked,
+      baseFile: File(p.join(surface.dir.path, 'sync_base.json')),
+    )..retryDelay = Duration.zero;
+    final report = await engine.run();
+    for (final n in ['A.pdf', 'B.pdf', 'C.pdf', 'D.pdf']) {
+      expect(surface.has(n), isTrue, reason: n);
+    }
+    expect(report.failed, contains('.volti/setlists/${s.id}.json'));
+    // Beim nächsten Mal (Datei wieder frei) kommt auch die Setlist.
+    await surface.sync();
+    expect((await SetlistStore(surface.root).loadAll()).single.name, 'Gottesdienst');
+  });
 }
 
 /// Sync-Ziel, bei dem das Lesen einer Datei mittendrin abbricht.
 class _FailingStore implements SyncStore {
-  _FailingStore(this.inner, this.broken);
+  _FailingStore(this.inner, this.broken, {this.readFails = false});
   final SyncStore inner;
   final String broken;
+
+  /// Auch das Lesen als Text schlägt fehl (wie „Zugriff auf die Clouddatei verweigert“).
+  final bool readFails;
 
   @override
   Future<Set<String>> list() => inner.list();
   @override
   Future<bool> exists(String rel) => inner.exists(rel);
   @override
-  Future<String> readString(String rel) => inner.readString(rel);
+  Future<String> readString(String rel) => readFails && rel == broken
+      ? Future.error(const FileSystemException('Der Zugriff auf die Clouddatei wurde verweigert'))
+      : inner.readString(rel);
   @override
   Stream<List<int>> openRead(String rel) async* {
     if (rel == broken) {

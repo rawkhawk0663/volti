@@ -292,28 +292,38 @@ class SyncEngine {
     final files = await remote.list();
     final pdfs = files.where((f) => f.startsWith('Noten/') && f.toLowerCase().endsWith('.pdf')).toList()
       ..sort((a, b) => b.length.compareTo(a.length)); // längster Name zuerst
+    // Normale Setlists heissen "<id>.json" – die müssen gar nicht gelesen
+    // werden. Nur anders benannte (Konflikt-Kopien) werden geöffnet.
+    final plainSetlist = RegExp(r'^\.volti/setlists/[0-9a-fA-F-]{36}\.json$');
     for (final f in files) {
+      // Klappt das Lesen nicht (z. B. Proton Drive gibt die Datei gerade
+      // nicht frei), wird es beim nächsten Abgleich nochmals versucht –
+      // der Abgleich selbst läuft weiter.
       if (f.startsWith('Noten/') && f.endsWith('.json')) {
         if (pdfs.any((pdf) => f == '$pdf${SidecarStore.suffix}')) continue;
         final owner = pdfs.where((pdf) => f.startsWith(pdf)).firstOrNull;
         if (owner == null) continue;
-        final copy = _tryParseSidecar(await remote.readString(f));
-        if (copy == null) continue;
-        final target = '$owner${SidecarStore.suffix}';
-        final main = await remote.exists(target) ? _parseSidecar(await remote.readString(target)) : ScoreSidecar();
-        await remote.writeString(target, _encode(ScoreSidecar.merge(main, copy)));
-        await remote.delete(f);
-        report.conflictCopiesResolved++;
-      } else if (f.startsWith('.volti/setlists/')) {
-        final s = _tryParseSetlist(await remote.readString(f));
-        if (s == null || f == '.volti/setlists/${s.id}.json') continue;
-        final target = '.volti/setlists/${s.id}.json';
-        final main = await remote.exists(target) ? _tryParseSetlist(await remote.readString(target)) : null;
-        if (main == null || s.modified.isAfter(main.modified)) {
-          await remote.writeString(target, const JsonEncoder.withIndent(' ').convert(s.toJson()));
-        }
-        await remote.delete(f);
-        report.conflictCopiesResolved++;
+        await _safely(f, report, () async {
+          final copy = _tryParseSidecar(await remote.readString(f));
+          if (copy == null) return;
+          final target = '$owner${SidecarStore.suffix}';
+          final main = await remote.exists(target) ? _parseSidecar(await remote.readString(target)) : ScoreSidecar();
+          await remote.writeString(target, _encode(ScoreSidecar.merge(main, copy)));
+          await remote.delete(f);
+          report.conflictCopiesResolved++;
+        });
+      } else if (f.startsWith('.volti/setlists/') && !plainSetlist.hasMatch(f)) {
+        await _safely(f, report, () async {
+          final s = _tryParseSetlist(await remote.readString(f));
+          if (s == null || f == '.volti/setlists/${s.id}.json') return;
+          final target = '.volti/setlists/${s.id}.json';
+          final main = await remote.exists(target) ? _tryParseSetlist(await remote.readString(target)) : null;
+          if (main == null || s.modified.isAfter(main.modified)) {
+            await remote.writeString(target, const JsonEncoder.withIndent(' ').convert(s.toJson()));
+          }
+          await remote.delete(f);
+          report.conflictCopiesResolved++;
+        });
       }
     }
   }
