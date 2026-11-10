@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../library/folders.dart';
 import '../library/setlist.dart';
 import '../library/sidecar_store.dart';
 import 'sync_store.dart';
@@ -85,6 +86,8 @@ class SyncEngine {
     // jüngste Fassung gewinnt.
     bool isSetlist(String rel) =>
         rel.startsWith('.volti/setlists/') || rel == '.volti/presets.json' || rel == '.volti/stamps.json';
+    // Ordner der Bibliothek: pro Ordner zusammengeführt.
+    bool isFolders(String rel) => rel == FolderStore.file;
 
     // ---------------------------------------------------- Sicherheitsbremse
     final localPdfs = localFiles.where(isPdf).toSet();
@@ -99,11 +102,16 @@ class SyncEngine {
     final newBase = <String>{};
 
     // -------------------------------------------------- PDFs und Setlists
-    final whole = {...localFiles, ...remoteFiles, ...base}.where((r) => isPdf(r) || isSetlist(r) || isStampImage(r));
+    final whole = {
+      ...localFiles,
+      ...remoteFiles,
+      ...base,
+    }.where((r) => isPdf(r) || isSetlist(r) || isStampImage(r) || isFolders(r));
     for (final rel in whole) {
       final l = localFiles.contains(rel), r = remoteFiles.contains(rel), b = base.contains(rel);
       if (l && r) {
         if (isSetlist(rel)) await _syncSetlist(rel, report);
+        if (isFolders(rel)) await _syncFolders(rel, report);
         newBase.add(rel);
       } else if (l) {
         if (b) {
@@ -203,6 +211,30 @@ class SyncEngine {
     } else if (lm.isAfter(rm)) {
       await remote.writeString(rel, lj);
     }
+  }
+
+  /// Ordnerliste: pro Ordner gewinnt die jüngste Fassung.
+  Future<void> _syncFolders(String rel, SyncReport report) async {
+    final lj = await _local.readString(rel), rj = await remote.readString(rel);
+    if (lj == rj) return;
+    List<ScoreFolder> parse(String j) {
+      try {
+        return FolderStore.decode(j);
+      } catch (_) {
+        return [];
+      }
+    }
+
+    final l = parse(lj), r = parse(rj);
+    final merged = mergeFolders(l, r);
+    String key(List<ScoreFolder> f) => jsonEncode([for (final x in mergeFolders(f, const [])) x.toJson()]);
+    final m = key(merged);
+    final out = FolderStore.encode(merged);
+    if (key(l) != m) {
+      await _local.writeString(rel, out);
+      report.merged++;
+    }
+    if (key(r) != m) await remote.writeString(rel, out);
   }
 
   static DateTime? _modifiedOf(String json) {

@@ -22,7 +22,7 @@ lib/
     sync/         Abgleich mit einem Sync-Ziel (SyncEngine, SyncStore; heute Ordner, später evtl. Dropbox)
     app_settings.dart  Nur geräteeigene Einstellungen (zuletzt geöffnet)
   features/
-    library/      Bibliothek, Infos-Dialog, Setlists (LibraryController hält den Zustand)
+    library/      Bibliothek mit Ordnern und Mehrfachauswahl, Infos-Dialog, Setlists (LibraryController hält den Zustand)
     viewer/       Notenansicht (Spielansicht + Bearbeiten), Stift-Ebene, Text-Ebene, Werkzeug-Palette,
                   ToolController (Werkzeuge + Stift-Vorlagen app-weit, via ToolScope), Vollbild, Stift-Test
 assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
@@ -95,6 +95,17 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    - **PDF-Export** (`page_export.dart`, Paket `pdf`): Jede Seite wird so gerendert, wie sie angezeigt wird (`renderPageAsShown`: Zuschnitt, Geraderichten, Vierteldrehung) und mit allen eingeblendeten Anmerkungen bemalt (`paintAnnotations`: Leuchtstift multipliziert, dann die Ebenen der Reihe nach, zuletzt der Text). Daraus entsteht ein neues PDF mit einem Bild pro Seite (`buildExportPdf`, `pw.RawImage`, rund 1800 px breit). Das Original wird nie verändert. Den Dialog zeigt `showExportDialog`: Speichern unter, unter Android im Dokumente-Ordner; Zum Drucken öffnen öffnet die Datei mit dem Standardprogramm. `shownPages` beachtet auch Lesezeichen-Bereiche.
    - **Takte kopieren:** Das Lasso im Modus `ToolController.snippetMode` nimmt das Rechteck um die Linie als Bild auf (Seite + Anmerkungen) und speichert es als eigenen Stempel mit `snippet: true`. Solche Stempel erscheinen nicht im Tab „Eigene“, werden aber abgeglichen. Ein `Stamp` damit kommt in die Zwischenablage (`putOnClipboard`).
    - **Endlosband** (`reflow_screen.dart`, `core/pdf/systems.dart`): `findSystems` sucht zuerst Notenlinien (Zeilen, die über 45 % der Breite dunkel sind, mindestens 4 in gleichem Abstand). Durchgehende Taktstriche verbinden Systeme (Klavier). Geschnitten wird an der hellsten Zeile dazwischen. Ohne Notenlinien wird an weissen Lücken getrennt. Der Titel bekommt einen eigenen Streifen.
+
+16. **Ordner in der Bibliothek** (Wunsch des Besitzers): Ordner sind nur eine Liste (`ScoreFolder`, `Bibliothek/.volti/folders.json`, Format `volti-folders` v1). Die PDFs bleiben in `Noten/`, ein Stück zeigt über das Info-Feld `folder` (`ScoreMeta.folder`, Ordner-ID) auf seinen Ordner. Genau **ein** Ordner pro Stück (so gewünscht). Unterordner über `parent`.
+   Sync: pro Ordner gewinnt die jüngste Fassung, auch beim Löschen (`mergeFolders`), die Zuordnung läuft über die Infos (pro Feld). Gelöschte Ordner bleiben als Grabstein. Was darin lag, rutscht eine Ebene höher (`FolderTree.resolve`), so kann „Rückgängig“ alles zurückholen. Kreise (zwei Geräte verschieben gleichzeitig) werden abgefangen.
+   Oberste Ebene: Ordner, Eintrag „Alle Noten“, darunter nur Stücke ohne Ordner. Die Suche findet immer alles (mit Ordner-Schild auf der Kachel). Import landet im offenen Ordner. Ziehen auf Ordner oder Brotkrümel nur mit Maus/Stift (`PointerDraggable`), mit dem Finger über „In Ordner verschieben“.
+   **Mehrfachauswahl:** Knopf „Mehrere auswählen“ (bzw. im Kachel-Menü), dann Löschen, Verschieben, Zu Setlist, Als PDF für alle zusammen. Nicht über langes Drücken, das bleibt das Menü.
+
+17. **Zoom** (`zoom_area.dart`): zwei Finger, Strg + Mausrad, Touchpad, Strg +/−/0. Vergrössert verschiebt ein Finger die Seite, Wischen blättert dann nicht. Esc oder der Knopf „… %“ zeigt wieder die ganze Seite, Umblättern auch.
+   Während der Geste nur ein `Transform` (schnell). Danach (`PageZoom.renderScale`, halbe Schritte) werden Seite und Strich-Bilder mit höherem Pixelverhältnis neu gemacht (`_sharper`, MediaQuery mit grösserem `devicePixelRatio`), höchstens 4096 Punkte auf der längeren Seite. Der Aufbau um die Seite bleibt immer gleich, damit eine offene Text-Notiz beim Zoomen nicht zugeht.
+   **Handballen:** Solange der Stift schwebt oder schreibt (und 0,7 s danach), zoomen Finger nicht. Radierer-Grösse und Antipp-Schwelle rechnen mit `ToolController.viewScale`, damit sie auf dem Bildschirm gleich bleiben.
+
+18. **Bildschirmtastatur (Windows):** Windows zeigt sie bei Flutter nicht von selbst. `TouchKeyboard` (`lib/app/touch_keyboard.dart`) meldet über den Kanal `volti/keyboard`, wenn ein Textfeld mit Finger oder Stift angetippt wird. Der Runner (`flutter_window.cpp`, `SetTouchKeyboard`) zeigt sie über `IInputPaneInterop`/`IInputPane2::TryShow`, aber nur im Tablet-Modus (`SM_CONVERTIBLESLATEMODE` = 0, Tastatur ab oder umgeklappt). Mit der Maus oder angeschlossener Tastatur erscheint sie nie.
 
 ## Prüfen
 ```bash

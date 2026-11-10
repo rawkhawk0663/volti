@@ -30,6 +30,9 @@ class ScoreEntry {
   String? get genre => meta.text(ScoreMeta.genre);
   List<String> get tags => meta.tagList;
 
+  /// Ordner in der Bibliothek (siehe `FolderTree.resolve`; null = keiner).
+  String? get folderId => meta.text(ScoreMeta.folder);
+
   /// Unterordner innerhalb der Bibliothek ('' = oberste Ebene).
   String get folder {
     final d = p.dirname(relativePath);

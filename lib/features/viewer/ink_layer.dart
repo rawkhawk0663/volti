@@ -209,7 +209,7 @@ class _InkLayerState extends State<InkLayer> {
       _activeRepaint.value++;
       return;
     }
-    if (_provisional && (e.localPosition - _start).distance > kTouchSlop) {
+    if (_provisional && (e.localPosition - _start).distance * tools.viewScale > kTouchSlop) {
       _provisional = false;
       tools.isDrawing.value = true;
     }
@@ -565,7 +565,7 @@ class _InkLayerState extends State<InkLayer> {
   }
 
   /// Ganze Elemente: kleiner, fester Fangradius. Teilweise: gewählte Grösse.
-  double get eraserRadius => tools.eraserPartial ? tools.eraserRadius : 10;
+  double get eraserRadius => (tools.eraserPartial ? tools.eraserRadius : 10) / tools.viewScale;
 
   void _eraseAt(Offset pos, Size size) {
     final r = eraserRadius;

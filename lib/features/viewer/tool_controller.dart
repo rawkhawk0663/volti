@@ -320,6 +320,10 @@ class ToolController extends ChangeNotifier {
   /// Zeiger (Finger/Maus), die gerade das Lineal bewegen. Die Stift-Ebene
   /// zeichnet mit ihnen nicht, und ein Antippen blättert nicht um.
   final Set<int> rulerPointers = {};
+
+  /// Aktuelle Vergrösserung der Notenansicht (Zoom). Der Radierer bleibt so
+  /// auf dem Bildschirm gleich gross, und ein Antippen bleibt ein Antippen.
+  double viewScale = 1;
   DateTime _rulerTouched = DateTime(2000);
 
   void grabRuler(int pointer) {

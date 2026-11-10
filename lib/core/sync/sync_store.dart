@@ -32,7 +32,10 @@ bool isSyncedPath(String rel) {
   if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'setlists') return parts[2].endsWith('.json');
   // Bilder der eigenen Stempel
   if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'stamps') return parts[2].endsWith('.png');
-  return rel == '.volti/library.json' || rel == '.volti/presets.json' || rel == '.volti/stamps.json';
+  return rel == '.volti/library.json' ||
+      rel == '.volti/presets.json' ||
+      rel == '.volti/stamps.json' ||
+      rel == '.volti/folders.json';
 }
 
 /// Ein gewöhnlicher Ordner als Sync-Ziel.

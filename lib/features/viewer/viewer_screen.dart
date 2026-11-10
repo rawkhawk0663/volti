@@ -28,6 +28,7 @@ import 'ruler_overlay.dart';
 import 'text_layer.dart';
 import 'tool_controller.dart';
 import 'tool_palette.dart';
+import 'zoom_area.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
 class ViewerItem {
@@ -144,6 +145,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// Wird gerade die Doppelseite gezeigt? (Ergibt sich aus Fenster und Einstellung.)
   bool _twoUp = false;
 
+  /// Vergrösserung mit zwei Fingern (bzw. Strg + Mausrad).
+  final _zoom = PageZoom();
+
   final _diagnostics = PenDiagnostics();
   bool _showDiagnostics = false;
 
@@ -202,8 +206,17 @@ class _ViewerScreenState extends State<ViewerScreen> {
     super.initState();
     tools.setMode(ToolMode.read);
     tools.addListener(_onToolsChanged);
+    _zoom.renderScale.addListener(_onRenderScale);
+    _zoom.matrix.addListener(_onZoom);
     _ensureAround(_left.piece);
     _restartHideTimer();
+  }
+
+  void _onZoom() => tools.viewScale = _zoom.scale;
+
+  /// Nach dem Zoomen: Seiten in der neuen Grösse scharf rendern.
+  void _onRenderScale() {
+    if (mounted) setState(() {});
   }
 
   ToolMode? _lastMode;
@@ -301,6 +314,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void _show(PageSlot slot) {
     if (_half) setState(() => _half = false);
     if (slot == _left) return;
+    _zoom.reset();
     // Eine Auswahl auf einer Seite, die man nicht mehr sieht, wäre gefährlich
     // (z. B. Entf-Taste) – also aufheben. Die Zwischenablage bleibt.
     tools.clearSelection();
@@ -322,6 +336,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void dispose() {
     _hideTimer?.cancel();
     tools.removeListener(_onToolsChanged);
+    _zoom.renderScale.removeListener(_onRenderScale);
+    _zoom.matrix.removeListener(_onZoom);
+    _zoom.dispose();
+    tools.viewScale = 1;
     tools.setMode(ToolMode.read);
     if (_fullscreen) setAppFullscreen(false);
     for (final p in _pieces.values) {
@@ -501,6 +519,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// Vollbild von Hand: F11, Esc oder das Symbol in der Leiste.
   Future<void> _toggleFullscreen() => _setFullscreen(!_fullscreen);
 
+  /// Strg + Plus/Minus: um die Mitte vergrössern bzw. verkleinern.
+  void _zoomStep(double factor) {
+    final box = context.findRenderObject() as RenderBox?;
+    final size = box?.size ?? MediaQuery.sizeOf(context);
+    _zoom.zoomBy(factor, size.center(Offset.zero));
+  }
+
   void _toggleDiagnostics() => setState(() => _showDiagnostics = !_showDiagnostics);
 
   // ---------------------------------------------------------------- Tastatur
@@ -557,6 +582,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
       shift ? _activePiece.ink.redo() : _activePiece.ink.undo();
     } else if (ctrl && key == LogicalKeyboardKey.keyY) {
       _activePiece.ink.redo();
+    } else if (ctrl &&
+        (key == LogicalKeyboardKey.equal || key == LogicalKeyboardKey.add || key == LogicalKeyboardKey.numpadAdd)) {
+      _zoomStep(1.25);
+    } else if (ctrl && (key == LogicalKeyboardKey.minus || key == LogicalKeyboardKey.numpadSubtract)) {
+      _zoomStep(0.8);
+    } else if (ctrl && (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0)) {
+      _zoom.reset();
     } else if (down && key == LogicalKeyboardKey.f11) {
       _toggleFullscreen();
     } else if (down && key == LogicalKeyboardKey.keyP) {
@@ -584,6 +616,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
         tools.clearSelection();
       } else if (tools.editing) {
         tools.finishEditing();
+      } else if (_zoom.isZoomed) {
+        _zoom.reset();
       } else if (_fullscreen) {
         _toggleFullscreen();
       } else {
@@ -613,6 +647,27 @@ class _ViewerScreenState extends State<ViewerScreen> {
         body: Stack(
           children: [
             Positioned.fill(child: _buildPageArea()),
+            // Vergrössert: Anzeige und Knopf zurück auf die ganze Seite.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: showBars && _pageCount > 1 ? 76 : 16,
+              child: Center(
+                child: ValueListenableBuilder<Matrix4>(
+                  valueListenable: _zoom.matrix,
+                  builder: (context, _, _) => !_zoom.isZoomed
+                      ? const SizedBox.shrink()
+                      : ExcludeFocus(
+                          child: ActionChip(
+                            avatar: const Icon(Icons.fit_screen_outlined, size: 18),
+                            label: Text('${(_zoom.scale * 100).round()} %'),
+                            tooltip: 'Ganze Seite zeigen (Esc)',
+                            onPressed: _zoom.reset,
+                          ),
+                        ),
+                ),
+              ),
+            ),
             // Am Computer: Maus an den oberen Rand → Leiste erscheint.
             Positioned(
               top: 0,
@@ -720,7 +775,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
         onTapUp: reading ? _onTap : null,
         onHorizontalDragStart: reading ? (d) => _dragKind = d.kind : null,
         onHorizontalDragEnd: reading ? _onSwipe : null,
-        child: SafeArea(child: LayoutBuilder(builder: (context, box) => _buildPages(box))),
+        child: SafeArea(
+          child: ZoomArea(
+            zoom: _zoom,
+            tools: tools,
+            child: LayoutBuilder(builder: (context, box) => _buildPages(box)),
+          ),
+        ),
       ),
     );
   }
@@ -729,6 +790,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void _onTap(TapUpDetails d) {
     if (d.kind == PointerDeviceKind.invertedStylus) return;
     if (tools.rulerRecentlyUsed) return; // Finger war am Lineal
+    if (_zoom.recentlyMoved) return; // Finger hat gezoomt oder verschoben
     final width = MediaQuery.sizeOf(context).width;
     final x = d.globalPosition.dx / width;
     if (x < 0.3) {
@@ -743,6 +805,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void _onSwipe(DragEndDetails d) {
     // Mit dem Stift wird gezeichnet, nicht geblättert.
     if (_dragKind == PointerDeviceKind.stylus || _dragKind == PointerDeviceKind.invertedStylus) return;
+    // Vergrössert verschiebt der Finger die Seite, statt umzublättern.
+    if (_zoom.isZoomed || _zoom.recentlyMoved) return;
     final v = d.primaryVelocity ?? 0;
     if (v < -300) _next();
     if (v > 300) _prev();
@@ -876,7 +940,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
     // In 128-Pixel-Schritten rendern, damit nicht jede kleine
     // Fensteränderung ein neues Rendern auslöst. Bei einem Ausschnitt wird
     // die ganze Seite entsprechend grösser gerendert (bleibt scharf).
-    final pixelWidth = ((full.width * dpr / 128).ceil() * 128).clamp(128, 4096);
+    // Vergrössert: Seite und Anmerkungen in höherer Auflösung (scharf).
+    // Höchstens 4096 Punkte auf der längeren Seite (Speicher).
+    final zoomed = _zoom.renderScale.value;
+    final sharp = zoomed <= 1 ? 1.0 : math.max(1.0, math.min(zoomed, 4096 / (math.max(full.width, full.height) * dpr)));
+    final pixelWidth = ((full.width * dpr * sharp / 128).ceil() * 128).clamp(128, 4096);
     final key = '${slot.piece}/${slot.page}';
 
     // RepaintBoundary: Jede Ebene wird nur neu gemalt, wenn sie sich selbst
@@ -899,47 +967,66 @@ class _ViewerScreenState extends State<ViewerScreen> {
           child: CroppedPage(
             crop: crop,
             size: Size(w, h),
-            page: (_) => Stack(
-              fit: StackFit.expand,
-              children: [
-                const ColoredBox(color: Colors.white),
-                // Die Stift-Ebene malt auch die Notenseite: Seite, Leuchtstift und
-                // alle Ebenen werden dort zu einem einzigen Bild (schneller).
-                ListenableBuilder(
-                  listenable: cache,
-                  builder: (context, _) => InkLayer(
-                    key: ValueKey('ink/$key'),
-                    page: src,
-                    controller: piece.ink,
-                    tools: tools,
-                    pageImage: cache.imageFor(src, pixelWidth),
+            page: (_) => _sharper(
+              sharp,
+              Stack(
+                fit: StackFit.expand,
+                children: [
+                  const ColoredBox(color: Colors.white),
+                  // Die Stift-Ebene malt auch die Notenseite: Seite, Leuchtstift und
+                  // alle Ebenen werden dort zu einem einzigen Bild (schneller).
+                  ListenableBuilder(
+                    listenable: cache,
+                    builder: (context, _) => InkLayer(
+                      key: ValueKey('ink/$key'),
+                      page: src,
+                      controller: piece.ink,
+                      tools: tools,
+                      pageImage: cache.imageFor(src, pixelWidth),
+                    ),
                   ),
-                ),
-                RepaintBoundary(
-                  child: TextNotesLayer(
-                    key: ValueKey('text/$key'),
-                    page: src,
-                    controller: piece.ink,
-                    tools: tools,
-                    onEditingChanged: (v) => setState(() => _editingText = v),
+                  RepaintBoundary(
+                    child: TextNotesLayer(
+                      key: ValueKey('text/$key'),
+                      page: src,
+                      controller: piece.ink,
+                      tools: tools,
+                      onEditingChanged: (v) => setState(() => _editingText = v),
+                    ),
                   ),
-                ),
-                // Sprungmarken (blaue Punkte) und das Aufblinken am Ziel
-                RepaintBoundary(
-                  child: LinksLayer(
-                    key: ValueKey('links/$key'),
-                    page: src,
-                    controller: piece.ink,
-                    tools: tools,
-                    flash: _flash,
-                    onJump: (l) => _jump(slot.piece, l),
+                  // Sprungmarken (blaue Punkte) und das Aufblinken am Ziel
+                  RepaintBoundary(
+                    child: LinksLayer(
+                      key: ValueKey('links/$key'),
+                      page: src,
+                      controller: piece.ink,
+                      tools: tools,
+                      flash: _flash,
+                      onJump: (l) => _jump(slot.piece, l),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Bilder in [factor]-facher Auflösung (für den Zoom): Die Ebenen richten
+  /// sich nach dem Pixelverhältnis des Bildschirms.
+  /// Immer mit demselben Aufbau (auch bei 1), damit beim Zoomen nichts neu
+  /// entsteht – z. B. bleibt eine gerade getippte Text-Notiz offen.
+  static Widget _sharper(double factor, Widget child) {
+    return Builder(
+      builder: (context) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(devicePixelRatio: mq.devicePixelRatio * factor),
+          child: child,
+        );
+      },
     );
   }
 }

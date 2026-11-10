@@ -1,10 +1,50 @@
 #include "flutter_window.h"
 
+#include <flutter/standard_method_codec.h>
+#include <inputpaneinterop.h>
+#include <roapi.h>
+#include <windows.ui.viewmanagement.h>
+#include <wrl/client.h>
+#include <wrl/wrappers/corewrappers.h>
+
 #include <optional>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
 
 namespace {
+
+// Ist das Gerät gerade ein Tablet (Tastatur abgenommen oder umgeklappt)?
+// Wert von SM_CONVERTIBLESLATEMODE: 0 = Tablet.
+bool IsSlateMode() {
+  constexpr int kConvertibleSlateMode = 0x2003;
+  return ::GetSystemMetrics(kConvertibleSlateMode) == 0;
+}
+
+// Zeigt bzw. versteckt die Bildschirmtastatur von Windows (über die
+// dokumentierte InputPane-Schnittstelle). Gezeigt wird sie nur im
+// Tablet-Modus, also wenn keine Tastatur angeschlossen ist.
+bool SetTouchKeyboard(HWND hwnd, bool show) {
+  if (!hwnd || (show && !IsSlateMode())) return false;
+  using Microsoft::WRL::ComPtr;
+  namespace vm = ABI::Windows::UI::ViewManagement;
+  ComPtr<IInputPaneInterop> interop;
+  HRESULT hr = ::RoGetActivationFactory(
+      Microsoft::WRL::Wrappers::HStringReference(
+          RuntimeClass_Windows_UI_ViewManagement_InputPane)
+          .Get(),
+      IID_PPV_ARGS(&interop));
+  if (FAILED(hr)) return false;
+  ComPtr<vm::IInputPane> pane;
+  hr = interop->GetForWindow(hwnd, IID_PPV_ARGS(&pane));
+  if (FAILED(hr)) return false;
+  ComPtr<vm::IInputPane2> pane2;
+  hr = pane.As(&pane2);
+  if (FAILED(hr)) return false;
+  boolean done = false;
+  hr = show ? pane2->TryShow(&done) : pane2->TryHide(&done);
+  return SUCCEEDED(hr) && done;
+}
 
 // Schaltet die Windows-Komfortfunktionen für Stift und Touch ab, die eine
 // Zeichen-App ausbremsen: Kreise beim Antippen, "Gedrückt halten =
@@ -68,6 +108,26 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  // Bildschirmtastatur: Volti meldet, wann ein Textfeld angetippt wird.
+  keyboard_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "volti/keyboard",
+          &flutter::StandardMethodCodec::GetInstance());
+  keyboard_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        const std::string& name = call.method_name();
+        if (name == "show" || name == "hide") {
+          const bool ok = SetTouchKeyboard(GetHandle(), name == "show");
+          result->Success(flutter::EncodableValue(ok));
+        } else if (name == "isTablet") {
+          result->Success(flutter::EncodableValue(IsSlateMode()));
+        } else {
+          result->NotImplemented();
+        }
+      });
+
   // Stift-Verzögerungen von Windows abschalten (Hauptfenster und Inhalt).
   DisablePenDelays(GetHandle());
   DisablePenDelays(flutter_controller_->view()->GetNativeWindow());
@@ -85,6 +145,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  keyboard_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

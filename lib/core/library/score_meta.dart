@@ -17,6 +17,9 @@ class ScoreMeta {
   static const key = 'key';
   static const notes = 'notes';
 
+  /// Ordner in der Bibliothek (ID, leer = oberste Ebene).
+  static const folder = 'folder';
+
   Map<String, MetaValue> get fields => Map.unmodifiable(_fields);
 
   bool get isEmpty => _fields.isEmpty;

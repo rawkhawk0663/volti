@@ -56,10 +56,23 @@ class _ScoreThumbnailState extends State<ScoreThumbnail> {
 
 /// Kachel eines Stücks in der Bibliothek.
 class ScoreCard extends StatelessWidget {
-  const ScoreCard({super.key, required this.entry, required this.onOpen, required this.menuBuilder});
+  const ScoreCard({
+    super.key,
+    required this.entry,
+    required this.onOpen,
+    required this.menuBuilder,
+    this.selected,
+    this.folderName,
+  });
 
   final ScoreEntry entry;
   final VoidCallback onOpen;
+
+  /// Im Auswahl-Modus: angekreuzt oder nicht (null = kein Auswahl-Modus).
+  final bool? selected;
+
+  /// Ordner, in dem das Stück liegt (wird bei der Suche angezeigt).
+  final String? folderName;
   final List<PopupMenuEntry<VoidCallback>> Function(BuildContext) menuBuilder;
 
   @override
@@ -83,6 +96,51 @@ class ScoreCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   ScoreThumbnail(path: entry.path),
+                  if (selected == true) ColoredBox(color: theme.colorScheme.primary.withValues(alpha: 0.28)),
+                  if (selected != null)
+                    Positioned(
+                      left: 6,
+                      top: 6,
+                      child: Icon(
+                        selected! ? Icons.check_circle : Icons.radio_button_unchecked,
+                        size: 28,
+                        color: selected! ? theme.colorScheme.primary : Colors.black54,
+                        shadows: const [Shadow(color: Colors.white, blurRadius: 4)],
+                      ),
+                    ),
+                  if (folderName != null)
+                    Positioned(
+                      left: 6,
+                      right: 6,
+                      bottom: 6,
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.secondaryContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.folder_outlined, size: 13, color: theme.colorScheme.onSecondaryContainer),
+                              const SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  folderName!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSecondaryContainer,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   if (entry.hasAnnotations)
                     Positioned(
                       right: 6,

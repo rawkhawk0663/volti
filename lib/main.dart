@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import 'app/theme.dart';
+import 'app/touch_keyboard.dart';
 import 'core/app_settings.dart';
 import 'core/ink/custom_stamps.dart';
 import 'core/ink/tool_settings.dart';
@@ -18,6 +19,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await pdfrxFlutterInitialize();
   await initFullscreenSupport();
+  // Windows: Bildschirmtastatur beim Antippen von Textfeldern (Tablet-Modus).
+  TouchKeyboard.install();
   // Voltis eigener Datenordner für Noten, Infos, Anmerkungen und Setlists.
   final support = (await getApplicationSupportDirectory()).path;
   final settings = await AppSettings.load();

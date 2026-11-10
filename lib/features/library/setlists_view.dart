@@ -334,12 +334,23 @@ Future<void> addToSetlistDialog(
   ScoreEntry entry, {
   String? bookmark,
   String? label,
+}) => addManyToSetlistDialog(context, library, [entry], bookmark: bookmark, label: label);
+
+/// Ein oder mehrere Stücke (bzw. ein Lesezeichen) zu einer Setlist hinzufügen.
+Future<void> addManyToSetlistDialog(
+  BuildContext context,
+  LibraryController library,
+  List<ScoreEntry> entries, {
+  String? bookmark,
+  String? label,
 }) async {
+  if (entries.isEmpty) return;
   const newOne = '__neu__';
+  final what = entries.length == 1 ? '„${label ?? entries.first.title}“' : '${entries.length} Stücke';
   final choice = await showDialog<String>(
     context: context,
     builder: (c) => SimpleDialog(
-      title: Text('„${label ?? entry.title}“ hinzufügen zu …'),
+      title: Text('$what hinzufügen zu …'),
       children: [
         for (final s in library.setlists)
           SimpleDialogOption(onPressed: () => Navigator.pop(c, s.id), child: Text(s.name)),
@@ -360,9 +371,9 @@ Future<void> addToSetlistDialog(
     target = library.setlists.firstWhere((s) => s.id == choice);
   }
   if (bookmark != null) {
-    await library.addBookmarkToSetlist(target, entry, bookmark, label ?? entry.title);
+    await library.addBookmarkToSetlist(target, entries.first, bookmark, label ?? entries.first.title);
   } else {
-    await library.addToSetlist(target, [entry]);
+    await library.addToSetlist(target, entries);
   }
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Zu „${target.name}“ hinzugefügt')));
