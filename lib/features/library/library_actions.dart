@@ -228,8 +228,29 @@ class SyncButton extends StatelessWidget {
       context: context,
       builder: (c) => AlertDialog(
         title: Text(sync.partialFailure ? 'Nicht alles abgeglichen' : 'Abgleich nicht möglich'),
-        content: SizedBox(width: 460, child: Text(sync.error ?? '')),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(sync.error ?? ''),
+                if (sync.errorDetail != null) ...[
+                  const SizedBox(height: 12),
+                  // Genaue Meldung (zum Weitergeben, falls es weiter klemmt).
+                  SelectableText(
+                    'Genauer Grund: ${sync.errorDetail}',
+                    style: Theme.of(c).textTheme.bodySmall?.copyWith(color: Theme.of(c).colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
         actions: [
+          if (sync.cloudAccessDenied && Platform.isWindows)
+            TextButton(onPressed: sync.openCloudDownloadSettings, child: const Text('Windows-Einstellung öffnen')),
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('Schliessen')),
           FilledButton(
             onPressed: () {

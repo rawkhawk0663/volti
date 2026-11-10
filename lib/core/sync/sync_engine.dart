@@ -22,6 +22,17 @@ class SyncReport {
   /// Abgleich wieder dran; alles andere wurde trotzdem abgeglichen.
   final List<String> failed = [];
 
+  /// Fehlermeldung pro fehlgeschlagener Datei (für die Anzeige).
+  final Map<String, String> reasons = {};
+
+  /// Hat Windows den Zugriff auf Dateien im Cloud-Ordner verweigert?
+  /// (Fehler 395 – meist ist dann Volti unter „Automatische Dateidownloads“
+  /// blockiert, oder die Datei liegt noch nicht auf dem Gerät.)
+  bool get cloudAccessDenied => reasons.values.any(
+    (r) =>
+        r.contains('errno = 395') || r.toLowerCase().contains('clouddatei') || r.toLowerCase().contains('cloud file'),
+  );
+
   /// Hat sich auf diesem Gerät etwas geändert (Bibliothek neu einlesen)?
   bool get changedLocally => downloaded > 0 || deletedHere > 0 || merged > 0;
 
@@ -160,15 +171,18 @@ class SyncEngine {
   /// Mal. Scheitert es wieder, wird sie übersprungen (und beim nächsten
   /// Abgleich erneut versucht) – der Rest läuft weiter.
   Future<bool> _safely(String rel, SyncReport report, Future<void> Function() action) async {
+    Object? last;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
         await action();
         return true;
-      } catch (_) {
+      } catch (e) {
+        last = e;
         if (attempt == 0) await Future<void>.delayed(retryDelay);
       }
     }
     report.failed.add(rel);
+    report.reasons[rel] = '$last';
     return false;
   }
 

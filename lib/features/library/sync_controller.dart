@@ -93,6 +93,18 @@ class SyncController extends ChangeNotifier {
   /// Nur einzelne Dateien fehlten beim letzten Abgleich (der Rest ging).
   bool partialFailure = false;
 
+  /// Windows hat den Zugriff auf Dateien im Cloud-Ordner verweigert.
+  bool cloudAccessDenied = false;
+
+  /// Genaue Meldung von Windows zur ersten fehlgeschlagenen Datei.
+  String? errorDetail;
+
+  /// Öffnet unter Windows die Einstellung „Automatische Dateidownloads“.
+  Future<void> openCloudDownloadSettings() async {
+    if (!Platform.isWindows) return;
+    await Process.run('explorer.exe', ['ms-settings:privacy-automaticfiledownloads']);
+  }
+
   Future<void> syncNow() async {
     final f = folder;
     if (f == null) return;
@@ -108,17 +120,27 @@ class SyncController extends ChangeNotifier {
       lastSync = DateTime.now();
       error = null;
       partialFailure = false;
+      cloudAccessDenied = false;
+      errorDetail = null;
       _status = SyncStatus.idle;
       if (report.failed.isNotEmpty) {
         partialFailure = true;
+        cloudAccessDenied = report.cloudAccessDenied;
+        final first = report.reasons.entries.firstOrNull;
+        if (first != null) errorDetail = '${_describe(first.key)}: ${first.value}';
         // Das meiste ist abgeglichen; einzelne Dateien kommen beim nächsten Mal.
         final names = {for (final f in report.failed) _describe(f)}.toList();
         final list = names.take(5).join(', ') + (names.length > 5 ? ' …' : '');
         error =
             '${names.length == 1 ? 'Eine Datei konnte' : '${names.length} Dateien konnten'} diesmal nicht abgeglichen werden: '
-            '$list.\n\nAlles andere ist abgeglichen. Volti versucht es beim nächsten Abgleich automatisch nochmals. '
-            'Bleibt der Fehler, prüfe bitte, ob die Datei im Sync-Ordner vollständig heruntergeladen ist '
-            '(z. B. in Proton Drive „Immer auf diesem Gerät behalten“).';
+            '$list.\n\nAlles andere ist abgeglichen. Volti versucht es beim nächsten Abgleich automatisch nochmals.\n\n'
+            '${cloudAccessDenied ? 'Windows hat Volti den Zugriff auf diese Dateien im Cloud-Ordner verweigert. '
+                      'Meist hilft eines davon:\n'
+                      '1. In den Windows-Einstellungen unter „Automatische Dateidownloads“ Volti erlauben '
+                      '(Knopf unten).\n'
+                      '2. Im Explorer den Ordner „_Volti“ mit rechts anklicken → „Immer auf diesem Gerät behalten“ '
+                      'und warten, bis alle Dateien ein grünes Häkchen haben.' : 'Bleibt der Fehler, prüfe bitte, ob die Dateien im Sync-Ordner vollständig heruntergeladen sind '
+                      '(z. B. in Proton Drive „Immer auf diesem Gerät behalten“).'}';
         _status = SyncStatus.error;
       }
       if (report.changedLocally) {
@@ -127,6 +149,8 @@ class SyncController extends ChangeNotifier {
       }
     } catch (e) {
       partialFailure = false;
+      cloudAccessDenied = '$e'.contains('errno = 395');
+      errorDetail = null;
       error = e is SyncException ? e.message : 'Abgleich fehlgeschlagen: $e';
       _status = SyncStatus.error;
     } finally {
