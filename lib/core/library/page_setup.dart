@@ -90,15 +90,29 @@ class PageCrop {
 /// * [crops]: Zuschnitt pro PDF-Seite. Kommt eine Seite mehrfach vor, gilt
 ///   derselbe Zuschnitt – und dieselben Anmerkungen.
 ///
+/// * Leere Seiten (zum Beschriften, z. B. Notizen als Music Director) stehen
+///   als Nummern ab [blankBase] in [order]. Sie haben keine PDF-Seite; ihre
+///   Anmerkungen liegen unter dieser Nummer. [blanks] zählt, wie viele je
+///   angelegt wurden – so bekommt eine neue leere Seite nie die Nummer (und
+///   damit die Notizen) einer früheren.
+///
 /// Beim Sync gewinnt die jüngste Fassung als Ganzes ([modified]).
 class PageSetup {
-  const PageSetup({this.order, this.crops = const {}, this.modified});
+  const PageSetup({this.order, this.crops = const {}, this.modified, this.blanks = 0});
 
   final List<int>? order;
   final Map<int, PageCrop> crops;
   final DateTime? modified;
+  final int blanks;
 
   static const empty = PageSetup();
+
+  /// Ab dieser Nummer ist eine Seite eine leere Seite (keine PDF-Seite).
+  static const blankBase = 100000;
+  static bool isBlank(int page) => page > blankBase;
+
+  /// Seite, deren Grösse eine leere Seite übernimmt (die erste PDF-Seite).
+  static int sizeSource(int page) => isBlank(page) ? 1 : page;
 
   bool get isDefault => order == null && crops.values.every((c) => c.isNone);
 
@@ -108,7 +122,7 @@ class PageSetup {
     if (o == null) return [for (var i = 1; i <= pdfPages; i++) i];
     final valid = [
       for (final p in o)
-        if (p >= 1 && p <= pdfPages) p,
+        if ((p >= 1 && p <= pdfPages) || (isBlank(p) && p <= blankBase + blanks)) p,
     ];
     // Nie ganz leer: sonst gäbe es nichts zum Anzeigen.
     return valid.isEmpty ? [for (var i = 1; i <= pdfPages; i++) i] : valid;
@@ -117,8 +131,22 @@ class PageSetup {
   PageCrop cropOf(int pdfPage) => crops[pdfPage] ?? PageCrop.none;
 
   /// Neue Reihenfolge (null = wieder alle Seiten in PDF-Reihenfolge).
-  PageSetup withOrder(List<int>? order, {DateTime? now}) =>
-      PageSetup(order: order == null ? null : List.unmodifiable(order), crops: crops, modified: now ?? _now());
+  PageSetup withOrder(List<int>? order, {DateTime? now, int? blanks}) => PageSetup(
+    order: order == null ? null : List.unmodifiable(order),
+    crops: crops,
+    modified: now ?? _now(),
+    blanks: blanks ?? this.blanks,
+  );
+
+  /// Eine neue leere Seite an Stelle [index] (0-basiert, in der Anzeige-
+  /// Reihenfolge) einfügen. Gibt die neue Einrichtung und die Nummer der
+  /// leeren Seite zurück.
+  (PageSetup, int) withBlankAt(int index, int pdfPages, {DateTime? now}) {
+    final list = [...pages(pdfPages)];
+    final page = blankBase + blanks + 1;
+    list.insert(index.clamp(0, list.length), page);
+    return (withOrder(list, now: now, blanks: blanks + 1), page);
+  }
 
   PageSetup withCrop(int pdfPage, PageCrop crop, {DateTime? now}) {
     final map = Map<int, PageCrop>.of(crops);
@@ -127,11 +155,12 @@ class PageSetup {
     } else {
       map[pdfPage] = crop.normalized();
     }
-    return PageSetup(order: order, crops: Map.unmodifiable(map), modified: now ?? _now());
+    return PageSetup(order: order, crops: Map.unmodifiable(map), modified: now ?? _now(), blanks: blanks);
   }
 
   PageSetup withCrops(Map<int, PageCrop> all, {DateTime? now}) => PageSetup(
     order: order,
+    blanks: blanks,
     crops: Map.unmodifiable({
       for (final e in all.entries)
         if (!e.value.isNone) e.key: e.value.normalized(),
@@ -140,7 +169,7 @@ class PageSetup {
   );
 
   /// Alles zurück auf das PDF, wie es ist.
-  PageSetup reset({DateTime? now}) => PageSetup(modified: now ?? _now());
+  PageSetup reset({DateTime? now}) => PageSetup(modified: now ?? _now(), blanks: blanks);
 
   static DateTime _now() => DateTime.now().toUtc();
 
@@ -157,6 +186,7 @@ class PageSetup {
     return {
       if (order != null) 'order': order,
       if (crops.isNotEmpty) 'crops': {for (final e in crops.entries) '${e.key}': e.value.toJson()},
+      if (blanks > 0) 'blanks': blanks,
       'modified': modified!.toUtc().toIso8601String(),
     };
   }
@@ -173,6 +203,7 @@ class PageSetup {
       order: (j['order'] as List<dynamic>?)?.map((v) => v as int).toList(),
       crops: crops,
       modified: j['modified'] == null ? null : DateTime.parse(j['modified'] as String),
+      blanks: j['blanks'] as int? ?? 0,
     );
   }
 }

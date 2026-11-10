@@ -35,7 +35,8 @@ bool isSyncedPath(String rel) {
   return rel == '.volti/library.json' ||
       rel == '.volti/presets.json' ||
       rel == '.volti/stamps.json' ||
-      rel == '.volti/folders.json';
+      rel == '.volti/folders.json' ||
+      rel == '.volti/setlist-folders.json';
 }
 
 /// Ein gewöhnlicher Ordner als Sync-Ziel.
@@ -79,14 +80,23 @@ class FolderSyncStore implements SyncStore {
     // Erst vollständig schreiben, dann umbenennen: Der Cloud-Dienst sieht so
     // nie eine halbe Datei.
     final tmp = File('${target.path}.tmp');
-    final sink = tmp.openWrite();
+    IOSink? sink = tmp.openWrite();
     try {
       await sink.addStream(data);
       await sink.flush();
-    } finally {
       await sink.close();
+      sink = null;
+      await tmp.rename(target.path);
+    } catch (_) {
+      // Halbe Datei wegräumen; der ursprüngliche Fehler zählt.
+      try {
+        await sink?.close();
+      } catch (_) {}
+      try {
+        if (await tmp.exists()) await tmp.delete();
+      } catch (_) {}
+      rethrow;
     }
-    await tmp.rename(target.path);
   }
 
   @override

@@ -78,6 +78,9 @@ class SyncController extends ChangeNotifier {
     _debounce = Timer(const Duration(seconds: 4), syncNow);
   }
 
+  /// Nur einzelne Dateien fehlten beim letzten Abgleich (der Rest ging).
+  bool partialFailure = false;
+
   Future<void> syncNow() async {
     final f = folder;
     if (f == null) return;
@@ -92,12 +95,26 @@ class SyncController extends ChangeNotifier {
       final report = await SyncEngine(localRoot: library.root, remote: FolderSyncStore(f), baseFile: _baseFile).run();
       lastSync = DateTime.now();
       error = null;
+      partialFailure = false;
       _status = SyncStatus.idle;
+      if (report.failed.isNotEmpty) {
+        partialFailure = true;
+        // Das meiste ist abgeglichen; einzelne Dateien kommen beim nächsten Mal.
+        final names = {for (final f in report.failed) p.basename(f).replaceAll(RegExp(r'\.volti\.json$'), '')}.toList();
+        final list = names.take(5).join(', ') + (names.length > 5 ? ' …' : '');
+        error =
+            '${names.length == 1 ? 'Eine Datei konnte' : '${names.length} Dateien konnten'} diesmal nicht abgeglichen werden: '
+            '$list.\n\nAlles andere ist abgeglichen. Volti versucht es beim nächsten Abgleich automatisch nochmals. '
+            'Bleibt der Fehler, prüfe bitte, ob die Datei im Sync-Ordner vollständig heruntergeladen ist '
+            '(z. B. in Proton Drive „Immer auf diesem Gerät behalten“).';
+        _status = SyncStatus.error;
+      }
       if (report.changedLocally) {
         await library.rescan();
         await afterDownload?.call();
       }
     } catch (e) {
+      partialFailure = false;
       error = e is SyncException ? e.message : 'Abgleich fehlgeschlagen: $e';
       _status = SyncStatus.error;
     } finally {

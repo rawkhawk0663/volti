@@ -14,6 +14,8 @@ Future<void> showSettingsDialog(
   VoidCallback? onStopSync,
   String? dataFolder,
   VoidCallback? onOpenDataFolder,
+  VoidCallback? onCreateBackup,
+  VoidCallback? onRestoreBackup,
 }) {
   final tools = ToolScope.read(context);
   return showDialog<void>(
@@ -25,6 +27,8 @@ Future<void> showSettingsDialog(
       onStopSync: onStopSync,
       dataFolder: dataFolder,
       onOpenDataFolder: onOpenDataFolder,
+      onCreateBackup: onCreateBackup,
+      onRestoreBackup: onRestoreBackup,
     ),
   );
 }
@@ -37,11 +41,13 @@ class _SettingsDialog extends StatelessWidget {
     this.onStopSync,
     this.dataFolder,
     this.onOpenDataFolder,
+    this.onCreateBackup,
+    this.onRestoreBackup,
   });
 
   final ToolController tools;
   final SyncController? sync;
-  final VoidCallback? onSetupSync, onStopSync, onOpenDataFolder;
+  final VoidCallback? onSetupSync, onStopSync, onOpenDataFolder, onCreateBackup, onRestoreBackup;
   final String? dataFolder;
 
   @override
@@ -141,6 +147,39 @@ class _SettingsDialog extends StatelessWidget {
                       value: tools.paletteLeft,
                       onChanged: (_) => tools.togglePaletteSide(),
                     ),
+                    if (onCreateBackup != null) ...[
+                      const _Section('Sicherung'),
+                      Text(
+                        'Alle Noten mit Infos und Anmerkungen, Setlists, Ordnern, eigenen Stempeln und '
+                        'Stift-Vorlagen in einer einzigen Datei. Beim Einspielen wird nichts gelöscht oder '
+                        'überschrieben: Was fehlt, kommt dazu, Anmerkungen werden zusammengeführt.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilledButton.tonalIcon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              onCreateBackup!();
+                            },
+                            icon: const Icon(Icons.save_alt),
+                            label: const Text('Sicherung erstellen …'),
+                          ),
+                          if (onRestoreBackup != null)
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                onRestoreBackup!();
+                              },
+                              icon: const Icon(Icons.restore),
+                              label: const Text('Sicherung einspielen …'),
+                            ),
+                        ],
+                      ),
+                    ],
                     if (sync != null) ..._syncSection(context, sync!),
                     if (dataFolder != null) ...[
                       const _Section('Datenordner'),

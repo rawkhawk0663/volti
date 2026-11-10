@@ -150,13 +150,18 @@ class FolderTree {
   }
 }
 
-/// Liest und schreibt `Bibliothek/.volti/folders.json` (Format
-/// `volti-folders` v1).
+/// Liest und schreibt `Bibliothek/.volti/folders.json` bzw.
+/// `.volti/setlist-folders.json` (Format `volti-folders` v1).
 class FolderStore {
-  FolderStore(this.libraryRoot);
+  FolderStore(this.libraryRoot, {this.file = scoresFile});
   final String libraryRoot;
 
-  static const file = '.volti/folders.json';
+  /// Ordner der Bibliothek bzw. der Setlists (zwei getrennte Bäume).
+  static const scoresFile = '.volti/folders.json';
+  static const setlistsFile = '.volti/setlist-folders.json';
+  static const files = {scoresFile, setlistsFile};
+
+  final String file;
 
   File get _file => File(p.joinAll([libraryRoot, ...file.split('/')]));
 

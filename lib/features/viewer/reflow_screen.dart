@@ -51,6 +51,11 @@ class _ReflowScreenState extends State<_ReflowScreen> {
   Future<void> _prepare() async {
     final p = widget.piece;
     for (final page in p.pages) {
+      if (PageSetup.isBlank(page)) {
+        // Leere Seiten haben keine Notenzeilen.
+        if (mounted) setState(() => _done++);
+        continue;
+      }
       final img = await renderPageAsShown(p.doc, p.annotations, p.setup.cropOf(page), page, width: 1400);
       if (_disposed) {
         img?.dispose();

@@ -29,6 +29,9 @@ import 'text_layer.dart';
 import 'tool_controller.dart';
 import 'tool_palette.dart';
 import 'zoom_area.dart';
+import 'metronome.dart';
+import 'metronome_panel.dart';
+import '../../core/library/score_meta.dart';
 import '../library/settings_dialog.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
@@ -92,6 +95,17 @@ class _Piece {
   /// Reihenfolge und Zuschnitt der Seiten (das PDF bleibt unverändert).
   PageSetup setup = PageSetup.empty;
 
+  /// Infos des Stücks (z. B. Tempo fürs Metronom).
+  ScoreMeta meta = ScoreMeta();
+
+  int? _int(String field) {
+    final v = meta.fields[field]?.value;
+    return v is num && v > 0 ? v.round() : null;
+  }
+
+  int? get tempo => _int(ScoreMeta.tempo);
+  int? get beats => _int(ScoreMeta.beats);
+
   /// Angezeigte Seiten als PDF-Seitennummern.
   /// Angezeigte Seiten – bei einem Lesezeichen nur dessen Bereich.
   List<int> get _shown => shownPages(setup, cache?.pageCount ?? 0, ink.annotations, item.bookmark);
@@ -111,6 +125,14 @@ class _Piece {
 
   PageCrop crop(int display) => setup.cropOf(source(display));
 
+  /// Position (0-basiert) der angezeigten Seite [display] in der ganzen
+  /// Reihenfolge – bei einem Lesezeichen liegt sein Bereich mittendrin.
+  int fullIndex(int display) {
+    final shown = _shown;
+    if (shown.isEmpty) return display - 1;
+    return allShown.indexOf(shown.first) + (display - 1).clamp(0, shown.length - 1);
+  }
+
   /// Seitenverhältnis der angezeigten Seite (nach Zuschnitt und Drehung).
   double aspect(int display) => crop(display).displayAspect(cache!.aspectRatio(source(display)));
 
@@ -118,7 +140,9 @@ class _Piece {
     try {
       final d = await PdfDocument.openFile(item.path);
       await ink.load();
-      setup = (await const SidecarStore().load(item.path)).pages;
+      final side = await const SidecarStore().load(item.path);
+      setup = side.pages;
+      meta = side.meta;
       doc = d;
       cache = PageImageCache(d);
     } catch (e) {
@@ -148,6 +172,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// Vergrösserung mit zwei Fingern (bzw. Strg + Mausrad).
   final _zoom = PageZoom();
+
+  /// Metronom: Tempo aus den Infos des Stücks, jederzeit anpassbar.
+  final _metronome = Metronome();
+  bool _metronomeOpen = false;
+  int? _metronomePiece;
 
   final _diagnostics = PenDiagnostics();
   bool _showDiagnostics = false;
@@ -207,7 +236,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     super.initState();
     tools.setMode(ToolMode.read);
     tools.addListener(_onToolsChanged);
-    _zoom.renderScale.addListener(_onRenderScale);
+    _zoom.settled.addListener(_onRenderScale);
     _zoom.matrix.addListener(_onZoom);
     _ensureAround(_left.piece);
     _restartHideTimer();
@@ -245,7 +274,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   Future<_Piece> _ensure(int i) {
     final p = _pieces.putIfAbsent(i, () => _Piece(widget.items[i]));
     return p.ready.then((_) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+        if (i == _left.piece) _adoptTempo();
+      }
       return p;
     });
   }
@@ -276,6 +308,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
     tools.clearSelection();
     final result = await showPageSetup(context, doc: doc, setup: piece.setup, title: piece.item.title);
     if (result == null || !mounted) return;
+    await _applySetup(index, result);
+  }
+
+  /// Neue Seiten-Einrichtung eines Stücks zeigen und speichern.
+  Future<void> _applySetup(int index, PageSetup result) async {
+    final piece = _pieces[index];
+    if (piece == null) return;
     setState(() {
       piece.setup = result;
       _activeSlot = null;
@@ -289,6 +328,65 @@ class _ViewerScreenState extends State<ViewerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
       }
     }
+  }
+
+  /// Ist die zuletzt berührte Seite eine leere Seite?
+  bool get _onBlankPage {
+    final slot = _activeSlot ?? _left;
+    final piece = _pieces[slot.piece];
+    return piece?.cache != null && PageSetup.isBlank(piece!.source(slot.page));
+  }
+
+  /// Nach der zuletzt berührten Seite eine leere Seite für Notizen einfügen
+  /// (das PDF bleibt unverändert) und gleich hinblättern.
+  Future<void> _insertBlank() async {
+    final slot = _activeSlot ?? _left;
+    final piece = _pieces[slot.piece];
+    final cache = piece?.cache;
+    if (piece == null || cache == null) return;
+    tools.clearSelection();
+    final before = piece.setup;
+    final (next, _) = before.withBlankAt(piece.fullIndex(slot.page) + 1, cache.pageCount);
+    await _applySetup(slot.piece, next);
+    if (!mounted) return;
+    _show(PageSlot(slot.piece, (slot.page + 1).clamp(1, piece.pageCount ?? 1)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        persist: false,
+        duration: const Duration(seconds: 6),
+        content: const Text('Leere Seite eingefügt'),
+        action: SnackBarAction(
+          label: 'Rückgängig',
+          // Den Zähler behalten: eine spätere leere Seite bekommt nie dieselbe Nummer.
+          onPressed: () => _applySetup(slot.piece, before.withOrder(before.order, blanks: next.blanks)),
+        ),
+      ),
+    );
+  }
+
+  /// Die zuletzt berührte leere Seite entfernen (mit Rückgängig).
+  Future<void> _removeBlank() async {
+    final slot = _activeSlot ?? _left;
+    final piece = _pieces[slot.piece];
+    final cache = piece?.cache;
+    if (piece == null || cache == null || !PageSetup.isBlank(piece.source(slot.page))) return;
+    if (piece.allShown.length <= 1) return;
+    tools.clearSelection();
+    final before = piece.setup;
+    final list = [...piece.allShown]..removeAt(piece.fullIndex(slot.page));
+    await _applySetup(slot.piece, before.withOrder(list));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        persist: false,
+        duration: const Duration(seconds: 6),
+        content: const Text('Leere Seite entfernt'),
+        action: SnackBarAction(
+          label: 'Rückgängig',
+          onPressed: () => _applySetup(slot.piece, before.withOrder(before.order)),
+        ),
+      ),
+    );
   }
 
   /// Alles auf der zuletzt berührten Seite auswählen (Strg+A).
@@ -324,6 +422,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
       _activeSlot = null;
     });
     _ensureAround(slot.piece);
+    // Nächster Song in der Setlist: sein Tempo (läuft das Metronom, gleich hörbar).
+    _adoptTempo();
   }
 
   void _reportOpened() {
@@ -337,9 +437,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void dispose() {
     _hideTimer?.cancel();
     tools.removeListener(_onToolsChanged);
-    _zoom.renderScale.removeListener(_onRenderScale);
+    _zoom.settled.removeListener(_onRenderScale);
     _zoom.matrix.removeListener(_onZoom);
     _zoom.dispose();
+    _metronome.dispose();
     tools.viewScale = 1;
     tools.setMode(ToolMode.read);
     if (_fullscreen) setAppFullscreen(false);
@@ -528,6 +629,41 @@ class _ViewerScreenState extends State<ViewerScreen> {
     _zoom.zoomBy(factor, size.center(Offset.zero));
   }
 
+  /// Kommt ein anderes Stück dran, sein Tempo übernehmen (falls eingetragen).
+  void _adoptTempo() {
+    final p = _leftPiece;
+    if (p == null || p.cache == null || _metronomePiece == _left.piece) return;
+    _metronomePiece = _left.piece;
+    _metronome.adopt(bpm: p.tempo, beats: p.beats);
+  }
+
+  void _toggleMetronome() {
+    _adoptTempo();
+    setState(() => _metronomeOpen = !_metronomeOpen);
+  }
+
+  /// Eingestelltes Tempo und Taktart in den Infos des Stücks speichern.
+  Future<void> _rememberTempo() async {
+    final p = _leftPiece;
+    if (p == null) return;
+    final meta = ScoreMeta(p.meta.fields)
+      ..set(ScoreMeta.tempo, _metronome.bpm)
+      ..set(ScoreMeta.beats, _metronome.beats);
+    try {
+      final saved = await const SidecarStore().save(p.item.path, meta: meta);
+      p.meta = saved.meta;
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${_metronome.bpm} BPM bei „${p.item.title}“ gespeichert')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
+      }
+    }
+  }
+
   void _toggleDiagnostics() => setState(() => _showDiagnostics = !_showDiagnostics);
 
   // ---------------------------------------------------------------- Tastatur
@@ -609,6 +745,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
       tools.setMode(ToolMode.link);
     } else if (down && !ctrl && key == LogicalKeyboardKey.keyA) {
       tools.setMode(ToolMode.lasso);
+    } else if (down && key == LogicalKeyboardKey.keyM) {
+      _adoptTempo();
+      _metronome.toggle();
     } else if (down && key == LogicalKeyboardKey.keyL) {
       tools.toggleRuler();
     } else if (down && _digits.contains(key)) {
@@ -733,6 +872,22 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     onPressed: _jumpBack,
                     icon: const Icon(Icons.undo),
                     label: const Text('Zurück'),
+                  ),
+                ),
+              ),
+            if (_metronomeOpen)
+              Positioned(
+                right: 12,
+                top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
+                child: ExcludeFocus(
+                  child: RepaintBoundary(
+                    child: MetronomePanel(
+                      metronome: _metronome,
+                      onClose: () => setState(() => _metronomeOpen = false),
+                      onRemember: _leftPiece?.cache == null ? null : _rememberTempo,
+                      songTempo: _leftPiece?.tempo,
+                      songTitle: _leftPiece?.item.title,
+                    ),
                   ),
                 ),
               ),
@@ -884,13 +1039,23 @@ class _ViewerScreenState extends State<ViewerScreen> {
       c.preload([p.source(s.page)], ((full.width * dpr / 128).ceil() * 128).clamp(128, 4096));
     }
 
+    // Vergrössert: nur sichtbare Seiten scharf rendern (Speicher und Zeit).
+    final view = _zoom.visibleContent;
+    final rowW = aspects.fold<double>(0, (a, b) => a + b * h) + gaps;
+    var x = (box.maxWidth - rowW) / 2;
+    final top = (box.maxHeight - h) / 2;
+    final visible = <bool>[];
+    for (final a in aspects) {
+      visible.add(!_zoom.isZoomed || Rect.fromLTWH(x, top, a * h, h).overlaps(view));
+      x += a * h + gap;
+    }
     return Center(
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           for (final (i, s) in slots.indexed) ...[
             if (i > 0) const SizedBox(width: gap),
-            _buildPage(s, h * aspects[i], h, dpr),
+            _buildPage(s, h * aspects[i], h, dpr, sharpen: visible[i]),
           ],
         ],
       ),
@@ -939,7 +1104,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     );
   }
 
-  Widget _buildPage(PageSlot slot, double w, double h, double dpr) {
+  Widget _buildPage(PageSlot slot, double w, double h, double dpr, {bool sharpen = true}) {
     final piece = _pieces[slot.piece];
     final cache = piece?.cache;
     if (piece == null || cache == null) {
@@ -967,7 +1132,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     // die ganze Seite entsprechend grösser gerendert (bleibt scharf).
     // Vergrössert: Seite und Anmerkungen in höherer Auflösung (scharf).
     // Höchstens 4096 Punkte auf der längeren Seite (Speicher).
-    final zoomed = _zoom.renderScale.value;
+    final zoomed = sharpen ? _zoom.renderScale.value : 1.0;
     final sharp = zoomed <= 1 ? 1.0 : math.max(1.0, math.min(zoomed, 4096 / (math.max(full.width, full.height) * dpr)));
     final pixelWidth = ((full.width * dpr * sharp / 128).ceil() * 128).clamp(128, 4096);
     final key = '${slot.piece}/${slot.page}';
@@ -1118,6 +1283,17 @@ class _TopBar extends StatelessWidget {
                     icon: const Icon(Icons.edit),
                     label: const Text('Bearbeiten'),
                   ),
+                  ListenableBuilder(
+                    listenable: state._metronome,
+                    builder: (context, _) => IconButton(
+                      tooltip: 'Metronom (M)',
+                      isSelected: state._metronomeOpen || state._metronome.running,
+                      icon: MetronomeIcon(
+                        color: state._metronome.running ? Theme.of(context).colorScheme.primary : null,
+                      ),
+                      onPressed: state._toggleMetronome,
+                    ),
+                  ),
                   IconButton(
                     tooltip: 'Als PDF teilen oder drucken',
                     icon: const Icon(Icons.ios_share),
@@ -1155,6 +1331,23 @@ class _TopBar extends StatelessWidget {
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
+                      PopupMenuItem(
+                        value: state._insertBlank,
+                        child: const ListTile(
+                          leading: Icon(Icons.note_add_outlined),
+                          title: Text('Leere Seite einfügen (für Notizen)'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      if (state._onBlankPage)
+                        PopupMenuItem(
+                          value: state._removeBlank,
+                          child: const ListTile(
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Diese leere Seite entfernen'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
                       PopupMenuItem(
                         value: state._editPages,
                         child: const ListTile(

@@ -22,6 +22,18 @@ class PageZoom {
   /// gerade gemacht sind (in halben Schritten, erst nach der Geste).
   final ValueNotifier<double> renderScale = ValueNotifier(1);
 
+  /// Zählt hoch, wenn eine Geste zur Ruhe gekommen ist (dann wird geprüft,
+  /// welche Seiten sichtbar sind und scharf gerendert werden sollen).
+  final ValueNotifier<int> settled = ValueNotifier(0);
+
+  /// Sichtbarer Bereich in Koordinaten der (unvergrösserten) Fläche.
+  Rect get visibleContent => Rect.fromLTWH(
+    -_offset.dx / _scale,
+    -_offset.dy / _scale,
+    _area.width / _scale,
+    _area.height / _scale,
+  );
+
   double _scale = 1;
   Offset _offset = Offset.zero;
   Size _area = Size.zero;
@@ -75,6 +87,7 @@ class PageZoom {
       matrix.value = Matrix4.identity();
     }
     renderScale.value = 1;
+    settled.value++;
   }
 
   void _scheduleSharpen() {
@@ -83,6 +96,7 @@ class PageZoom {
       // In halben Schritten, damit nicht jede kleine Änderung neu rendert.
       final target = isZoomed ? ((_scale * 2).ceil() / 2).clamp(1.0, maxScale) : 1.0;
       renderScale.value = target;
+      settled.value++;
     });
   }
 
@@ -90,6 +104,7 @@ class PageZoom {
     _sharpen?.cancel();
     matrix.dispose();
     renderScale.dispose();
+    settled.dispose();
   }
 }
 

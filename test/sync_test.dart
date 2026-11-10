@@ -185,4 +185,55 @@ void main() {
     final r = await surface.sync();
     expect([r.uploaded, r.downloaded, r.merged, r.deletedHere, r.deletedThere], [0, 0, 0, 0, 0]);
   });
+
+  test('Eine Datei, die sich nicht lesen lässt, hält den übrigen Abgleich nicht auf', () async {
+    await importOn(desktop, 'Kaputt.pdf', '%PDF-1.4 a');
+    await importOn(desktop, 'Gut.pdf', '%PDF-1.4 b');
+    await desktop.sync();
+    final flaky = _FailingStore(FolderSyncStore(cloud), 'Noten/Kaputt.pdf');
+    final engine = SyncEngine(
+      localRoot: surface.root,
+      remote: flaky,
+      baseFile: File(p.join(surface.dir.path, 'sync_base.json')),
+    )..retryDelay = Duration.zero;
+    final report = await engine.run();
+    expect(report.failed, ['Noten/Kaputt.pdf']);
+    expect(surface.has('Gut.pdf'), isTrue);
+    expect(surface.has('Kaputt.pdf'), isFalse);
+    expect(File('${surface.pdfPath('Kaputt.pdf')}.tmp').existsSync(), isFalse, reason: 'keine halbe Datei');
+    // Beim nächsten Mal klappt es – und nichts wurde fälschlich gelöscht.
+    final again = await surface.sync();
+    expect(again.failed, isEmpty);
+    expect(surface.has('Kaputt.pdf'), isTrue);
+    expect(File(p.join(cloud, 'Noten', 'Kaputt.pdf')).existsSync(), isTrue);
+  });
+}
+
+/// Sync-Ziel, bei dem das Lesen einer Datei mittendrin abbricht.
+class _FailingStore implements SyncStore {
+  _FailingStore(this.inner, this.broken);
+  final SyncStore inner;
+  final String broken;
+
+  @override
+  Future<Set<String>> list() => inner.list();
+  @override
+  Future<bool> exists(String rel) => inner.exists(rel);
+  @override
+  Future<String> readString(String rel) => inner.readString(rel);
+  @override
+  Stream<List<int>> openRead(String rel) async* {
+    if (rel == broken) {
+      yield [1, 2, 3];
+      throw const FileSystemException('Der Cloudvorgang war nicht erfolgreich');
+    }
+    yield* inner.openRead(rel);
+  }
+
+  @override
+  Future<void> writeString(String rel, String content) => inner.writeString(rel, content);
+  @override
+  Future<void> writeStream(String rel, Stream<List<int>> data) => inner.writeStream(rel, data);
+  @override
+  Future<void> delete(String rel) => inner.delete(rel);
 }

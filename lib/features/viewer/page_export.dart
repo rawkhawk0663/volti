@@ -107,31 +107,36 @@ Future<ui.Image?> renderPageAsShown(
   int page, {
   int width = 1800,
 }) async {
-  final p = doc.pages[page - 1];
+  final p = doc.pages[PageSetup.sizeSource(page) - 1];
   final aspect = p.width / p.height;
   // Breite der ganzen Seite, so dass die fertige Seite [width] breit wird
   // (bei Vierteldrehung ist die Breite die Höhe des Ausschnitts).
   final fullW = (crop.quarterTurns.isOdd ? width * aspect / crop.height : width / crop.width).clamp(400, 4096).round();
   final fullH = (fullW / aspect).round();
-  final pageImg = await p.renderForDisplay(
-    width: fullW,
-    height: fullH,
-    fullWidth: fullW.toDouble(),
-    fullHeight: fullH.toDouble(),
-    backgroundColor: 0xFFFFFFFF,
-  );
-  if (pageImg == null) return null;
+  // Leere Seite (zum Beschriften): einfach weiss.
+  final blank = PageSetup.isBlank(page);
+  final pageImg = blank
+      ? null
+      : await p.renderForDisplay(
+          width: fullW,
+          height: fullH,
+          fullWidth: fullW.toDouble(),
+          fullHeight: fullH.toDouble(),
+          backgroundColor: 0xFFFFFFFF,
+        );
+  if (pageImg == null && !blank) return null;
   final full = Size(fullW.toDouble(), fullH.toDouble());
 
   // Ganze Seite mit Anmerkungen
   final r1 = ui.PictureRecorder();
   final c1 = Canvas(r1);
-  c1.drawImage(pageImg, Offset.zero, Paint());
+  c1.drawRect(Offset.zero & full, Paint()..color = const Color(0xFFFFFFFF));
+  if (pageImg != null) c1.drawImage(pageImg, Offset.zero, Paint());
   if (annotations != null) paintAnnotations(c1, full, annotations, page);
   final pic1 = r1.endRecording();
   final annotated = await pic1.toImage(fullW, fullH);
   pic1.dispose();
-  pageImg.dispose();
+  pageImg?.dispose();
   if (crop.isNone) return annotated;
 
   // Zuschnitt, Geraderichten, Drehung – wie in der Notenansicht (CroppedPage).
@@ -176,7 +181,7 @@ Future<Uint8List> buildExportPdf(
       if (img != null) {
         final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
         // Seitengrösse in Punkten wie im Original (mit Zuschnitt und Drehung).
-        final p = piece.doc.pages[page - 1];
+        final p = piece.doc.pages[PageSetup.sizeSource(page) - 1];
         final w = p.width * crop.width, h = p.height * crop.height;
         final format = crop.quarterTurns.isOdd ? PdfPageFormat(h, w) : PdfPageFormat(w, h);
         final raw = pw.RawImage(bytes: data!.buffer.asUint8List(), width: img.width, height: img.height);

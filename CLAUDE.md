@@ -113,6 +113,19 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 20. **Tonart** (`ScoreEntry.musicalKey`, Info-Feld `key`) ist überall gut sichtbar (`KeyBadge`): Kachel, Setlist, Auswahl beim Hinzufügen. Wichtig für den Besitzer (Freikirche: viele Lieder in mehreren Tonarten). Gleiche Titel werden nach Tonart geordnet, die Suche findet auch die Tonart. Die Auswahl „Stücke hinzufügen“ zeigt die Ordner zum Durchklicken (wie die Bibliothek).
 
+21. **Leere Seiten und Notizblätter** (Wunsch des Besitzers, „mega Muss“, für Notizen als Music Director): Leere Seiten sind Nummern ab `PageSetup.blankBase` in `PageSetup.order`, ohne PDF-Seite. `PageSetup.blanks` zählt hoch, damit eine neue leere Seite nie die Nummer (und Notizen) einer früheren bekommt. Grösse wie PDF-Seite 1 (`sizeSource`), der Seiten-Cache liefert ein weisses Bild, Export und Endlosband kennen sie. Einfügen: ⋮ → „Leere Seite einfügen“ (nach der zuletzt berührten Seite, mit Rückgängig) oder in „Seiten anordnen“.
+   **Notizblatt** in einer Setlist: ein erzeugtes leeres A4-PDF in `Noten/Notizblatt-<id>.pdf` mit Info `sheet: true` (`createSheet`). So läuft alles (Anmerkungen, Sync) wie bei einem Stück. Es erscheint nicht in der Bibliothek (`LibraryController.scores` blendet es aus) und wird gelöscht, wenn es aus der letzten Setlist entfernt wird (`removeFromSetlist`).
+
+22. **Metronom** (`metronome.dart`, `metronome_panel.dart`, Knopf oben in der Notenansicht, Taste M): `flutter_soloud` (Ton über einen Build-Hook, nichts im Runner nötig). Genau im Takt, weil **ein ganzer Takt** als WAV erzeugt und als Schleife gespielt wird (`buildBar`), die Eins heller. Klänge: Weich (Standard, eigener Klang in der Art von MultiTracks, deren Aufnahme wird *nicht* verwendet), Holzblock, Piep. Tempo und Taktart stehen in den Infos (`ScoreMeta.tempo`, `beats`, im Infos-Dialog), beim nächsten Song wird es übernommen (`_adoptTempo`) und bleibt anpassbar (Regler, ±1/±5, Tippen). „Speichern“ legt das Tempo beim Stück ab.
+
+23. **Sicherung** (`core/library/backup.dart`, im Einstellungsfenster): ZIP aller Sync-Dateien plus `volti-sicherung.json`. Einspielen läuft als Abgleich mit der ausgepackten Sicherung (eigene leere Basis, nur lesen): Es kommt nur dazu, Anmerkungen werden zusammengeführt, gelöscht wird nie etwas.
+
+24. **Setlist-Übersicht** wie die Bibliothek: Suche (auch nach Song-Titeln), Ordner (eigener Baum `.volti/setlist-folders.json`, `Setlist.folder`, `FolderBook`), Mehrfachauswahl, Sync-Knopf und Zahnrad (`LibraryActions`-Mixin, gemeinsam mit der Bibliothek). Alle Suchfelder haben ein „x“ zum Leeren.
+
+25. **Werkzeugleiste und Einstellungsfenster werden beim Zeichnen eingefroren** (`FreezeWhileDrawing`): Solange der Stift schreibt, wird nur ein Bild davon gezeigt. Gemessen (Linux): Malen pro Bild 23 → 10 ms, im Zoom 31 → 14 ms. Im Zoom werden nur sichtbare Seiten scharf gerendert (`PageZoom.visibleContent`, `settled`).
+
+26. **Sync robuster:** Lässt sich eine Datei nicht lesen oder schreiben (z. B. Proton Drive lädt sie gerade), wird sie nach 2 s nochmals versucht und sonst übersprungen (`_safely`, `SyncReport.failed`). Der Rest wird abgeglichen, sie kommt beim nächsten Mal wieder dran (sie landet nicht in der Basis, also wird nichts fälschlich gelöscht). Halbe `.tmp`-Dateien werden weggeräumt. Hinweise mit „Rückgängig“ verschwinden nach 6 s (`persist: false`, sonst bleiben sie seit Flutter 3.x stehen).
+
 ## Prüfen
 ```bash
 flutter analyze
@@ -131,9 +144,11 @@ flutter test
 
 ## Darstellung
 - Hell/dunkel/System wählt der Besitzer unter ⚙ (`ToolController.themeMode`, geräteeigene Einstellung `themeMode`).
+- Hellmodus (vom Besitzer gewünscht): Flächen in sanftem, neutralem Grau, Akzente im hellen Seegrün (`buildVoltiTheme`). Der Dunkelmodus bleibt, wie er ist.
 
 ## Offene Ideen (noch nicht umsetzen)
-- **Hellmodus auf Weiss:** Der Besitzer findet den sehr sanften Seegrün-Ton im Hellmodus noch etwas komisch und überlegt, auf Weiss umzusteigen. Erst ändern, wenn er es bestätigt. Der Dunkelmodus gefällt ihm so, wie er ist.
+- **Audio zum Mitspielen** (MP3 an ein Stück hängen): später besprechen.
+- **Android:** Der Besitzer hat noch kein Android-Tablet (plant ein Galaxy Tab S12 Ultra). Ordner-Sync geht dort so nicht.
 
 ## Vereinbarte Richtung für Bearbeitungsfunktionen (angelehnt an forScore, eigenes Design)
 - Zuschneiden und Seiten umordnen verändern das PDF nicht. Volti speichert nur, wie die Seiten angezeigt werden, und Anmerkungen bleiben an ihrem Platz.

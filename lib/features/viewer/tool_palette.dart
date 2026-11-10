@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import 'ink_controller.dart';
 import 'layers_panel.dart';
 import 'tool_controller.dart';
+import 'freeze.dart';
 import 'tool_popover.dart';
 
 /// Werkzeuge beim Bearbeiten: eine feste, schmale Leiste am Seitenrand und
@@ -96,7 +97,11 @@ class _ToolOverlayState extends State<ToolOverlay> {
                   bottom: 0,
                   left: tools.paletteLeft ? _margin : null,
                   right: tools.paletteLeft ? null : _margin,
-                  child: Center(child: RepaintBoundary(child: _buildBar(context))),
+                  child: Center(
+                    child: RepaintBoundary(
+                      child: FreezeWhileDrawing(drawing: tools.isDrawing, child: _buildBar(context)),
+                    ),
+                  ),
                 ),
                 if (hasPopover)
                   // Beim Ziehen ändert sich nur die Position (_dragOffset) – der
@@ -104,12 +109,15 @@ class _ToolOverlayState extends State<ToolOverlay> {
                   ValueListenableBuilder<Offset?>(
                     valueListenable: _dragOffset,
                     child: RepaintBoundary(
-                      child: ToolPopover(
-                        key: ValueKey(tools.layersOpen ? 'layers' : mode),
-                        tools: tools,
-                        ink: widget.ink,
-                        page: widget.page,
-                        onDrag: (d) => _drag(d, screen),
+                      child: FreezeWhileDrawing(
+                        drawing: tools.isDrawing,
+                        child: ToolPopover(
+                          key: ValueKey(tools.layersOpen ? 'layers' : mode),
+                          tools: tools,
+                          ink: widget.ink,
+                          page: widget.page,
+                          onDrag: (d) => _drag(d, screen),
+                        ),
                       ),
                     ),
                     builder: (context, dragged, child) {

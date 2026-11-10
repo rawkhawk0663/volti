@@ -20,6 +20,15 @@ class ScoreMeta {
   /// Ordner in der Bibliothek (ID, leer = oberste Ebene).
   static const folder = 'folder';
 
+  /// Notizblatt einer Setlist (leeres Blatt zum Beschriften, true).
+  static const sheet = 'sheet';
+
+  /// Tempo in Schlägen pro Minute (für das Metronom).
+  static const tempo = 'tempo';
+
+  /// Schläge pro Takt (für die Betonung im Metronom, z. B. 4 bei 4/4).
+  static const beats = 'beats';
+
   Map<String, MetaValue> get fields => Map.unmodifiable(_fields);
 
   bool get isEmpty => _fields.isEmpty;

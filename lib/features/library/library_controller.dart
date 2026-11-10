@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdf/pdf.dart' show PdfPageFormat;
+import 'package:pdf/widgets.dart' as pw;
+import 'package:uuid/uuid.dart';
 
 import '../../core/app_settings.dart';
 import '../../core/library/folders.dart';
@@ -27,18 +30,26 @@ class LibraryController extends ChangeNotifier {
   final _sidecars = const SidecarStore();
   late final _importer = ScoreImporter(root);
   late final _setlistStore = SetlistStore(root);
-  late final _folderStore = FolderStore(root);
 
   List<ScoreEntry> _scores = [];
-  List<ScoreEntry> get scores => _scores;
+
+  /// Stücke der Bibliothek (ohne die Notizblätter der Setlists).
+  List<ScoreEntry> get scores {
+    if (!identical(_scoresOf, _scores)) {
+      _scoresOf = _scores;
+      _visibleScores = [
+        for (final s in _scores)
+          if (!s.isSheet) s,
+      ];
+    }
+    return _visibleScores;
+  }
+
+  List<ScoreEntry>? _scoresOf;
+  List<ScoreEntry> _visibleScores = const [];
 
   List<Setlist> _setlists = [];
   List<Setlist> get setlists => _setlists;
-
-  /// Ordner (inkl. gelöschter, als Grabsteine für den Abgleich).
-  List<ScoreFolder> _folders = [];
-  FolderTree _tree = FolderTree(const []);
-  FolderTree get folders => _tree;
 
   bool _loading = false;
   bool get loading => _loading;
@@ -77,7 +88,8 @@ class LibraryController extends ChangeNotifier {
     try {
       _scores = await _scanner.scan(root);
       _setlists = await _setlistStore.loadAll();
-      _setFolders(await _folderStore.load());
+      await scoreFolders.load();
+      await setlistFolders.load();
     } catch (e) {
       error = 'Die Bibliothek konnte nicht gelesen werden: $e';
     }
@@ -121,66 +133,69 @@ class LibraryController extends ChangeNotifier {
       importPdfs(await ScoreImporter.findPdfs(dir), folder: folder);
 
   // ------------------------------------------------------------- Ordner
-  void _setFolders(List<ScoreFolder> list) {
-    _folders = list;
-    _tree = FolderTree(list);
-  }
-
-  Future<void> _saveFolders(List<ScoreFolder> list) async {
-    _setFolders(list);
-    await _folderStore.save(list);
+  void _foldersChanged() {
     notifyListeners();
     onLocalChange?.call();
   }
 
+  /// Ordner der Bibliothek und (getrennt davon) der Setlists.
+  late final scoreFolders = FolderBook(FolderStore(root), _foldersChanged);
+  late final setlistFolders = FolderBook(FolderStore(root, file: FolderStore.setlistsFile), _foldersChanged);
+
+  FolderTree get folders => scoreFolders.tree;
+
   /// Ordner, in dem ein Stück liegt (null = oberste Ebene).
-  String? folderOf(ScoreEntry e) => _tree.resolve(e.folderId);
+  String? folderOf(ScoreEntry e) => folders.resolve(e.folderId);
 
   /// Stücke direkt in einem Ordner (ohne Unterordner).
   List<ScoreEntry> scoresIn(String? folder) => [
-    for (final s in _scores)
+    for (final s in scores)
       if (folderOf(s) == folder) s,
   ];
 
   /// Anzahl Stücke in einem Ordner samt Unterordnern.
-  int countIn(String folder) => _scores.where((s) {
+  int countIn(String folder) => scores.where((s) {
     final f = folderOf(s);
-    return f != null && _tree.isInside(f, folder);
+    return f != null && folders.isInside(f, folder);
   }).length;
 
-  Future<ScoreFolder> createFolder(String name, {String? parent}) async {
-    final f = ScoreFolder.create(name, parent: parent);
-    await _saveFolders([..._folders, f]);
-    return f;
+  Future<ScoreFolder> createFolder(String name, {String? parent}) => scoreFolders.create(name, parent: parent);
+  Future<void> renameFolder(ScoreFolder f, String name) => scoreFolders.rename(f, name);
+  Future<bool> moveFolder(ScoreFolder f, String? parent) => scoreFolders.move(f, parent);
+  Future<void> deleteFolder(ScoreFolder f) => scoreFolders.delete(f);
+  Future<void> restoreFolder(ScoreFolder f) => scoreFolders.restore(f);
+
+  // ---------------------------------------------- Setlists in Ordnern
+  String? setlistFolderOf(Setlist s) => setlistFolders.tree.resolve(s.folder);
+
+  List<Setlist> setlistsIn(String? folder) => [
+    for (final s in _setlists)
+      if (setlistFolderOf(s) == folder) s,
+  ];
+
+  int setlistCountIn(String folder) => _setlists.where((s) {
+    final f = setlistFolderOf(s);
+    return f != null && setlistFolders.tree.isInside(f, folder);
+  }).length;
+
+  Future<void> moveSetlists(Iterable<Setlist> lists, String? folder) async {
+    for (final s in lists) {
+      s.folder = folder;
+      s.touch();
+      await _setlistStore.save(s);
+    }
+    notifyListeners();
+    onLocalChange?.call();
   }
 
-  Future<void> _replaceFolder(ScoreFolder f) => _saveFolders([for (final x in _folders) x.id == f.id ? f : x]);
-
-  Future<void> renameFolder(ScoreFolder f, String name) async {
-    final cur = _tree.byId(f.id);
-    if (cur != null && name.trim().isNotEmpty) await _replaceFolder(cur.copyWith(name: name.trim()));
-  }
-
-  /// Ordner verschieben. Gibt false zurück, wenn das Ziel in ihm selbst liegt.
-  Future<bool> moveFolder(ScoreFolder f, String? parent) async {
-    if (parent != null && _tree.isInside(parent, f.id)) return false;
-    final cur = _tree.byId(f.id);
-    if (cur == null) return false;
-    await _replaceFolder(cur.copyWith(parent: () => parent));
-    return true;
-  }
-
-  /// Löscht einen Ordner. Seine Stücke und Unterordner rutschen eine Ebene
-  /// höher (sie werden nicht gelöscht).
-  Future<void> deleteFolder(ScoreFolder f) async {
-    final cur = _tree.byId(f.id);
-    if (cur != null) await _replaceFolder(cur.copyWith(deleted: true));
-  }
-
-  /// Gelöschten Ordner zurückholen (Rückgängig).
-  Future<void> restoreFolder(ScoreFolder f) async {
-    final cur = _tree.byId(f.id);
-    if (cur != null) await _replaceFolder(cur.copyWith(deleted: false));
+  Future<void> deleteSetlists(Iterable<Setlist> lists) async {
+    final ids = {for (final s in lists) s.id};
+    for (final s in lists) {
+      await _setlistStore.delete(s);
+    }
+    _setlists = _setlists.where((x) => !ids.contains(x.id)).toList();
+    notifyListeners();
+    onLocalChange?.call();
   }
 
   /// Stücke in einen Ordner legen (null = oberste Ebene).
@@ -248,6 +263,39 @@ class LibraryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------------------- Notizblätter
+  /// Neues Notizblatt (ein leeres A4-Blatt, z. B. für Notizen als Music
+  /// Director). Es liegt wie ein Stück in `Noten/` (so wird es abgeglichen),
+  /// erscheint aber nur in Setlists. Weitere Seiten kommen über „Leere Seite
+  /// einfügen“ dazu.
+  Future<ScoreEntry?> createSheet(String name) async {
+    final doc = pw.Document(title: name, creator: 'Volti');
+    doc.addPage(pw.Page(pageFormat: PdfPageFormat.a4, build: (_) => pw.SizedBox()));
+    final bytes = await doc.save();
+    final file = 'Notizblatt-${const Uuid().v4().substring(0, 8)}.pdf';
+    final path = p.join(_importer.notesDir, file);
+    await Directory(_importer.notesDir).create(recursive: true);
+    await File(path).writeAsBytes(bytes, flush: true);
+    final meta = ScoreMeta()
+      ..set(ScoreMeta.title, name)
+      ..set(ScoreMeta.sheet, true);
+    await _sidecars.save(path, meta: meta);
+    await rescan();
+    onLocalChange?.call();
+    return byPath(path);
+  }
+
+  /// Eintrag [index] aus der Setlist nehmen. Ein Notizblatt wird dabei
+  /// gelöscht, wenn es in keiner anderen Setlist mehr vorkommt.
+  Future<void> removeFromSetlist(Setlist s, int index) async {
+    final item = s.items.removeAt(index);
+    await saveSetlist(s);
+    final entry = byRelativePath(item.relativePath);
+    if (entry == null || !entry.isSheet) return;
+    final usedElsewhere = _setlists.any((x) => x.items.any((i) => i.relativePath == item.relativePath));
+    if (!usedElsewhere) await deleteScores([entry]);
+  }
+
   // ------------------------------------------------------------ Setlists
   Future<Setlist> createSetlist(String name) async {
     final s = Setlist.create(name);
@@ -289,5 +337,63 @@ class LibraryController extends ChangeNotifier {
       if (s.path == path) return s;
     }
     return null;
+  }
+}
+
+/// Ein Ordner-Baum (Bibliothek oder Setlists) samt Speichern.
+class FolderBook {
+  FolderBook(this.store, this._changed);
+  final FolderStore store;
+  final VoidCallback _changed;
+
+  /// Alle Ordner (inkl. gelöschter, als Grabsteine für den Abgleich).
+  List<ScoreFolder> _all = [];
+  FolderTree tree = FolderTree(const []);
+
+  Future<void> load() async => _set(await store.load());
+
+  void _set(List<ScoreFolder> list) {
+    _all = list;
+    tree = FolderTree(list);
+  }
+
+  Future<void> _save(List<ScoreFolder> list) async {
+    _set(list);
+    await store.save(list);
+    _changed();
+  }
+
+  Future<void> _replace(ScoreFolder f) => _save([for (final x in _all) x.id == f.id ? f : x]);
+
+  Future<ScoreFolder> create(String name, {String? parent}) async {
+    final f = ScoreFolder.create(name, parent: parent);
+    await _save([..._all, f]);
+    return f;
+  }
+
+  Future<void> rename(ScoreFolder f, String name) async {
+    final cur = tree.byId(f.id);
+    if (cur != null && name.trim().isNotEmpty) await _replace(cur.copyWith(name: name.trim()));
+  }
+
+  /// Ordner verschieben. Gibt false zurück, wenn das Ziel in ihm selbst liegt.
+  Future<bool> move(ScoreFolder f, String? parent) async {
+    if (parent != null && tree.isInside(parent, f.id)) return false;
+    final cur = tree.byId(f.id);
+    if (cur == null) return false;
+    await _replace(cur.copyWith(parent: () => parent));
+    return true;
+  }
+
+  /// Löscht einen Ordner. Was darin liegt, rutscht eine Ebene höher.
+  Future<void> delete(ScoreFolder f) async {
+    final cur = tree.byId(f.id);
+    if (cur != null) await _replace(cur.copyWith(deleted: true));
+  }
+
+  /// Gelöschten Ordner zurückholen (Rückgängig).
+  Future<void> restore(ScoreFolder f) async {
+    final cur = tree.byId(f.id);
+    if (cur != null) await _replace(cur.copyWith(deleted: false));
   }
 }

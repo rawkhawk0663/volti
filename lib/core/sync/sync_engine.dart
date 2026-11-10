@@ -17,6 +17,11 @@ class SyncReport {
   int merged = 0;
   int conflictCopiesResolved = 0;
 
+  /// Dateien, die diesmal nicht abgeglichen werden konnten (z. B. weil der
+  /// Cloud-Dienst sie gerade selbst herunterlädt). Sie kommen beim nächsten
+  /// Abgleich wieder dran; alles andere wurde trotzdem abgeglichen.
+  final List<String> failed = [];
+
   /// Hat sich auf diesem Gerät etwas geändert (Bibliothek neu einlesen)?
   bool get changedLocally => downloaded > 0 || deletedHere > 0 || merged > 0;
 
@@ -87,7 +92,7 @@ class SyncEngine {
     bool isSetlist(String rel) =>
         rel.startsWith('.volti/setlists/') || rel == '.volti/presets.json' || rel == '.volti/stamps.json';
     // Ordner der Bibliothek: pro Ordner zusammengeführt.
-    bool isFolders(String rel) => rel == FolderStore.file;
+    bool isFolders(String rel) => FolderStore.files.contains(rel);
 
     // ---------------------------------------------------- Sicherheitsbremse
     final localPdfs = localFiles.where(isPdf).toSet();
@@ -110,25 +115,31 @@ class SyncEngine {
     for (final rel in whole) {
       final l = localFiles.contains(rel), r = remoteFiles.contains(rel), b = base.contains(rel);
       if (l && r) {
-        if (isSetlist(rel)) await _syncSetlist(rel, report);
-        if (isFolders(rel)) await _syncFolders(rel, report);
+        // Liegt auf beiden Seiten: bleibt in der Basis, auch wenn das
+        // Zusammenführen diesmal nicht klappt.
         newBase.add(rel);
+        await _safely(rel, report, () async {
+          if (isSetlist(rel)) await _syncSetlist(rel, report);
+          if (isFolders(rel)) await _syncFolders(rel, report);
+        });
       } else if (l) {
         if (b) {
-          await _deleteLocal(rel);
-          report.deletedHere++;
-        } else {
-          await remote.writeStream(rel, _local.openRead(rel));
+          await _safely(rel, report, () async {
+            await _deleteLocal(rel);
+            report.deletedHere++;
+          });
+        } else if (await _safely(rel, report, () => remote.writeStream(rel, _local.openRead(rel)))) {
           report.uploaded++;
           newBase.add(rel);
         }
       } else if (r) {
         if (b) {
-          await remote.delete(rel);
-          if (isPdf(rel)) await remote.delete('$rel${SidecarStore.suffix}');
-          report.deletedThere++;
-        } else {
-          await _local.writeStream(rel, remote.openRead(rel));
+          await _safely(rel, report, () async {
+            await remote.delete(rel);
+            if (isPdf(rel)) await remote.delete('$rel${SidecarStore.suffix}');
+            report.deletedThere++;
+          });
+        } else if (await _safely(rel, report, () => _local.writeStream(rel, remote.openRead(rel)))) {
           report.downloaded++;
           newBase.add(rel);
         }
@@ -137,12 +148,32 @@ class SyncEngine {
 
     // ------------------------------------------ Infos und Anmerkungen
     for (final pdf in newBase.where(isPdf)) {
-      await _syncSidecar('$pdf${SidecarStore.suffix}', report);
+      final rel = '$pdf${SidecarStore.suffix}';
+      await _safely(rel, report, () => _syncSidecar(rel, report));
     }
 
     await _saveBase(newBase);
     return report;
   }
+
+  /// Eine Datei abgleichen; klappt es nicht, nach kurzer Pause ein zweites
+  /// Mal. Scheitert es wieder, wird sie übersprungen (und beim nächsten
+  /// Abgleich erneut versucht) – der Rest läuft weiter.
+  Future<bool> _safely(String rel, SyncReport report, Future<void> Function() action) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await action();
+        return true;
+      } catch (_) {
+        if (attempt == 0) await Future<void>.delayed(retryDelay);
+      }
+    }
+    report.failed.add(rel);
+    return false;
+  }
+
+  /// Pause vor dem zweiten Versuch (in Tests kürzer).
+  Duration retryDelay = const Duration(seconds: 2);
 
   Future<void> _deleteLocal(String rel) async {
     await _local.delete(rel);

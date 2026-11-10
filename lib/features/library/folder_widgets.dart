@@ -3,14 +3,19 @@ import 'package:flutter/material.dart';
 
 import '../../core/library/folders.dart';
 import '../../core/library/library_scanner.dart';
+import '../../core/library/setlist.dart';
 import 'library_controller.dart';
 import 'setlists_view.dart';
 
-/// Was in der Bibliothek gezogen wird: Stücke oder ein Ordner.
+/// Was gezogen wird: Stücke, Setlists oder ein Ordner.
 class LibraryDrag {
-  const LibraryDrag({this.scores = const [], this.folder});
+  const LibraryDrag({this.scores = const [], this.setlists = const [], this.folder, this.setlistFolder = false});
   final List<ScoreEntry> scores;
+  final List<Setlist> setlists;
   final ScoreFolder? folder;
+
+  /// Gehört [folder] zu den Setlist-Ordnern?
+  final bool setlistFolder;
 }
 
 /// Ziehen nur mit Maus und Stift. Mit dem Finger wird gescrollt (und langes
@@ -65,17 +70,30 @@ Widget dragFeedback(BuildContext context, String label, {IconData icon = Icons.m
   );
 }
 
-/// Nimmt gezogene Stücke oder Ordner an und legt sie in [folder]
-/// (null = oberste Ebene der Bibliothek).
+/// Nimmt gezogene Stücke (bzw. Setlists) oder Ordner an und legt sie in
+/// [folder] (null = oberste Ebene). [setlists]: Ordner der Setlists.
 class FolderDropTarget extends StatelessWidget {
-  const FolderDropTarget({super.key, required this.library, required this.folder, required this.builder});
+  const FolderDropTarget({
+    super.key,
+    required this.library,
+    required this.folder,
+    required this.builder,
+    this.setlists = false,
+  });
   final LibraryController library;
   final String? folder;
+  final bool setlists;
   final Widget Function(BuildContext context, bool hovering) builder;
+
+  FolderBook get _book => setlists ? library.setlistFolders : library.scoreFolders;
 
   bool _accepts(LibraryDrag d) {
     final f = d.folder;
-    if (f != null) return f.id != folder && (folder == null || !library.folders.isInside(folder, f.id));
+    if (f != null) {
+      if (d.setlistFolder != setlists) return false;
+      return f.id != folder && (folder == null || !_book.tree.isInside(folder, f.id));
+    }
+    if (setlists) return d.setlists.any((s) => library.setlistFolderOf(s) != folder);
     return d.scores.any((s) => library.folderOf(s) != folder);
   }
 
@@ -86,17 +104,22 @@ class FolderDropTarget extends StatelessWidget {
       onAcceptWithDetails: (d) async {
         final f = d.data.folder;
         if (f != null) {
-          await library.moveFolder(f, folder);
+          await _book.move(f, folder);
+        } else if (setlists) {
+          await library.moveSetlists(d.data.setlists, folder);
         } else {
           await library.moveScores(d.data.scores, folder);
         }
         if (!context.mounted) return;
-        final where = folder == null ? 'Bibliothek' : (library.folders.byId(folder)?.name ?? 'Ordner');
+        final where = folder == null
+            ? (setlists ? 'Setlists' : 'Bibliothek')
+            : (_book.tree.byId(folder)?.name ?? 'Ordner');
+        final n = setlists ? d.data.setlists.length : d.data.scores.length;
         final what = f != null
             ? '„${f.name}“'
-            : d.data.scores.length == 1
-            ? '„${d.data.scores.first.title}“'
-            : '${d.data.scores.length} Stücke';
+            : n == 1
+            ? '„${setlists ? d.data.setlists.first.name : d.data.scores.first.title}“'
+            : '$n ${setlists ? 'Setlists' : 'Stücke'}';
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$what liegt jetzt in „$where“')));
       },
       builder: (context, candidates, _) => builder(context, candidates.isNotEmpty),
@@ -116,7 +139,11 @@ class FolderTile extends StatelessWidget {
     this.folder,
     this.menuBuilder,
     this.dropTarget = true,
+    this.setlists = false,
   });
+
+  /// Ordner der Setlists (statt der Bibliothek).
+  final bool setlists;
 
   final LibraryController library;
   final IconData icon;
@@ -189,11 +216,11 @@ class FolderTile extends StatelessWidget {
 
     final f = folder;
     Widget tile = dropTarget && f != null
-        ? FolderDropTarget(library: library, folder: f.id, builder: (context, h) => card(h))
+        ? FolderDropTarget(library: library, folder: f.id, setlists: setlists, builder: (context, h) => card(h))
         : card(false);
     if (f != null) {
       tile = PointerDraggable<LibraryDrag>(
-        data: LibraryDrag(folder: f),
+        data: LibraryDrag(folder: f, setlistFolder: setlists),
         feedback: dragFeedback(context, f.name, icon: Icons.folder),
         child: tile,
       );
@@ -226,9 +253,11 @@ Future<FolderChoice?> pickFolder(
   required String title,
   String? current,
   String? exclude,
+  bool setlists = false,
 }) async {
   const newOne = FolderChoice('__neu__');
-  final tree = library.folders;
+  final book = setlists ? library.setlistFolders : library.scoreFolders;
+  final tree = book.tree;
   final choice = await showDialog<FolderChoice>(
     context: context,
     builder: (c) {
@@ -253,7 +282,12 @@ Future<FolderChoice?> pickFolder(
       return SimpleDialog(
         title: Text(title),
         children: [
-          option(null, 'Bibliothek (kein Ordner)', 0, Icons.library_music_outlined),
+          option(
+            null,
+            setlists ? 'Setlists (kein Ordner)' : 'Bibliothek (kein Ordner)',
+            0,
+            setlists ? Icons.queue_music_outlined : Icons.library_music_outlined,
+          ),
           for (final (f, depth) in tree.outline())
             if (exclude == null || !tree.isInside(f.id, exclude))
               option(f.id, f.name, depth + 1, Icons.folder_outlined),
@@ -273,7 +307,7 @@ Future<FolderChoice?> pickFolder(
   if (identical(choice, newOne)) {
     final name = await askForName(context, title: 'Neuer Ordner', initial: '');
     if (name == null) return null;
-    final f = await library.createFolder(name);
+    final f = await book.create(name);
     return FolderChoice(f.id);
   }
   return choice;

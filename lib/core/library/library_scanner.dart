@@ -33,6 +33,17 @@ class ScoreEntry {
   /// Tonart, z. B. „G-Dur“ (frei eingetragen, null = keine).
   String? get musicalKey => meta.text(ScoreMeta.key);
 
+  /// Tempo (Schläge pro Minute) und Schläge pro Takt, falls eingetragen.
+  int? get tempo => _int(ScoreMeta.tempo);
+  int? get beats => _int(ScoreMeta.beats);
+  int? _int(String field) {
+    final v = meta.fields[field]?.value;
+    return v is num && v > 0 ? v.round() : null;
+  }
+
+  /// Notizblatt einer Setlist? (erscheint nicht in der Bibliothek)
+  bool get isSheet => meta.fields[ScoreMeta.sheet]?.value == true;
+
   /// Ordner in der Bibliothek (siehe `FolderTree.resolve`; null = keiner).
   String? get folderId => meta.text(ScoreMeta.folder);
 

@@ -46,12 +46,17 @@ class _EditMetaDialogState extends State<_EditMetaDialog> {
   late final _genre = TextEditingController(text: m.text(ScoreMeta.genre) ?? '');
   late final _key = TextEditingController(text: m.text(ScoreMeta.key) ?? '');
   late final _notes = TextEditingController(text: m.text(ScoreMeta.notes) ?? '');
+  late final _tempo = TextEditingController(text: widget.entry.tempo?.toString() ?? '');
+  late int? _beats = widget.entry.beats;
+
+  /// Taktarten fürs Metronom (Schläge pro Takt).
+  static const _meters = {2: '2/4', 3: '3/4', 4: '4/4', 5: '5/4', 6: '6/8', 7: '7/8', 12: '12/8'};
   late final List<String> _tags = [...m.tagList];
   final _tagInput = TextEditingController();
 
   @override
   void dispose() {
-    for (final c in [_title, _composer, _genre, _key, _notes, _tagInput]) {
+    for (final c in [_title, _composer, _genre, _key, _notes, _tagInput, _tempo]) {
       c.dispose();
     }
     super.dispose();
@@ -73,6 +78,8 @@ class _EditMetaDialogState extends State<_EditMetaDialog> {
       ScoreMeta.key: _key.text,
       ScoreMeta.notes: _notes.text,
       ScoreMeta.tags: _tags,
+      ScoreMeta.tempo: int.tryParse(_tempo.text.trim()),
+      ScoreMeta.beats: _beats,
     });
   }
 
@@ -106,6 +113,32 @@ class _EditMetaDialogState extends State<_EditMetaDialog> {
                     child: TextField(
                       controller: _key,
                       decoration: const InputDecoration(labelText: 'Tonart'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Für das Metronom in der Notenansicht.
+              Row(
+                children: [
+                  SizedBox(
+                    width: 150,
+                    child: TextField(
+                      controller: _tempo,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Tempo', suffixText: 'BPM'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      initialValue: _meters.containsKey(_beats) ? _beats : null,
+                      decoration: const InputDecoration(labelText: 'Taktart'),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('–')),
+                        for (final e in _meters.entries) DropdownMenuItem(value: e.key, child: Text(e.value)),
+                      ],
+                      onChanged: (v) => setState(() => _beats = v),
                     ),
                   ),
                 ],

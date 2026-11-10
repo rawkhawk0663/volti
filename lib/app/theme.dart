@@ -27,13 +27,14 @@ class VoltiColors {
       : const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFF4FBF9), Color(0xFFE3F2EE)],
+          // Hell: sanftes, neutrales Grau (Seegrün bleibt für die Akzente).
+          colors: [Color(0xFFF5F6F6), Color(0xFFE6E9E8)],
         );
 
   /// Leichter Verlauf für Leisten (Werkzeugleiste, Navigation).
   static LinearGradient barGradient(Brightness b) => b == Brightness.dark
       ? const LinearGradient(colors: [Color(0xFF1D2826), Color(0xFF1A2422)])
-      : const LinearGradient(colors: [Color(0xFFFFFFFF), Color(0xFFEDF7F4)]);
+      : const LinearGradient(colors: [Color(0xFFFFFFFF), Color(0xFFF0F2F2)]);
 }
 
 ThemeData buildVoltiTheme(Brightness brightness) {
@@ -45,12 +46,33 @@ ThemeData buildVoltiTheme(Brightness brightness) {
     primaryContainer: dark ? const Color(0xFF1F4A43) : const Color(0xFFCDEDE6),
     onPrimaryContainer: dark ? const Color(0xFFBDEDE3) : const Color(0xFF0E4F45),
   );
+  // Hellmodus: Flächen in sanftem, neutralem Grau statt grünlich getönt –
+  // das helle Seegrün bleibt für aktive Knöpfe und Akzente.
+  final light = dark
+      ? scheme
+      : scheme.copyWith(
+          surface: const Color(0xFFF7F8F8),
+          onSurface: const Color(0xFF1B1E1E),
+          onSurfaceVariant: const Color(0xFF4A504F),
+          surfaceContainerLowest: Colors.white,
+          surfaceContainerLow: const Color(0xFFF1F3F3),
+          surfaceContainer: const Color(0xFFECEEEE),
+          surfaceContainerHigh: const Color(0xFFE6E8E8),
+          surfaceContainerHighest: const Color(0xFFDFE2E2),
+          surfaceDim: const Color(0xFFD9DCDC),
+          surfaceBright: const Color(0xFFF9FAFA),
+          outline: const Color(0xFF7A807F),
+          outlineVariant: const Color(0xFFC6CBCA),
+          secondaryContainer: const Color(0xFFDDE6E4),
+          onSecondaryContainer: const Color(0xFF1F3330),
+          surfaceTint: Colors.transparent,
+        );
   return ThemeData(
-    colorScheme: scheme,
+    colorScheme: light,
     useMaterial3: true,
     visualDensity: VisualDensity.standard,
     // Grundfarbe; Bibliothek und Setlists legen zusätzlich den Verlauf darunter.
-    scaffoldBackgroundColor: dark ? const Color(0xFF151C1A) : const Color(0xFFECF7F4),
+    scaffoldBackgroundColor: dark ? const Color(0xFF151C1A) : const Color(0xFFEFF1F1),
     navigationRailTheme: const NavigationRailThemeData(backgroundColor: Colors.transparent),
     appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, surfaceTintColor: Colors.transparent),
     // Langes Drücken mit Finger oder Stift ist überall der "Rechtsklick"

@@ -2,7 +2,10 @@ import 'dart:collection';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:pdfrx/pdfrx.dart';
+
+import '../library/page_setup.dart';
 
 /// Rendert PDF-Seiten als Bilder und hält die letzten paar im Speicher.
 ///
@@ -28,7 +31,7 @@ class PageImageCache extends ChangeNotifier {
 
   /// Seitenverhältnis (Breite / Höhe) der Seite.
   double aspectRatio(int page) {
-    final p = document.pages[page - 1];
+    final p = document.pages[PageSetup.sizeSource(page) - 1];
     return p.width / p.height;
   }
 
@@ -52,8 +55,17 @@ class PageImageCache extends ChangeNotifier {
 
   void preload(Iterable<int> pages, int pixelWidth) {
     for (final p in pages) {
-      if (p >= 1 && p <= pageCount) _render(_Key(p, pixelWidth));
+      if ((p >= 1 && p <= pageCount) || PageSetup.isBlank(p)) _render(_Key(p, pixelWidth));
     }
+  }
+
+  /// Leere Seite: einfach weiss.
+  static Future<ui.Image> _white(int w, int h) {
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder)
+        .drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Paint()..color = const Color(0xFFFFFFFF));
+    final picture = recorder.endRecording();
+    return picture.toImage(w, h).whenComplete(picture.dispose);
   }
 
   Future<void> _render(_Key key) {
@@ -65,16 +77,18 @@ class PageImageCache extends ChangeNotifier {
   }
 
   Future<void> _doRender(_Key key) async {
-    final page = document.pages[key.page - 1];
+    final page = document.pages[PageSetup.sizeSource(key.page) - 1];
     final w = key.pixelWidth;
     final h = (w * page.height / page.width).round();
-    final image = await page.renderForDisplay(
-      width: w,
-      height: h,
-      fullWidth: w.toDouble(),
-      fullHeight: h.toDouble(),
-      backgroundColor: 0xFFFFFFFF,
-    );
+    final image = PageSetup.isBlank(key.page)
+        ? await _white(w, h)
+        : await page.renderForDisplay(
+            width: w,
+            height: h,
+            fullWidth: w.toDouble(),
+            fullHeight: h.toDouble(),
+            backgroundColor: 0xFFFFFFFF,
+          );
     if (image == null) return;
     if (_disposed) {
       image.dispose();

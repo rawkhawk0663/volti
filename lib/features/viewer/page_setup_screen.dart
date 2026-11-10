@@ -36,6 +36,7 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
   late final List<int> _order = widget.setup.pages(_n);
   late final Map<int, PageCrop> _crops = {...widget.setup.crops};
   late final PageImageCache _thumbs = PageImageCache(widget.doc, capacity: 64);
+  late int _blanks = widget.setup.blanks;
   bool _busy = false;
 
   static const _thumbHeight = 150.0;
@@ -57,12 +58,13 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
 
   PageSetup _result() {
     final natural = _order.length == _n && [for (var i = 0; i < _n; i++) _order[i] == i + 1].every((b) => b);
-    return widget.setup.withOrder(natural ? null : _order).withCrops(_crops);
+    return widget.setup.withOrder(natural ? null : _order, blanks: _blanks).withCrops(_crops);
   }
 
   Future<void> _autoAll() async {
     setState(() => _busy = true);
     for (final src in {..._order}) {
+      if (PageSetup.isBlank(src)) continue;
       final found = await autoCropPage(widget.doc, src);
       if (!mounted) return;
       if (found != null) {
@@ -111,6 +113,12 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
     }
   }
 
+  /// Leere Seite zum Beschriften nach Position [i] einfügen.
+  void _insertBlank(int i) => setState(() {
+    _blanks++;
+    _order.insert(i + 1, PageSetup.blankBase + _blanks);
+  });
+
   void _showAgain(int p) {
     setState(() {
       final i = _order.indexWhere((o) => o > p);
@@ -153,7 +161,8 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
             child: Text(
               'Das PDF bleibt unverändert – Volti merkt sich nur, wie die Seiten gezeigt werden. '
               'Am Griff ☰ ziehen ändert die Reihenfolge. Eine Seite doppelt zeigen geht z. B. für Wiederholungen '
-              '(Anmerkungen erscheinen dann auf beiden). «Ränder entfernen» schneidet weisse Ränder bei allen Seiten weg.',
+              '(Anmerkungen erscheinen dann auf beiden). «Ränder entfernen» schneidet weisse Ränder bei allen Seiten weg. '
+              'Das Blatt mit Plus fügt danach eine leere Seite für Notizen ein.',
               style: hint,
             ),
           ),
@@ -184,6 +193,7 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
               onReorderItem: (from, to) => setState(() => _order.insert(to, _order.removeAt(from))),
               itemBuilder: (context, i) {
                 final src = _order[i];
+                final blank = PageSetup.isBlank(src);
                 final crop = _crop(src);
                 final aspect = crop.displayAspect(_thumbs.aspectRatio(src));
                 final duplicates = _order.where((o) => o == src).length;
@@ -205,7 +215,7 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                             ),
                           ),
                           InkWell(
-                            onTap: () => _editCrop(src),
+                            onTap: blank ? null : () => _editCrop(src),
                             child: Container(
                               color: VoltiColors.anthracite,
                               padding: const EdgeInsets.all(4),
@@ -225,7 +235,9 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                               children: [
                                 Text('${i + 1}', style: Theme.of(context).textTheme.titleLarge),
                                 Text(
-                                  src == i + 1 && duplicates == 1
+                                  blank
+                                      ? 'Leere Seite (für Notizen)'
+                                      : src == i + 1 && duplicates == 1
                                       ? 'PDF-Seite $src'
                                       : 'PDF-Seite $src${duplicates > 1 ? ' (mehrfach)' : ''}',
                                   style: hint,
@@ -242,24 +254,35 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                               ],
                             ),
                           ),
+                          if (!blank) ...[
+                            IconButton(
+                              tooltip: 'Zuschneiden …',
+                              icon: const Icon(Icons.crop),
+                              onPressed: () => _editCrop(src),
+                            ),
+                            IconButton(
+                              tooltip: 'Drehen',
+                              icon: const Icon(Icons.rotate_right),
+                              onPressed: () => _setCrop(src, crop.copyWith(quarterTurns: crop.quarterTurns + 1)),
+                            ),
+                            IconButton(
+                              tooltip: 'Doppelt zeigen',
+                              icon: const Icon(Icons.library_add_outlined),
+                              onPressed: () => setState(() => _order.insert(i + 1, src)),
+                            ),
+                          ],
                           IconButton(
-                            tooltip: 'Zuschneiden …',
-                            icon: const Icon(Icons.crop),
-                            onPressed: () => _editCrop(src),
+                            tooltip: 'Leere Seite danach einfügen',
+                            icon: const Icon(Icons.note_add_outlined),
+                            onPressed: () => _insertBlank(i),
                           ),
                           IconButton(
-                            tooltip: 'Drehen',
-                            icon: const Icon(Icons.rotate_right),
-                            onPressed: () => _setCrop(src, crop.copyWith(quarterTurns: crop.quarterTurns + 1)),
-                          ),
-                          IconButton(
-                            tooltip: 'Doppelt zeigen',
-                            icon: const Icon(Icons.library_add_outlined),
-                            onPressed: () => setState(() => _order.insert(i + 1, src)),
-                          ),
-                          IconButton(
-                            tooltip: duplicates > 1 ? 'Hier entfernen' : 'Ausblenden',
-                            icon: const Icon(Icons.visibility_off_outlined),
+                            tooltip: blank
+                                ? 'Leere Seite entfernen'
+                                : duplicates > 1
+                                ? 'Hier entfernen'
+                                : 'Ausblenden',
+                            icon: Icon(blank ? Icons.delete_outline : Icons.visibility_off_outlined),
                             onPressed: _order.length <= 1 ? null : () => setState(() => _order.removeAt(i)),
                           ),
                         ],

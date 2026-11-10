@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 /// So funktioniert die Setlist auf jedem Gerät, auch wenn der
 /// Bibliotheksordner dort an einem anderen Ort liegt.
 class Setlist {
-  Setlist({required this.id, required this.name, required this.items, required this.modified});
+  Setlist({required this.id, required this.name, required this.items, required this.modified, this.folder});
 
   factory Setlist.create(String name) =>
       Setlist(id: const Uuid().v4(), name: name.trim(), items: [], modified: DateTime.now().toUtc());
@@ -20,6 +20,9 @@ class Setlist {
   final List<SetlistItem> items;
   DateTime modified;
 
+  /// Ordner bei den Setlists (ID, null = oberste Ebene).
+  String? folder;
+
   void touch() => modified = DateTime.now().toUtc();
 
   Map<String, dynamic> toJson() => {
@@ -28,6 +31,7 @@ class Setlist {
     'id': id,
     'name': name,
     'modified': modified.toUtc().toIso8601String(),
+    if (folder != null) 'folder': folder,
     'items': [for (final i in items) i.toJson()],
   };
 
@@ -35,6 +39,7 @@ class Setlist {
     id: json['id'] as String,
     name: json['name'] as String? ?? 'Setlist',
     modified: DateTime.parse(json['modified'] as String),
+    folder: json['folder'] as String?,
     items: [for (final i in json['items'] as List? ?? const []) SetlistItem.fromJson(i as Map<String, dynamic>)],
   );
 }
