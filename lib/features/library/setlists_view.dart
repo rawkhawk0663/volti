@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/library/folders.dart';
 import '../../core/library/library_filter.dart';
 import '../../core/library/library_scanner.dart';
 import '../../core/library/setlist.dart';
@@ -200,7 +203,20 @@ class SetlistDetailScreen extends StatelessWidget {
                             radius: 14,
                             child: Text('${i + 1}', style: const TextStyle(fontSize: 12)),
                           ),
-                          title: Text(item.label ?? entry?.title ?? item.relativePath),
+                          title: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  item.label ?? entry?.title ?? item.relativePath,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (entry?.musicalKey != null) ...[
+                                const SizedBox(width: 8),
+                                KeyBadge(entry!.musicalKey!),
+                              ],
+                            ],
+                          ),
                           subtitle: entry == null
                               ? Text(
                                   'Nicht gefunden – umbenannt oder gelöscht?',
@@ -279,38 +295,114 @@ class _ScorePickerState extends State<_ScorePicker> {
   String _query = '';
   final List<ScoreEntry> _selected = [];
 
+  /// Offener Ordner (null = oberste Ebene) bzw. "Alle Noten".
+  String? _folder;
+  bool _all = false;
+
+  LibraryController get lib => widget.library;
+
+  void _open(String? folder, {bool all = false}) => setState(() {
+    _folder = folder;
+    _all = all;
+  });
+
+  void _toggle(ScoreEntry e) => setState(() => _selected.contains(e) ? _selected.remove(e) : _selected.add(e));
+
   @override
   Widget build(BuildContext context) {
-    final list = filterScores(widget.library.scores, query: _query);
+    final theme = Theme.of(context);
+    final tree = lib.folders;
+    final searching = _query.trim().isNotEmpty;
+    final current = _all ? null : tree.resolve(_folder);
+    // Gleiche Titel stehen zusammen, nach Tonart geordnet (z. B. ein Lied in
+    // mehreren Tonarten).
+    final list = filterScores(searching || _all ? lib.scores : lib.scoresIn(current), query: _query);
+    final words = _query.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final folders = _all
+        ? const <ScoreFolder>[]
+        : searching
+        ? [
+            for (final f in tree.live)
+              if (words.every(f.name.toLowerCase().contains)) f,
+          ]
+        : tree.children(current);
+    final showAll = !searching && !_all && current == null && tree.live.isNotEmpty;
+    final path = tree.pathTo(current);
+    final size = MediaQuery.sizeOf(context);
+
+    Widget folderRow(IconData icon, String name, String sub, VoidCallback onTap) => ListTile(
+      leading: Icon(icon, color: theme.colorScheme.primary),
+      title: Text(name),
+      subtitle: Text(sub),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: onTap,
+    );
+
+    String count(int n) => n == 1 ? '1 Stück' : '$n Stücke';
+
     return AlertDialog(
       title: const Text('Stücke hinzufügen'),
+      contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       content: SizedBox(
-        width: 520,
-        height: 480,
+        width: math.min(640, size.width - 48),
+        height: math.min(620, size.height - 220),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
-              autofocus: true,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Suchen …'),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Titel, Komponist, Tonart … suchen',
+              ),
               onChanged: (v) => setState(() => _query = v),
             ),
-            const SizedBox(height: 8),
+            if (!searching && (current != null || _all))
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Zurück',
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => _all ? _open(null) : _open(tree.parentOf(current!)),
+                    ),
+                    Expanded(
+                      child: Text(
+                        ['Bibliothek', if (_all) 'Alle Noten', for (final f in path) f.name].join(' › '),
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 4),
             Expanded(
-              child: ListView.builder(
-                itemCount: list.length,
-                itemBuilder: (context, i) {
-                  final e = list[i];
-                  final n = _selected.indexOf(e);
-                  return CheckboxListTile(
-                    value: n >= 0,
-                    title: Text(e.title),
-                    subtitle: e.composer == null ? null : Text(e.composer!),
-                    secondary: n >= 0
-                        ? CircleAvatar(radius: 12, child: Text('${n + 1}', style: const TextStyle(fontSize: 11)))
-                        : null,
-                    onChanged: (v) => setState(() => v == true ? _selected.add(e) : _selected.remove(e)),
-                  );
-                },
+              child: ListView(
+                children: [
+                  if (showAll)
+                    folderRow(
+                      Icons.library_books_outlined,
+                      'Alle Noten',
+                      count(lib.scores.length),
+                      () => _open(null, all: true),
+                    ),
+                  for (final f in folders)
+                    folderRow(Icons.folder, f.name, count(lib.countIn(f.id)), () {
+                      if (searching) _query = '';
+                      _open(f.id);
+                    }),
+                  if ((showAll || folders.isNotEmpty) && list.isNotEmpty) const Divider(),
+                  for (final e in list) _scoreRow(context, e, showFolder: searching || _all),
+                  if (list.isEmpty && folders.isEmpty && !showAll)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        searching ? 'Keine Treffer.' : 'Hier liegen keine Stücke.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
@@ -323,6 +415,46 @@ class _ScorePickerState extends State<_ScorePicker> {
           child: Text(_selected.isEmpty ? 'Hinzufügen' : '${_selected.length} hinzufügen'),
         ),
       ],
+    );
+  }
+
+  Widget _scoreRow(BuildContext context, ScoreEntry e, {required bool showFolder}) {
+    final n = _selected.indexOf(e);
+    final folder = showFolder ? lib.folderOf(e) : null;
+    final sub = [?e.composer, if (folder != null) '📁 ${lib.folders.byId(folder)?.name ?? ''}'].join(' · ');
+    return CheckboxListTile(
+      value: n >= 0,
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Row(
+        children: [
+          Flexible(child: Text(e.title, overflow: TextOverflow.ellipsis)),
+          if (e.musicalKey != null) ...[const SizedBox(width: 8), KeyBadge(e.musicalKey!)],
+        ],
+      ),
+      subtitle: sub.isEmpty ? null : Text(sub, overflow: TextOverflow.ellipsis),
+      secondary: n >= 0
+          ? CircleAvatar(radius: 12, child: Text('${n + 1}', style: const TextStyle(fontSize: 11)))
+          : null,
+      onChanged: (_) => _toggle(e),
+    );
+  }
+}
+
+/// Tonart als gut sichtbares Schild, z. B. „G-Dur“.
+class KeyBadge extends StatelessWidget {
+  const KeyBadge(this.musicalKey, {super.key});
+  final String musicalKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(6)),
+      child: Text(
+        musicalKey,
+        style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700, fontSize: 13),
+      ),
     );
   }
 }

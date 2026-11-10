@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/library/library_scanner.dart';
 import '../../core/pdf/thumbnail_cache.dart';
+import 'setlists_view.dart' show KeyBadge;
 
 /// Vorschaubild der ersten Seite (wird im Hintergrund erzeugt).
 class ScoreThumbnail extends StatefulWidget {
@@ -141,6 +142,7 @@ class ScoreCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  if (entry.musicalKey != null) Positioned(right: 6, bottom: 6, child: KeyBadge(entry.musicalKey!)),
                   if (entry.hasAnnotations)
                     Positioned(
                       right: 6,

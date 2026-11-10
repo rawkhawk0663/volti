@@ -29,6 +29,7 @@ import 'text_layer.dart';
 import 'tool_controller.dart';
 import 'tool_palette.dart';
 import 'zoom_area.dart';
+import '../library/settings_dialog.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
 class ViewerItem {
@@ -403,6 +404,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// Springt zum Ziel einer Sprungmarke und lässt es kurz aufblinken.
   void _jump(int pieceIndex, JumpLink l) {
+    _lastJump = DateTime.now();
     final piece = _pieces[pieceIndex];
     final count = piece?.pageCount ?? 0;
     if (piece == null || count == 0) return;
@@ -779,6 +781,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
           child: ZoomArea(
             zoom: _zoom,
             tools: tools,
+            onTap: _cleanTap,
             child: LayoutBuilder(builder: (context, box) => _buildPages(box)),
           ),
         ),
@@ -791,8 +794,30 @@ class _ViewerScreenState extends State<ViewerScreen> {
     if (d.kind == PointerDeviceKind.invertedStylus) return;
     if (tools.rulerRecentlyUsed) return; // Finger war am Lineal
     if (_zoom.recentlyMoved) return; // Finger hat gezoomt oder verschoben
+    _tapAt(d.globalPosition);
+  }
+
+  DateTime _lastTap = DateTime(2000);
+  DateTime _lastJump = DateTime(2000);
+
+  /// Rückfall: Ein sauberes Antippen (ein Finger bzw. Stift, kaum bewegt), das
+  /// die übliche Erkennung nicht erreicht hat – z. B. im Zoom. Kurz warten,
+  /// ob es schon behandelt wurde (oder eine Sprungmarke angetippt wurde).
+  void _cleanTap(Offset global, PointerDeviceKind kind) {
+    if (tools.mode != ToolMode.read) return;
+    Future<void>.delayed(const Duration(milliseconds: 80), () {
+      if (!mounted || tools.mode != ToolMode.read || tools.rulerRecentlyUsed) return;
+      final now = DateTime.now();
+      if (now.difference(_lastTap) < const Duration(milliseconds: 400)) return;
+      if (now.difference(_lastJump) < const Duration(milliseconds: 400)) return;
+      _tapAt(global);
+    });
+  }
+
+  void _tapAt(Offset global) {
+    _lastTap = DateTime.now();
     final width = MediaQuery.sizeOf(context).width;
-    final x = d.globalPosition.dx / width;
+    final x = global.dx / width;
     if (x < 0.3) {
       _prev();
     } else if (x > 0.7) {
@@ -1094,6 +1119,11 @@ class _TopBar extends StatelessWidget {
                     label: const Text('Bearbeiten'),
                   ),
                   IconButton(
+                    tooltip: 'Als PDF teilen oder drucken',
+                    icon: const Icon(Icons.ios_share),
+                    onPressed: state._export,
+                  ),
+                  IconButton(
                     tooltip: 'Lesezeichen',
                     icon: const Icon(Icons.bookmarks_outlined),
                     onPressed: state._openBookmarks,
@@ -1108,40 +1138,20 @@ class _TopBar extends StatelessWidget {
                     icon: const Icon(Icons.more_vert),
                     onSelected: (a) => a(),
                     itemBuilder: (_) => [
-                      CheckedPopupMenuItem(
-                        value: () => tools.setHalfTurns(!tools.halfTurns),
-                        checked: tools.halfTurns,
-                        child: const Text('Halbe Seitenwechsel (bei einer Seite)'),
-                      ),
-                      CheckedPopupMenuItem(
-                        value: () => tools.setInstantPen(!tools.instantPen),
-                        checked: tools.instantPen,
-                        child: const Text('Mit dem Stift sofort zeichnen'),
-                      ),
-                      for (final (l, label) in const [
-                        (PageLayout.auto, 'Seiten: automatisch (quer = zwei)'),
-                        (PageLayout.single, 'Seiten: immer eine'),
-                        (PageLayout.double, 'Seiten: immer zwei'),
-                      ])
-                        CheckedPopupMenuItem(
-                          value: () => tools.setPageLayout(l),
-                          checked: tools.pageLayout == l,
-                          child: Text(label),
+                      PopupMenuItem(
+                        value: () => showSettingsDialog(context),
+                        child: const ListTile(
+                          leading: Icon(Icons.settings_outlined),
+                          title: Text('Einstellungen …'),
+                          contentPadding: EdgeInsets.zero,
                         ),
+                      ),
                       const PopupMenuDivider(),
                       PopupMenuItem(
                         value: state._reflow,
                         child: const ListTile(
                           leading: Icon(Icons.view_day_outlined),
                           title: Text('Endlosband (Notenzeilen untereinander)'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: state._export,
-                        child: const ListTile(
-                          leading: Icon(Icons.ios_share),
-                          title: Text('Als PDF teilen oder drucken …'),
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),

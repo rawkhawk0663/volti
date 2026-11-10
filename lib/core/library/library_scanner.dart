@@ -30,6 +30,9 @@ class ScoreEntry {
   String? get genre => meta.text(ScoreMeta.genre);
   List<String> get tags => meta.tagList;
 
+  /// Tonart, z. B. „G-Dur“ (frei eingetragen, null = keine).
+  String? get musicalKey => meta.text(ScoreMeta.key);
+
   /// Ordner in der Bibliothek (siehe `FolderTree.resolve`; null = keiner).
   String? get folderId => meta.text(ScoreMeta.folder);
 

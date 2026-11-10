@@ -163,6 +163,8 @@ void main() {
 
     Future<int> alphaAt(double x, double y) async {
       // Warten, bis das Bild im Hintergrund fertig ist.
+      // Neues kommt erst nach einer kurzen Pause ins Bild (beim Schreiben).
+      await t.pump(const Duration(milliseconds: 500));
       for (var i = 0; i < 20; i++) {
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
         await t.pump();
@@ -206,6 +208,8 @@ void main() {
       width: 0.005,
       points: [InkPoint(0.5, 0.2, 0.5), InkPoint(0.5, 0.8, 0.5)],
     );
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
     for (var i = 0; i < 10; i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await t.pump();

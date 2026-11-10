@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -117,10 +118,52 @@ class _InkLayerState extends State<InkLayer> {
   int _cachedPoints = 0;
   double _dpr = 1;
 
+  /// Wo das Bild des Anfangs liegt (Seiten-Koordinaten). Es ist nur so gross
+  /// wie der Strich, und nur der sichtbare Teil – beim Zoomen wäre ein
+  /// seitengrosses Bild sehr gross und jedes neue Aufnehmen teuer.
+  Rect _cachedRect = Rect.zero;
+
+  /// Sichtbarer Teil der Seite (beim Aufsetzen des Stifts bestimmt).
+  Rect _visible = Rect.largest;
+
   void _resetCache() {
     _cachedStart?.dispose();
     _cachedStart = null;
     _cachedPoints = 0;
+  }
+
+  /// Sichtbarer Ausschnitt der Seite in ihren eigenen Koordinaten.
+  Rect _visibleRect(Size size) {
+    final box = context.findRenderObject() as RenderBox?;
+    final page = Offset.zero & size;
+    if (box == null || !box.attached) return page;
+    final screen = Offset.zero & MediaQuery.sizeOf(context);
+    final corners = [
+      box.globalToLocal(screen.topLeft),
+      box.globalToLocal(screen.topRight),
+      box.globalToLocal(screen.bottomLeft),
+      box.globalToLocal(screen.bottomRight),
+    ];
+    var r = Rect.fromPoints(corners[0], corners[1]);
+    for (final c in corners.skip(2)) {
+      r = r.expandToInclude(Rect.fromPoints(c, c));
+    }
+    final v = r.intersect(page);
+    return v.isEmpty ? page : v;
+  }
+
+  /// Bereich für das Bild des Anfangs: um die Punkte, mit Rand, nur sichtbar.
+  Rect _cacheRectFor(List<InkPoint> pts, Size size, double pad) {
+    var l = double.infinity, t = double.infinity, r = -double.infinity, b = -double.infinity;
+    for (final p in pts) {
+      l = math.min(l, p.x);
+      r = math.max(r, p.x);
+      t = math.min(t, p.y);
+      b = math.max(b, p.y);
+    }
+    final bounds = Rect.fromLTRB(l * size.width, t * size.height, r * size.width, b * size.height).inflate(pad);
+    final v = bounds.intersect(_visible);
+    return v.isEmpty ? bounds : v;
   }
 
   InkController get c => widget.controller;
@@ -179,6 +222,7 @@ class _InkLayerState extends State<InkLayer> {
     final drawing = mode == ToolMode.pen || mode == ToolMode.highlighter;
     if (!eraserEvent && !drawing && mode != ToolMode.eraser && !instant) return;
     _rulerEdge = !eraserEvent && mode != ToolMode.eraser ? _nearRulerEdge(e.position) : null;
+    _visible = _visibleRect(size);
     _pointer = e.pointer;
     _erasing = eraserEvent || mode == ToolMode.eraser;
     _provisional = instant && !eraserEvent;
@@ -846,6 +890,7 @@ class _StrokesImageState extends State<_StrokesImage> {
 
   @override
   void dispose() {
+    _composeTimer?.cancel();
     widget.controller.removeListener(_onChanged);
     CustomStamps.instance?.removeListener(_onCustomStamps);
     if (identical(widget.composer.parts[widget.partKey], this)) {
@@ -956,9 +1001,10 @@ class _StrokesImageState extends State<_StrokesImage> {
     if (_baseSize == size && _baseDpr == dpr && _startsWith(keys, _baseKeys)) {
       // Nichts verschwunden: höchstens etwas dazugekommen.
       _pending = items.sublist(_baseKeys.length);
-      if (_pending.isNotEmpty) _compose(dpr);
+      if (_pending.isNotEmpty) _composeSoon(dpr);
       return;
     }
+    _composeTimer?.cancel();
 
     // Etwas ist verschwunden oder hat sich verändert → ganz neu erzeugen.
     _generation++;
@@ -975,6 +1021,31 @@ class _StrokesImageState extends State<_StrokesImage> {
     final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
     picture.dispose();
     _setBase(img, keys, size, dpr);
+  }
+
+  /// Neue Elemente erst ins Bild nehmen, wenn kurz nichts mehr dazukommt.
+  ///
+  /// Beim Schreiben (viele kurze Striche) würde sonst nach jedem Strich die
+  /// ganze Seite neu aufgenommen – im Zoom ist das Bild gross, das bremst
+  /// (gemessen: 11 statt 31 Bilder/s). Bis dahin malt der _CompositePainter
+  /// die neuen Elemente direkt; man sieht keinen Unterschied.
+  Timer? _composeTimer;
+  int _timedPending = 0;
+
+  void _composeSoon(double dpr) {
+    if (_pending.length >= 40) {
+      _composeTimer?.cancel();
+      _compose(dpr);
+      return;
+    }
+    // Nur wenn wirklich etwas dazukam, wieder warten (ein blosses Neu-Aufbauen,
+    // z. B. nach dem Speichern, schiebt das Einsortieren nicht hinaus).
+    if (_composeTimer?.isActive == true && _pending.length == _timedPending) return;
+    _composeTimer?.cancel();
+    _timedPending = _pending.length;
+    _composeTimer = Timer(const Duration(milliseconds: 450), () {
+      if (mounted) _compose(dpr);
+    });
   }
 
   /// Bestehendes Bild + neue Elemente zu einem neuen Bild zusammenfügen.
@@ -1347,16 +1418,7 @@ class _ActivePainter extends CustomPainter {
     if (pts.length - state._cachedPoints > 24) {
       // Ganz neu aufnehmen (ohne das vorige Bild hineinzumalen): So hält das
       // neue Bild nicht alle früheren im Speicher fest.
-      final recorder = ui.PictureRecorder();
-      final c = Canvas(recorder)..scale(dpr);
-      segments(c, 1, pts.length);
-      final picture = recorder.endRecording();
-      final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
-      picture.dispose();
-      final old = state._cachedStart;
-      state._cachedStart = img;
-      state._cachedPoints = pts.length;
-      if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      _recordCache(size, dpr, preset.width * size.width * 2 + 2, (c) => segments(c, 1, pts.length));
     }
     if (translucent) {
       // Nur so gross wie der Strich (spart Arbeit beim Durchsichtig-Machen).
@@ -1373,7 +1435,12 @@ class _ActivePainter extends CustomPainter {
     }
     final img = state._cachedStart;
     if (img != null) {
-      canvas.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), dst, Paint());
+      canvas.drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        state._cachedRect,
+        Paint(),
+      );
     }
     segments(canvas, img == null ? 1 : state._cachedPoints, pts.length);
     if (!hl) _paintPrediction(canvas, size, preset.copyWith(color: solid.toARGB32()), pts);
@@ -1414,16 +1481,8 @@ class _ActivePainter extends CustomPainter {
       ..color = c;
 
     if (pts.length - state._cachedPoints > 32) {
-      final recorder = ui.PictureRecorder();
-      final c = Canvas(recorder)..scale(dpr);
-      c.drawPath(pathOf(0, pts.length), paintFor(color.withValues(alpha: 1)));
-      final picture = recorder.endRecording();
-      final img = picture.toImageSync((size.width * dpr).ceil(), (size.height * dpr).ceil());
-      picture.dispose();
-      final old = state._cachedStart;
-      state._cachedStart = img;
-      state._cachedPoints = pts.length;
-      if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      final full = paintFor(color.withValues(alpha: 1));
+      _recordCache(size, dpr, width * size.width + 2, (c) => c.drawPath(pathOf(0, pts.length), full));
     }
     final img = state._cachedStart;
     final from = img == null ? 0 : state._cachedPoints - 1;
@@ -1431,11 +1490,32 @@ class _ActivePainter extends CustomPainter {
       canvas.drawImageRect(
         img,
         Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-        dst,
+        state._cachedRect,
         Paint()..color = Color.fromRGBO(0, 0, 0, color.a),
       );
     }
     if (pts.length - from >= 2) canvas.drawPath(pathOf(from, pts.length), paintFor(color));
+  }
+
+  /// Den bisherigen Strich als Bild aufnehmen – nur so gross wie er selbst
+  /// (und nur der sichtbare Teil), in der Auflösung des Bildschirms.
+  void _recordCache(Size size, double dpr, double pad, void Function(Canvas) paint) {
+    final rect = state._cacheRectFor(state._points, size, pad);
+    final w = (rect.width * dpr).ceil(), h = (rect.height * dpr).ceil();
+    if (w <= 0 || h <= 0) return;
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder)
+      ..scale(dpr)
+      ..translate(-rect.left, -rect.top);
+    paint(c);
+    final picture = recorder.endRecording();
+    final img = picture.toImageSync(w, h);
+    picture.dispose();
+    final old = state._cachedStart;
+    state._cachedStart = img;
+    state._cachedRect = Rect.fromLTWH(rect.left, rect.top, w / dpr, h / dpr);
+    state._cachedPoints = state._points.length;
+    if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
   /// Kurzes vorhergesagtes Stück am Ende des Strichs (nur Anzeige).

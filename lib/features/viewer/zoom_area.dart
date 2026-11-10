@@ -61,9 +61,10 @@ class PageZoom {
   }
 
   void panBy(Offset delta) {
-    if (!isZoomed) return;
+    if (!isZoomed || delta == Offset.zero) return;
+    final before = _offset;
     set(_scale, _offset + delta);
-    _markMoved();
+    if (_offset != before) _markMoved();
   }
 
   void reset() {
@@ -100,10 +101,14 @@ class PageZoom {
 /// oder schreibt), werden Finger ignoriert – sonst würde der Handballen beim
 /// Schreiben die Seite verschieben.
 class ZoomArea extends StatefulWidget {
-  const ZoomArea({super.key, required this.zoom, required this.tools, required this.child});
+  const ZoomArea({super.key, required this.zoom, required this.tools, required this.child, this.onTap});
   final PageZoom zoom;
   final ToolController tools;
   final Widget child;
+
+  /// Ein sauberes Antippen mit Finger oder Stift (ein Zeiger, kaum bewegt,
+  /// kurz). Wird unabhängig von den übrigen Gesten gemeldet.
+  final void Function(Offset global, PointerDeviceKind kind)? onTap;
 
   @override
   State<ZoomArea> createState() => _ZoomAreaState();
@@ -128,6 +133,40 @@ class _ZoomAreaState extends State<ZoomArea> {
 
   // Touchpad
   double _padStartScale = 1;
+
+  // Antippen
+  int? _tapPointer;
+  Offset _tapStart = Offset.zero;
+  DateTime _tapTime = DateTime(2000);
+  bool _tapValid = false;
+
+  void _tapDown(PointerDownEvent e) {
+    final ok = e.kind == PointerDeviceKind.touch || e.kind == PointerDeviceKind.stylus;
+    if (_tapPointer != null) {
+      _tapValid = false; // zweiter Zeiger: kein Antippen
+      return;
+    }
+    _tapPointer = e.pointer;
+    _tapStart = e.position;
+    _tapTime = DateTime.now();
+    _tapValid = ok && !widget.tools.rulerPointers.contains(e.pointer);
+  }
+
+  void _tapMove(PointerMoveEvent e) {
+    if (e.pointer == _tapPointer && (e.position - _tapStart).distance > kTouchSlop) _tapValid = false;
+  }
+
+  void _tapUp(PointerEvent e) {
+    if (e.pointer != _tapPointer) return;
+    final valid =
+        _tapValid &&
+        e is PointerUpEvent &&
+        DateTime.now().difference(_tapTime) < const Duration(milliseconds: 500) &&
+        !widget.tools.rulerPointers.contains(e.pointer);
+    _tapPointer = null;
+    _tapValid = false;
+    if (valid) widget.onTap?.call(e.position, e.kind);
+  }
 
   bool get _penNear => _pensDown > 0 || DateTime.now().difference(_penSeen) < const Duration(milliseconds: 700);
 
@@ -240,10 +279,22 @@ class _ZoomAreaState extends State<ZoomArea> {
         zoom._area = box.biggest;
         return Listener(
           behavior: HitTestBehavior.translucent,
-          onPointerDown: _down,
-          onPointerMove: _move,
-          onPointerUp: _up,
-          onPointerCancel: _up,
+          onPointerDown: (e) {
+            _tapDown(e);
+            _down(e);
+          },
+          onPointerMove: (e) {
+            _tapMove(e);
+            _move(e);
+          },
+          onPointerUp: (e) {
+            _tapUp(e);
+            _up(e);
+          },
+          onPointerCancel: (e) {
+            _tapUp(e);
+            _up(e);
+          },
           onPointerHover: _hover,
           onPointerSignal: _signal,
           onPointerPanZoomStart: (e) => _padStartScale = zoom.scale,

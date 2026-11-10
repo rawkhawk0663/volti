@@ -15,13 +15,13 @@ import '../../core/library/sidecar_store.dart';
 import '../viewer/export_dialog.dart';
 import '../viewer/page_export.dart';
 import '../viewer/page_setup_screen.dart';
-import '../viewer/tool_controller.dart';
 import '../viewer/viewer_screen.dart';
 import 'edit_meta_dialog.dart';
 import 'folder_widgets.dart';
 import 'library_controller.dart';
 import 'open_scores.dart';
 import 'score_card.dart';
+import 'settings_dialog.dart';
 import 'setlists_view.dart';
 import 'sync_controller.dart';
 
@@ -633,68 +633,17 @@ class _ScoresViewState extends State<_ScoresView> {
                     icon: const Icon(Icons.refresh),
                   ),
                   if (_canSync) SyncButton(sync: widget.sync, onSetup: _setupSync),
-                  PopupMenuButton<VoidCallback>(
+                  IconButton(
                     tooltip: 'Einstellungen',
                     icon: const Icon(Icons.settings_outlined),
-                    onSelected: (a) => a(),
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        enabled: false,
-                        child: Text('Voltis Datenordner:\n${lib.root}', style: theme.textTheme.bodySmall),
-                      ),
-                      // Darstellung: hell, dunkel oder wie das System
-                      for (final (mode, label, icon) in const [
-                        (ThemeMode.system, 'Darstellung: wie das System', Icons.brightness_auto_outlined),
-                        (ThemeMode.light, 'Darstellung: hell', Icons.light_mode_outlined),
-                        (ThemeMode.dark, 'Darstellung: dunkel', Icons.dark_mode_outlined),
-                      ])
-                        PopupMenuItem(
-                          value: () => ToolScope.read(context).setThemeMode(mode),
-                          child: ListTile(
-                            leading: Icon(icon),
-                            title: Text(label),
-                            trailing: ToolScope.read(context).themeMode.value == mode ? const Icon(Icons.check) : null,
-                          ),
-                        ),
-                      const PopupMenuDivider(),
-                      if (Platform.isWindows || Platform.isLinux)
-                        PopupMenuItem(
-                          value: lib.revealDataFolder,
-                          child: const ListTile(leading: Icon(Icons.folder_open), title: Text('Datenordner öffnen')),
-                        ),
-                      if (_canSync) ...[
-                        const PopupMenuDivider(),
-                        if (widget.sync.folder == null)
-                          PopupMenuItem(
-                            value: _setupSync,
-                            child: const ListTile(
-                              leading: Icon(Icons.cloud_sync_outlined),
-                              title: Text('Sync einrichten …'),
-                            ),
-                          )
-                        else ...[
-                          PopupMenuItem(
-                            enabled: false,
-                            child: Text('Sync-Ordner:\n${widget.sync.folder}', style: theme.textTheme.bodySmall),
-                          ),
-                          PopupMenuItem(
-                            value: widget.sync.syncNow,
-                            child: const ListTile(leading: Icon(Icons.sync), title: Text('Jetzt abgleichen')),
-                          ),
-                          PopupMenuItem(
-                            value: _setupSync,
-                            child: const ListTile(
-                              leading: Icon(Icons.drive_file_move_outline),
-                              title: Text('Anderen Sync-Ordner …'),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: _stopSync,
-                            child: const ListTile(leading: Icon(Icons.cloud_off_outlined), title: Text('Sync beenden')),
-                          ),
-                        ],
-                      ],
-                    ],
+                    onPressed: () => showSettingsDialog(
+                      context,
+                      sync: _canSync ? widget.sync : null,
+                      onSetupSync: _setupSync,
+                      onStopSync: _stopSync,
+                      dataFolder: lib.root,
+                      onOpenDataFolder: Platform.isWindows || Platform.isLinux ? lib.revealDataFolder : null,
+                    ),
                   ),
                 ],
               ),

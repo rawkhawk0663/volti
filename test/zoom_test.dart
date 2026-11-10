@@ -13,7 +13,10 @@ void main() {
   late ToolController tools;
   late PageZoom zoom;
 
+  final taps = <Offset>[];
+
   Future<void> pump(WidgetTester t) async {
+    taps.clear();
     dir = Directory.systemTemp.createTempSync('volti_zoom');
     tools = await t.runAsync(() => makeTools(dir)) as ToolController;
     zoom = PageZoom();
@@ -22,7 +25,12 @@ void main() {
         home: SizedBox(
           width: 800,
           height: 600,
-          child: ZoomArea(zoom: zoom, tools: tools, child: const ColoredBox(color: Colors.white)),
+          child: ZoomArea(
+            zoom: zoom,
+            tools: tools,
+            onTap: (p, _) => taps.add(p),
+            child: const ColoredBox(color: Colors.white),
+          ),
         ),
       ),
     );
@@ -82,5 +90,17 @@ void main() {
     await pinch(t);
     expect(zoom.scale, 1);
     await pen.removePointer();
+  });
+
+  testWidgets('Antippen wird gemeldet, auch vergrössert – Zoomen nicht', (t) async {
+    await pump(t);
+    await pinch(t);
+    expect(taps, isEmpty, reason: 'zwei Finger sind kein Antippen');
+    await t.pump(const Duration(milliseconds: 400));
+    final f = await t.createGesture(kind: PointerDeviceKind.touch, pointer: 5);
+    await f.down(const Offset(400, 300));
+    await f.moveBy(const Offset(3, 2));
+    await f.up();
+    expect(taps, [const Offset(403, 302)]);
   });
 }

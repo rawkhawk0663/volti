@@ -16,11 +16,23 @@ List<ScoreEntry> filterScores(
     if (genre != null && e.genre != genre) return false;
     if (tag != null && !e.tags.contains(tag)) return false;
     if (words.isEmpty) return true;
-    final hay = [e.title, e.composer ?? '', e.genre ?? '', ...e.tags, e.relativePath].join(' ').toLowerCase();
+    final hay = [
+      e.title,
+      e.composer ?? '',
+      e.genre ?? '',
+      e.musicalKey ?? '',
+      ...e.tags,
+      e.relativePath,
+    ].join(' ').toLowerCase();
     return words.every(hay.contains);
   }
 
-  int byTitle(ScoreEntry a, ScoreEntry b) => a.title.toLowerCase().compareTo(b.title.toLowerCase());
+  // Gleiche Titel (ein Lied in mehreren Tonarten) nach Tonart ordnen.
+  int byTitle(ScoreEntry a, ScoreEntry b) {
+    final t = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    return t != 0 ? t : (a.musicalKey ?? '').toLowerCase().compareTo((b.musicalKey ?? '').toLowerCase());
+  }
+
   final list = all.where(matches).toList();
   switch (sort) {
     case ScoreSort.title:
