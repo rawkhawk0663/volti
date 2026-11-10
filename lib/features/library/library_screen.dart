@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
@@ -38,7 +39,26 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   int _tab = 0;
 
+  /// Nochmals auf den gewählten Punkt tippen = zurück zur Übersicht.
+  final _reset = [ValueNotifier(0), ValueNotifier(0)];
+
   LibraryController get lib => widget.library;
+
+  void _select(int i) {
+    if (i == _tab) {
+      _reset[i].value++;
+    } else {
+      setState(() => _tab = i);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final r in _reset) {
+      r.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,9 +66,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
       listenable: lib,
       builder: (context, _) {
         final wide = MediaQuery.sizeOf(context).width >= 720;
-        final body = _tab == 0
-            ? _ScoresView(library: lib, sync: widget.sync)
-            : SetlistsView(library: lib, sync: widget.sync);
+        // Beide bleiben bestehen: Beim Wechsel ist man wieder am selben Ort
+        // (Ordner, offene Setlist).
+        final body = IndexedStack(
+          index: _tab,
+          children: [
+            _ScoresView(library: lib, sync: widget.sync, reset: _reset[0], active: _tab == 0),
+            SetlistsView(library: lib, sync: widget.sync, reset: _reset[1], active: _tab == 1),
+          ],
+        );
         const destinations = [
           (Icons.library_music_outlined, Icons.library_music, 'Bibliothek'),
           (Icons.queue_music_outlined, Icons.queue_music, 'Setlists'),
@@ -62,7 +88,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   children: [
                     NavigationRail(
                       selectedIndex: _tab,
-                      onDestinationSelected: (i) => setState(() => _tab = i),
+                      onDestinationSelected: _select,
                       labelType: NavigationRailLabelType.all,
                       leading: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -87,7 +113,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             body: SafeArea(child: body),
             bottomNavigationBar: NavigationBar(
               selectedIndex: _tab,
-              onDestinationSelected: (i) => setState(() => _tab = i),
+              onDestinationSelected: _select,
               destinations: [
                 for (final (icon, sel, label) in destinations)
                   NavigationDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: label),
@@ -160,9 +186,15 @@ class _EmptyLibrary extends StatelessWidget {
 }
 
 class _ScoresView extends StatefulWidget {
-  const _ScoresView({required this.library, required this.sync});
+  const _ScoresView({required this.library, required this.sync, required this.reset, required this.active});
+
+  /// Gerade sichtbar? (Nur dann wirkt die Zurück-Taste hier.)
+  final bool active;
   final LibraryController library;
   final SyncController sync;
+
+  /// Meldet „zurück zur obersten Ebene“ (nochmals auf Bibliothek getippt).
+  final ValueListenable<int> reset;
 
   @override
   State<_ScoresView> createState() => _ScoresViewState();
@@ -184,7 +216,27 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
   });
 
   @override
+  void initState() {
+    super.initState();
+    widget.reset.addListener(_toTop);
+  }
+
+  /// Nochmals auf „Bibliothek“ getippt: zurück zur obersten Ebene.
+  void _toTop() {
+    if (!mounted) return;
+    setState(() {
+      _selecting = false;
+      _selected.clear();
+      _search.clear();
+      _query = '';
+      _folder = null;
+      _all = false;
+    });
+  }
+
+  @override
   void dispose() {
+    widget.reset.removeListener(_toTop);
     _search.dispose();
     super.dispose();
   }
@@ -545,9 +597,9 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
 
     return PopScope(
       // Zurück-Taste (Android) bzw. Esc: Auswahl beenden, Ordner nach oben.
-      canPop: !_selecting && !_all && current == null,
+      canPop: !widget.active || (!_selecting && !_all && current == null),
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
+        if (didPop || !widget.active) return;
         if (_selecting) {
           _endSelecting();
         } else {

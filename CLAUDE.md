@@ -130,6 +130,8 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 27. **Notizen je Setlist** (Wunsch des Besitzers): Ebenen haben ein `scope` (Setlist-ID, null = Bibliothek). Ebenen der Bibliothek sind immer und in jeder Setlist sichtbar. Alles, was in einer Setlist an Ebenen und Gruppen angelegt wird (`InkController.scope`, `addLayer`/`addGroup`), gilt nur dort. Mehrere Ebenen an beiden Orten sind ausdrücklich gewünscht. `ScoreAnnotations.viewScope` (nur zur Laufzeit) blendet fremde Setlist-Ebenen aus (`layers`, `isLayerShown`, `groupOf`), so greifen Zeichnen, Radierer, Lasso und Export automatisch richtig. Beim Öffnen in einer Setlist wird deren oberste Ebene aktiv, sonst entsteht `setlist-<id>` (feste ID, damit zwei Geräte dieselbe anlegen). Man kann trotzdem eine Song-Ebene wählen. Alles liegt in der Zusatzdatei des Songs und wird normal abgeglichen. `ViewerItem.setlistId`, Export einer Setlist mit `scope`.
 
+28. **Seitenleiste immer sichtbar** (Wunsch des Besitzers): Bibliothek und Setlists liegen in einem `IndexedStack`, beim Wechsel bleibt man am selben Ort (Ordner, offene Setlist). Eine geöffnete Setlist steckt in der Übersicht (`SetlistsView._detailId`, `SetlistDetailScreen(onBack:)`), nicht als eigene Seite. Nochmals auf den gewählten Punkt tippen führt zur Übersicht zurück (`reset`). Die Zurück-Taste wirkt nur auf die sichtbare Seite (`active`).
+
 ## Prüfen
 ```bash
 flutter analyze

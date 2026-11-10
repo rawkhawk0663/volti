@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
@@ -19,9 +20,15 @@ import 'open_scores.dart';
 /// Übersicht aller Setlists – mit Suche, Ordnern und Mehrfachauswahl
 /// (wie die Bibliothek).
 class SetlistsView extends StatefulWidget {
-  const SetlistsView({super.key, required this.library, required this.sync});
+  const SetlistsView({super.key, required this.library, required this.sync, this.reset, this.active = true});
+
+  /// Gerade sichtbar? (Nur dann wirkt die Zurück-Taste hier.)
+  final bool active;
   final LibraryController library;
   final SyncController sync;
+
+  /// Meldet „zurück zur Übersicht“ (nochmals auf Setlists getippt).
+  final ValueListenable<int>? reset;
 
   @override
   State<SetlistsView> createState() => _SetlistsViewState();
@@ -43,8 +50,35 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
   FolderBook get _book => library.setlistFolders;
   String? get _current => _all ? null : _book.tree.resolve(_folder);
 
+  /// Offene Setlist (in der Übersicht, damit die Seitenleiste sichtbar bleibt).
+  String? _detailId;
+
+  void _openDetail(Setlist s) => setState(() => _detailId = s.id);
+  void _closeDetail() => setState(() => _detailId = null);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.reset?.addListener(_toTop);
+  }
+
+  /// Nochmals auf „Setlists“ getippt: zurück zur Übersicht.
+  void _toTop() {
+    if (!mounted) return;
+    setState(() {
+      _detailId = null;
+      _selecting = false;
+      _selected.clear();
+      _search.clear();
+      _query = '';
+      _folder = null;
+      _all = false;
+    });
+  }
+
   @override
   void dispose() {
+    widget.reset?.removeListener(_toTop);
     _search.dispose();
     super.dispose();
   }
@@ -80,7 +114,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
     final s = await library.createSetlist(name);
     final folder = _current;
     if (folder != null) await library.moveSetlists([s], folder);
-    if (mounted) await openSetlist(context, library, s);
+    if (mounted) _openDetail(s);
   }
 
   Future<void> _newFolder() async {
@@ -212,7 +246,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
 
   List<PopupMenuEntry<VoidCallback>> _menu(Setlist s) => [
     PopupMenuItem(
-      value: () => openSetlist(context, library, s),
+      value: () => _openDetail(s),
       child: const ListTile(leading: Icon(Icons.open_in_new), title: Text('Öffnen')),
     ),
     if (s.items.isNotEmpty)
@@ -253,7 +287,29 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
   // ---------------------------------------------------------------- Aufbau
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(listenable: library, builder: (context, _) => _build(context));
+    return ListenableBuilder(
+      listenable: library,
+      builder: (context, _) {
+        final id = _detailId;
+        final open = id == null ? null : library.setlists.where((s) => s.id == id).firstOrNull;
+        if (open != null) {
+          // Offene Setlist innerhalb der Übersicht: Die Seitenleiste bleibt.
+          return PopScope(
+            canPop: !widget.active,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop && widget.active) _closeDetail();
+            },
+            child: SetlistDetailScreen(
+              key: ValueKey('setlist/$id'),
+              library: library,
+              setlist: open,
+              onBack: _closeDetail,
+            ),
+          );
+        }
+        return _build(context);
+      },
+    );
   }
 
   Widget _build(BuildContext context) {
@@ -440,9 +496,9 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
     final empty = library.setlists.isEmpty && tree.live.isEmpty;
 
     return PopScope(
-      canPop: !_selecting && !_all && current == null,
+      canPop: !widget.active || (!_selecting && !_all && current == null),
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
+        if (didPop || !widget.active) return;
         _selecting ? _endSelecting() : _up();
       },
       child: Scaffold(
@@ -575,7 +631,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
                 ),
           onTap: _selecting
               ? () => setState(() => _selected.contains(s.id) ? _selected.remove(s.id) : _selected.add(s.id))
-              : () => openSetlist(context, library, s),
+              : () => _openDetail(s),
           onLongPress: () {
             final box = context.findRenderObject() as RenderBox;
             menuAt(box.localToGlobal(box.size.center(Offset.zero)));
@@ -641,9 +697,12 @@ Future<void> _exportSetlist(BuildContext context, LibraryController library, Set
 }
 
 class SetlistDetailScreen extends StatelessWidget {
-  const SetlistDetailScreen({super.key, required this.library, required this.setlist});
+  const SetlistDetailScreen({super.key, required this.library, required this.setlist, this.onBack});
   final LibraryController library;
   final Setlist setlist;
+
+  /// Zurück zur Übersicht (wenn sie in der Übersicht steckt statt als eigene Seite).
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -655,6 +714,14 @@ class SetlistDetailScreen extends StatelessWidget {
           child: Scaffold(
             backgroundColor: Colors.transparent,
             appBar: AppBar(
+              leading: onBack == null
+                  ? null
+                  : IconButton(
+                      tooltip: 'Zurück zu den Setlists',
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: onBack,
+                    ),
+              automaticallyImplyLeading: onBack == null,
               title: Text(s.name),
               actions: [
                 IconButton(
@@ -689,7 +756,12 @@ class SetlistDetailScreen extends StatelessWidget {
                     );
                     if (ok != true) return;
                     await library.deleteSetlist(s);
-                    if (context.mounted) Navigator.of(context).pop();
+                    if (!context.mounted) return;
+                    if (onBack != null) {
+                      onBack!();
+                    } else {
+                      Navigator.of(context).pop();
+                    }
                   },
                 ),
                 const SizedBox(width: 8),
