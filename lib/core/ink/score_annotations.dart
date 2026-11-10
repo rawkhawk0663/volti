@@ -73,10 +73,17 @@ class ScoreAnnotations {
   Iterable<AnnotationLayer> get allLayers => _layers.values;
 
   /// Ebenen von unten nach oben. Die Grund-Ebene ist immer dabei.
+  /// In welcher Setlist gerade angezeigt wird (nur zur Laufzeit, wird nicht
+  /// gespeichert). Ebenen einer anderen Setlist sind dann unsichtbar – und in
+  /// der Bibliothek (null) alle Setlist-Ebenen.
+  String? viewScope;
+
+  bool _inScope(AnnotationLayer l) => l.scope == null || l.scope == viewScope;
+
   List<AnnotationLayer> get layers {
     final list = [
       for (final l in _layers.values)
-        if (!l.deleted || l.isDefault) l,
+        if ((!l.deleted || l.isDefault) && _inScope(l)) l,
     ];
     if (!_layers.containsKey(kDefaultLayer)) list.add(AnnotationLayer.standard());
     list.sort((a, b) {
@@ -91,7 +98,8 @@ class ScoreAnnotations {
   /// Gruppe einer Ebene, falls es sie (noch) gibt.
   AnnotationLayer? groupOf(AnnotationLayer l) {
     final p = l.parent == null ? null : _layers[l.parent];
-    return p != null && p.isGroup && !p.deleted ? p : null;
+    // Eine Gruppe, die hier nicht gilt (andere Setlist), zählt nicht.
+    return p != null && p.isGroup && !p.deleted && _inScope(p) ? p : null;
   }
 
   /// Ebenen und Gruppen von oben nach unten, so wie sie in der Liste stehen:
@@ -128,7 +136,7 @@ class ScoreAnnotations {
   bool isLayerShown(String id) {
     final l = layer(id);
     if (l == null) return true;
-    if (!l.visible) return false;
+    if (!_inScope(l) || !l.visible) return false;
     final g = groupOf(l);
     return g == null || g.visible;
   }
@@ -192,7 +200,8 @@ class ScoreAnnotations {
   /// Das Ergebnis ist unabhängig von der Reihenfolge: `a.merge(b)` und
   /// `b.merge(a)` ergeben denselben Stand.
   static ScoreAnnotations merge(ScoreAnnotations a, ScoreAnnotations b) {
-    final result = ScoreAnnotations(a.allStrokes, a.allTexts, a.allStamps, a.allLayers, a.allLinks, a.allBookmarks);
+    final result = ScoreAnnotations(a.allStrokes, a.allTexts, a.allStamps, a.allLayers, a.allLinks, a.allBookmarks)
+      ..viewScope = a.viewScope;
     for (final other in b.allLinks) {
       final mine = result._links[other.id];
       result.putLink(

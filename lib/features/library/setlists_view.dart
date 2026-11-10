@@ -616,7 +616,9 @@ Future<void> playSetlist(BuildContext context, LibraryController library, Setlis
     if (entry == null) continue;
     if (i == start) startIndex = items.length;
     final item = s.items[i];
-    items.add(ViewerItem(entry.path, item.label ?? entry.title, bookmark: item.bookmark));
+    items.add(
+      ViewerItem(entry.path, item.label ?? entry.title, bookmark: item.bookmark, setlistId: s.id, setlistName: s.name),
+    );
   }
   return openScores(context, library, items, start: startIndex, setlistName: s.name);
 }
@@ -629,7 +631,8 @@ Future<void> _exportSetlist(BuildContext context, LibraryController library, Set
     title: s.name,
     load: () async => opened ??= await openExportPieces([
       for (final item in s.items)
-        if (library.byRelativePath(item.relativePath) case final e?) (path: e.path, bookmark: item.bookmark),
+        if (library.byRelativePath(item.relativePath) case final e?)
+          (path: e.path, bookmark: item.bookmark, scope: s.id),
     ]),
     release: () async {
       if (opened != null) await closeExportPieces(opened!);

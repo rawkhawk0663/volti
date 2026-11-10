@@ -74,9 +74,15 @@ class _UndoEntry {
 /// Verwaltet die Anmerkungen eines Stücks: Zeichnen, Radieren,
 /// Rückgängig/Wiederholen und automatisches Speichern.
 class InkController extends ChangeNotifier {
-  InkController({required this.pdfPath, SidecarStore? store}) : _store = store ?? const SidecarStore();
+  InkController({required this.pdfPath, SidecarStore? store, this.scope, this.scopeName})
+    : _store = store ?? const SidecarStore();
 
   final String pdfPath;
+
+  /// Geöffnet in dieser Setlist (ID): Neue Notizen landen dann auf der
+  /// Setlist-Ebene und sind nur in dieser Setlist sichtbar. null = Bibliothek.
+  final String? scope;
+  final String? scopeName;
   final SidecarStore _store;
   static const _uuid = Uuid();
 
@@ -95,8 +101,39 @@ class InkController extends ChangeNotifier {
   String? saveError;
 
   Future<void> load() async {
-    _annotations = (await _store.load(pdfPath)).annotations;
+    _annotations = (await _store.load(pdfPath)).annotations..viewScope = scope;
+    _prepareScopeLayer();
     notifyListeners();
+  }
+
+  /// In einer Setlist: deren oberste Ebene als aktive wählen (gibt es keine,
+  /// eine neue zuoberst). So landen Notizen dort und nicht beim Song.
+  /// Gespeichert wird sie erst, wenn etwas daraufkommt.
+  void _prepareScopeLayer() {
+    final s = scope;
+    if (s == null) return;
+    // Oberste vorhandene Ebene dieser Setlist – sonst eine neue.
+    final mine = [
+      for (final l in _annotations.layers)
+        if (l.scope == s && !l.isGroup) l,
+    ];
+    if (mine.isNotEmpty) {
+      _activeLayer = mine.last.id;
+      return;
+    }
+    final id = AnnotationLayer.forSetlist(s);
+    final old = _annotations.allLayers.where((l) => l.id == id).firstOrNull;
+    _annotations.putLayer(
+      AnnotationLayer(
+        id: id,
+        name: old?.name ?? 'Setlist „${scopeName ?? 'Setlist'}“',
+        order: _topOrder() + 1,
+        createdAt: old?.createdAt ?? DateTime.now().toUtc(),
+        modifiedAt: old == null ? null : DateTime.now().toUtc(),
+        scope: s,
+      ),
+    );
+    _activeLayer = id;
   }
 
   /// Fügt einen fertig gezeichneten Strich hinzu.
@@ -416,6 +453,8 @@ class InkController extends ChangeNotifier {
       order: _topOrder(group) + 1,
       createdAt: DateTime.now().toUtc(),
       parent: group,
+      // In einer Setlist angelegt: gilt nur dort.
+      scope: scope,
     );
     _activeLayer = l.id;
     _changeLayers([l]);
@@ -430,6 +469,7 @@ class InkController extends ChangeNotifier {
       order: _topOrder() + 1,
       createdAt: DateTime.now().toUtc(),
       isGroup: true,
+      scope: scope,
     );
     _changeLayers([g]);
     return g.id;

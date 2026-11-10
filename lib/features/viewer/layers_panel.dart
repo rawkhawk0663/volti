@@ -75,6 +75,15 @@ class _LayersPanelState extends State<LayersPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 4),
+            if (ink.scope != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'Neue Ebenen gelten nur in dieser Setlist. Ebenen mit dem Bibliotheks-Zeichen gehören zum Song '
+                  'und sind überall sichtbar.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ),
             Wrap(
               spacing: 4,
               children: [
@@ -268,6 +277,18 @@ class _Row extends StatelessWidget {
                     ),
                   ),
                 ),
+                // In einer Setlist: wohin gehört die Ebene?
+                if (ink.scope != null)
+                  Tooltip(
+                    message: layer.scope != null
+                        ? 'Nur in dieser Setlist'
+                        : 'Gehört zum Song – in der Bibliothek und allen Setlists',
+                    child: Icon(
+                      layer.scope != null ? Icons.queue_music : Icons.library_music_outlined,
+                      size: 16,
+                      color: layer.scope != null ? scheme.primary : scheme.outline,
+                    ),
+                  ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   tooltip: layer.visible ? 'Ausblenden' : 'Einblenden',

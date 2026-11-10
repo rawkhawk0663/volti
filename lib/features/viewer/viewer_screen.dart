@@ -36,9 +36,14 @@ import '../library/settings_dialog.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
 class ViewerItem {
-  const ViewerItem(this.path, this.title, {this.bookmark});
+  const ViewerItem(this.path, this.title, {this.bookmark, this.setlistId, this.setlistName});
   final String path;
   final String title;
+
+  /// Aus dieser Setlist geöffnet: Notizen gehören dann zur Setlist (eigene
+  /// Ebene, nur dort sichtbar), nicht zum Song in der Bibliothek.
+  final String? setlistId;
+  final String? setlistName;
 
   /// Nur den Bereich dieses Lesezeichens zeigen (z. B. ein Lied aus einem
   /// Sammelband in einer Setlist).
@@ -83,7 +88,7 @@ class ViewerScreen extends StatefulWidget {
 
 /// Ein geöffnetes Stück: PDF, Seitenbilder und Anmerkungen.
 class _Piece {
-  _Piece(this.item) : ink = InkController(pdfPath: item.path);
+  _Piece(this.item) : ink = InkController(pdfPath: item.path, scope: item.setlistId, scopeName: item.setlistName);
 
   final ViewerItem item;
   final InkController ink;

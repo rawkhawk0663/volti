@@ -41,11 +41,13 @@ List<int> shownPages(PageSetup setup, int pdfPages, ScoreAnnotations annotations
 
 /// Öffnet Stücke für den Export (PDF und Zusatzdatei). Die geöffneten
 /// Dateien müssen danach mit [closeExportPieces] freigegeben werden.
-Future<List<ExportPiece>> openExportPieces(List<({String path, String? bookmark})> items) async {
+Future<List<ExportPiece>> openExportPieces(List<({String path, String? bookmark, String? scope})> items) async {
   final result = <ExportPiece>[];
   for (final it in items) {
     final doc = await PdfDocument.openFile(it.path);
     final side = await const SidecarStore().load(it.path);
+    // Aus einer Setlist: deren Notizen statt der anderer Setlists.
+    side.annotations.viewScope = it.scope;
     result.add(
       ExportPiece(
         doc: doc,

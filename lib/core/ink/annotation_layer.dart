@@ -17,7 +17,12 @@ class AnnotationLayer {
     this.deleted = false,
     this.parent,
     this.isGroup = false,
+    this.scope,
   });
+
+  /// ID der Ebene mit den Notizen einer Setlist (für alle Geräte gleich, so
+  /// entsteht beim Abgleich keine zweite).
+  static String forSetlist(String setlistId) => 'setlist-$setlistId';
 
   /// Die Grund-Ebene, solange sie nie verändert wurde.
   static AnnotationLayer standard() =>
@@ -39,6 +44,10 @@ class AnnotationLayer {
   /// Eine Gruppe fasst Ebenen zusammen. Auf ihr selbst liegt nichts; ist sie
   /// ausgeblendet, sind es alle Ebenen darin.
   final bool isGroup;
+
+  /// Nur in dieser Setlist sichtbar (ID der Setlist, null = überall).
+  /// So können Notizen zu einem Song je Setlist verschieden sein.
+  final String? scope;
 
   DateTime get lastChange => modifiedAt ?? createdAt;
   bool get isDefault => id == kDefaultLayer;
@@ -63,6 +72,7 @@ class AnnotationLayer {
     deleted: deleted ?? this.deleted,
     parent: identical(parent, _keep) ? this.parent : parent as String?,
     isGroup: isGroup,
+    scope: scope,
   );
 
   Map<String, dynamic> toJson() => {
@@ -75,6 +85,7 @@ class AnnotationLayer {
     if (deleted) 'deleted': true,
     if (parent != null) 'parent': parent,
     if (isGroup) 'group': true,
+    if (scope != null) 'scope': scope,
   };
 
   static AnnotationLayer fromJson(Map<String, dynamic> j) => AnnotationLayer(
@@ -87,5 +98,6 @@ class AnnotationLayer {
     deleted: j['deleted'] == true,
     parent: j['parent'] as String?,
     isGroup: j['group'] == true,
+    scope: j['scope'] as String?,
   );
 }

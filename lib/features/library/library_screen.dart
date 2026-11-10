@@ -421,7 +421,8 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     await showExportDialog(
       context,
       title: '${list.length} Stücke',
-      load: () async => opened ??= await openExportPieces([for (final e in list) (path: e.path, bookmark: null)]),
+      load: () async =>
+          opened ??= await openExportPieces([for (final e in list) (path: e.path, bookmark: null, scope: null)]),
       release: () async {
         if (opened != null) await closeExportPieces(opened!);
       },
@@ -447,7 +448,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     await showExportDialog(
       context,
       title: e.title,
-      load: () async => opened ??= await openExportPieces([(path: e.path, bookmark: null)]),
+      load: () async => opened ??= await openExportPieces([(path: e.path, bookmark: null, scope: null)]),
       release: () async {
         if (opened != null) await closeExportPieces(opened!);
       },
