@@ -30,6 +30,10 @@ enum ToolMode {
 
   /// Sprungmarken setzen: Startpunkt, dann Ziel antippen.
   link,
+
+  /// Verschieben: ein Element (Strich, Stempel, Text) anfassen und ziehen –
+  /// ohne es vorher einzukreisen.
+  move,
 }
 
 /// Ausgewählte Elemente auf einer Seite eines Stücks.

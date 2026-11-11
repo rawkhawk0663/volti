@@ -134,6 +134,8 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 29. **Formatierung innerhalb einer Text-Notiz** (wie in Word, Wunsch des Besitzers): `TextNote.marks` (`TextMark`: Bereich + `CharStyle` mit fett/kursiv/unterstrichen/Farbe als Abweichung vom Stil der Notiz, Feld `marks` in der Zusatzdatei; alte Notizen ohne `marks` bleiben gültig). Der Editor (`RichNoteController`) hält die Formatierung pro Zeichen, neu Getipptes übernimmt die des Zeichens davor (`adjustChars`). Ist etwas markiert, wirken B/I/U und Textfarbe im Text-Fenster nur darauf (`ToolController.richText`, `RichTextTarget`), sonst wie bisher auf die ganze Notiz. Strg+B/I/U im Editor. Darstellung überall über `noteSpan` (Seite, Lasso, Radierer-Fläche, Export).
 
+30. **Verschieben-Werkzeug** (`ToolMode.move`, Taste V, Symbol mit vier Pfeilen): Stift oder Maus fasst das oberste Element an (Text vor Stempel vor Strich, jüngster zuerst, `_elementAt`) und zieht es. Technisch eine kurze Auswahl mit der Lasso-Logik (`_beginMove` → `_moveLasso`/`_endLasso`), danach ist nichts mehr ausgewählt. Ein Zug ist ein Rückgängig-Schritt. Der Finger verschiebt nie (Handballen).
+
 ## Prüfen
 ```bash
 flutter analyze

@@ -748,6 +748,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
       tools.setMode(ToolMode.shape);
     } else if (down && key == LogicalKeyboardKey.keyJ) {
       tools.setMode(ToolMode.link);
+    } else if (down && !ctrl && key == LogicalKeyboardKey.keyV) {
+      tools.setMode(ToolMode.move);
     } else if (down && !ctrl && key == LogicalKeyboardKey.keyA) {
       tools.setMode(ToolMode.lasso);
     } else if (down && key == LogicalKeyboardKey.keyM) {

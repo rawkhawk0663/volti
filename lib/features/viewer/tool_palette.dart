@@ -178,6 +178,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
               ),
               tool(ToolMode.eraser, Icons.auto_fix_normal, 'Radierer (E)'),
               tool(ToolMode.lasso, Icons.highlight_alt, 'Auswählen (A)'),
+              tool(ToolMode.move, Icons.open_with, 'Verschieben (V)'),
               tool(ToolMode.text, Icons.text_fields, 'Text (T)'),
               tool(ToolMode.stamp, Icons.music_note, 'Stempel (S)'),
               tool(ToolMode.shape, Icons.category_outlined, 'Formen (F)'),

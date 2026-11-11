@@ -212,6 +212,10 @@ class _InkLayerState extends State<InkLayer> {
       _beginLasso(e, size);
       return;
     }
+    if (!eraserEvent && mode == ToolMode.move) {
+      _beginMove(e, size);
+      return;
+    }
     if (!eraserEvent && mode == ToolMode.shape) {
       _pointer = e.pointer;
       _shapeStart = _shapeEnd = e.localPosition;
@@ -423,6 +427,56 @@ class _InkLayerState extends State<InkLayer> {
     _activeRepaint.value++;
   }
 
+  /// Verschieben-Werkzeug: das oberste Element unter dem Stift anfassen.
+  /// Es wird kurz zur Auswahl (so bewegt es sich flüssig mit) und nach dem
+  /// Loslassen an der neuen Stelle abgelegt.
+  void _beginMove(PointerDownEvent e, Size size) {
+    final pos = e.localPosition;
+    final ids = _elementAt(pos, size);
+    if (ids == null) return;
+    _pointer = e.pointer;
+    _moving = true;
+    final sel = InkSelection(c, widget.page, ids);
+    tools.select(sel);
+    final r = selectionRect(ids, size);
+    if (r == null) {
+      _pointer = null;
+      _moving = false;
+      tools.clearSelection();
+      return;
+    }
+    _selDrag = _SelectDrag.move;
+    _selStart = pos;
+    _selRect = r;
+    _selTf = SelectionTransform.identity;
+    tools.isDrawing.value = true;
+    _activeRepaint.value++;
+  }
+
+  /// Läuft gerade ein Verschieben mit dem Verschieben-Werkzeug?
+  bool _moving = false;
+
+  /// Oberstes sichtbares Element an [pos]: zuerst Text, dann Stempel, dann
+  /// Striche (jüngste zuerst).
+  SelectionIds? _elementAt(Offset pos, Size size) {
+    final a = c.annotations;
+    final tol = 10 / tools.viewScale;
+    for (final n in a.visibleTextsOn(widget.page).toList().reversed) {
+      final b = textNoteBounds(n, size);
+      if (Rect.fromLTRB(b.left, b.top, b.right + 4, b.bottom).inflate(tol / 2).contains(pos)) {
+        return SelectionIds(texts: {n.id});
+      }
+    }
+    for (final st in a.visibleStampsOn(widget.page).toList().reversed) {
+      if (stampRect(st, size).inflate(tol / 2).contains(pos)) return SelectionIds(stamps: {st.id});
+    }
+    final strokes = a.visibleStrokesOn(widget.page).toList()..sort((x, y) => y.createdAt.compareTo(x.createdAt));
+    for (final s in strokes) {
+      if (_touches(s, pos, tol, size)) return SelectionIds(strokes: {s.id});
+    }
+    return null;
+  }
+
   void _moveLasso(Offset pos, Size size) {
     final lasso = _lasso;
     if (lasso != null) {
@@ -489,6 +543,11 @@ class _InkLayerState extends State<InkLayer> {
     _selDrag = null;
     _selTf = SelectionTransform.identity;
     _pointer = null;
+    // Verschieben-Werkzeug: danach nichts ausgewählt lassen.
+    if (_moving) {
+      _moving = false;
+      tools.clearSelection();
+    }
     tools.isDrawing.value = false;
     _activeRepaint.value++;
   }

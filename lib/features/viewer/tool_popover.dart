@@ -49,6 +49,7 @@ String toolName(ToolMode m) => switch (m) {
   ToolMode.shape => 'Formen',
   ToolMode.lasso => 'Auswählen',
   ToolMode.link => 'Sprungmarke',
+  ToolMode.move => 'Verschieben',
   _ => '',
 };
 
@@ -131,6 +132,7 @@ class ToolPopover extends StatelessWidget {
                         ToolMode.shape => _ShapeSettings(tools: tools),
                         ToolMode.lasso => _LassoSettings(tools: tools, ink: ink, page: page),
                         ToolMode.link => _LinkSettings(tools: tools),
+                        ToolMode.move => const _MoveSettings(),
                         _ => const SizedBox.shrink(),
                       },
               ),
@@ -1292,6 +1294,24 @@ class _PageDots extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ----------------------------------------------------------------- Verschieben
+class _MoveSettings extends StatelessWidget {
+  const _MoveSettings();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        'Einen Strich, Stempel oder eine Text-Notiz mit dem Stift (oder der Maus) anfassen und an die '
+        'neue Stelle ziehen. Mehrere auf einmal: mit „Auswählen“ einkreisen.',
+        style: theme.textTheme.bodyMedium,
+      ),
     );
   }
 }

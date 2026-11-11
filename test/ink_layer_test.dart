@@ -72,6 +72,40 @@ void main() {
     c.dispose();
   });
 
+  testWidgets('Verschieben: Strich anfassen und ziehen, danach nichts ausgewählt', (t) async {
+    await pump(t);
+    c.addStroke(
+      page: 1,
+      tool: InkTool.pen,
+      color: 0xFF000000,
+      width: 0.005,
+      points: const [InkPoint(0.4, 0.5, 0.5), InkPoint(0.6, 0.5, 0.5)],
+    );
+    tools.setMode(ToolMode.move);
+    await t.pump();
+    final center = t.getCenter(find.byType(InkLayer));
+    // Daneben angefasst: nichts passiert.
+    var g = await t.startGesture(center + const Offset(0, 120), kind: PointerDeviceKind.stylus);
+    await g.moveBy(const Offset(40, 0));
+    await g.up();
+    expect(c.annotations.visibleStrokesOn(1).single.points.first.x, closeTo(0.4, 0.001));
+    // Am Strich anfassen und 40 px nach rechts, 60 px nach unten ziehen.
+    g = await t.startGesture(center, kind: PointerDeviceKind.stylus);
+    for (var i = 0; i < 4; i++) {
+      await g.moveBy(const Offset(10, 15));
+    }
+    await g.up();
+    await t.pump();
+    final p0 = c.annotations.visibleStrokesOn(1).single.points.first;
+    expect(p0.x, closeTo(0.4 + 40 / 400, 0.002));
+    expect(p0.y, closeTo(0.5 + 60 / 600, 0.002));
+    expect(tools.selection.value, isNull);
+    // Ein Schritt zurück: wieder am alten Ort.
+    c.undo();
+    expect(c.annotations.visibleStrokesOn(1).single.points.first.x, closeTo(0.4, 0.001));
+    c.dispose();
+  });
+
   testWidgets('Spielansicht: Stift ziehen zeichnet sofort', (t) async {
     await pump(t);
     expect(tools.mode, ToolMode.read);
