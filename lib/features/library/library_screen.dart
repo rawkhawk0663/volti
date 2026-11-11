@@ -49,6 +49,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   void initState() {
     super.initState();
+    // Nach einem Update melden, ob es geklappt hat.
+    Future<void>.delayed(const Duration(seconds: 1), () {
+      if (mounted) reportLastUpdate(context);
+    });
     // Einmal beim Start nach einer neuen Version schauen (leise).
     Future<void>.delayed(const Duration(seconds: 6), () {
       if (mounted) checkForUpdateQuietly(context);

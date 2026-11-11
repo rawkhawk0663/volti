@@ -385,7 +385,9 @@ class _UpdateSectionState extends State<UpdateSection> {
             LinearProgressIndicator(value: _progress),
             const SizedBox(height: 4),
             Text(
-              _progress! < 1 ? 'Wird heruntergeladen …' : 'Volti startet gleich neu …',
+              _progress! < 1
+                  ? 'Wird heruntergeladen …'
+                  : 'Volti schliesst sich kurz und startet in der neuen Version neu …',
               style: theme.textTheme.bodySmall,
             ),
           ] else
@@ -455,7 +457,7 @@ Future<void> _installWithProgress(BuildContext context, UpdateInfo u) async {
           children: [
             LinearProgressIndicator(value: v),
             const SizedBox(height: 8),
-            Text(v < 1 ? 'Wird heruntergeladen …' : 'Volti startet gleich neu …'),
+            Text(v < 1 ? 'Wird heruntergeladen …' : 'Volti schliesst sich kurz und startet in der neuen Version neu …'),
           ],
         ),
       ),
@@ -469,4 +471,25 @@ Future<void> _installWithProgress(BuildContext context, UpdateInfo u) async {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Das Update ging nicht: $e')));
     }
   }
+}
+
+/// Nach einem Update: kurz melden, ob es geklappt hat.
+Future<void> reportLastUpdate(BuildContext context) async {
+  final r = await Updater.lastUpdateResult();
+  if (r == null || !context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      persist: false,
+      duration: Duration(seconds: r.ok ? 5 : 12),
+      content: Text(r.message),
+      action: r.ok
+          ? null
+          : SnackBarAction(
+              label: 'Download-Seite',
+              onPressed: () => Updater.openPage(
+                UpdateInfo(tag: '', number: 0, page: Uri.parse('https://github.com/${Updater.repo}/releases/latest')),
+              ),
+            ),
+    ),
+  );
 }

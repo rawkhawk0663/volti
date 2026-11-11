@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
@@ -127,35 +128,67 @@ class Updater {
 
     // Auspacken
     final unpacked = Directory(p.join(work.path, 'neu'));
-    await extractFileToDisk(zip.path, unpacked.path);
+    // Im Hintergrund auspacken, damit Volti nicht einfriert („Keine Rückmeldung“).
+    final zipPath = zip.path, outPath = unpacked.path;
+    await Isolate.run(() => extractFileToDisk(zipPath, outPath));
     if (!await File(p.join(unpacked.path, 'Volti.exe')).exists()) {
       throw const FileSystemException('Das Update ist unvollständig (Volti.exe fehlt).');
     }
     onProgress?.call(1);
 
-    // Ersetzen, sobald Volti beendet ist – und neu starten.
+    // Ersetzen, sobald Volti beendet ist – und neu starten. Ein einfaches
+    // Windows-Skript (cmd) erledigt das und schreibt jeden Schritt ins
+    // Protokoll; beim nächsten Start meldet Volti, ob es geklappt hat.
     final target = File(Platform.resolvedExecutable).parent.path;
-    String q(String s) => s.replaceAll("'", "''");
-    final script = File(p.join(work.path, 'update.ps1'));
+    final log = await _logFile();
+    await log.writeAsString('Update ${u.tag}\r\nHeruntergeladen und ausgepackt\r\n');
+    final script = File(p.join(work.path, 'update.cmd'));
+    final me = pid;
     await script.writeAsString(
-      '﻿' // BOM, damit PowerShell Umlaute in Pfaden richtig liest
-      "try { Wait-Process -Id $pid -Timeout 60 -ErrorAction SilentlyContinue } catch {}\r\n"
-      "Start-Sleep -Milliseconds 700\r\n"
-      "robocopy '${q(unpacked.path)}' '${q(target)}' /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null\r\n"
-      "Start-Process -FilePath '${q(p.join(target, 'Volti.exe'))}'\r\n"
-      "Start-Sleep -Seconds 3\r\n"
-      "Remove-Item -Recurse -Force '${q(work.path)}' -ErrorAction SilentlyContinue\r\n",
+      '@echo off\r\n'
+      'chcp 65001 >nul\r\n'
+      'set /a n=0\r\n'
+      ':wait\r\n'
+      // Warten, bis Volti beendet ist (höchstens rund eine Minute).
+      'tasklist /FI "PID eq $me" 2>nul | find "$me" >nul\r\n'
+      'if not errorlevel 1 (\r\n'
+      '  set /a n+=1\r\n'
+      '  if %n% GEQ 60 goto copy\r\n'
+      '  ping -n 2 127.0.0.1 >nul\r\n'
+      '  goto wait\r\n'
+      ')\r\n'
+      ':copy\r\n'
+      'ping -n 2 127.0.0.1 >nul\r\n'
+      'echo Volti beendet, kopiere >> "${log.path}"\r\n'
+      'robocopy "${unpacked.path}" "$target" /E /R:10 /W:1 /NFL /NDL /NJH /NJS /NP >> "${log.path}"\r\n'
+      'if %ERRORLEVEL% GEQ 8 (echo FEHLER beim Kopieren %ERRORLEVEL% >> "${log.path}") else (echo FERTIG >> "${log.path}")\r\n'
+      'start "" "${p.join(target, 'Volti.exe')}"\r\n',
     );
-    await Process.start('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-WindowStyle',
-      'Hidden',
-      '-File',
-      script.path,
-    ], mode: ProcessStartMode.detached);
+    await Process.start('cmd.exe', ['/c', script.path], mode: ProcessStartMode.detached);
+    // Kurz stehen lassen, damit man sieht, dass Volti absichtlich neu startet.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
     exit(0);
+  }
+
+  static Future<File> _logFile() async => File(p.join((await getApplicationSupportDirectory()).path, 'update.log'));
+
+  /// Nach einem Update (beim Start): Hat es geklappt? Gibt eine Meldung
+  /// zurück (null = es lief kein Update) und räumt das Protokoll weg.
+  static Future<({bool ok, String message})?> lastUpdateResult() async {
+    if (!Platform.isWindows) return null;
+    try {
+      final f = await _logFile();
+      if (!await f.exists()) return null;
+      final text = await f.readAsString();
+      await f.delete();
+      if (text.contains('FERTIG')) return (ok: true, message: 'Update installiert – jetzt läuft Volti $voltiVersion.');
+      final reason = text.contains('FEHLER')
+          ? 'Die neuen Dateien liessen sich nicht in den Volti-Ordner kopieren.'
+          : 'Das Ersetzen wurde nicht abgeschlossen.';
+      return (ok: false, message: 'Das Update ging nicht: $reason Bitte lade es von Hand herunter.');
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Seite mit dem Download im Browser öffnen (Android, oder wenn Volti sich
