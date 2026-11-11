@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../app/error_log.dart';
 import '../../core/app_settings.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_store.dart';
@@ -128,6 +129,11 @@ class SyncController extends ChangeNotifier {
         cloudAccessDenied = report.cloudAccessDenied;
         final first = report.reasons.entries.firstOrNull;
         if (first != null) errorDetail = '${_describe(first.key)}: ${first.value}';
+        ErrorLog.record(
+          'Nicht abgeglichen: ${report.reasons.entries.map((e) => '${e.key}: ${e.value}').join('\n')}',
+          null,
+          where: 'Sync',
+        );
         // Das meiste ist abgeglichen; einzelne Dateien kommen beim nächsten Mal.
         final names = {for (final f in report.failed) _describe(f)}.toList();
         final list = names.take(5).join(', ') + (names.length > 5 ? ' …' : '');
@@ -147,7 +153,8 @@ class SyncController extends ChangeNotifier {
         await library.rescan();
         await afterDownload?.call();
       }
-    } catch (e) {
+    } catch (e, st) {
+      ErrorLog.record(e, st, where: 'Sync');
       partialFailure = false;
       cloudAccessDenied = '$e'.contains('errno = 395');
       errorDetail = null;

@@ -1,10 +1,16 @@
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../app/error_log.dart';
 import '../../app/updater.dart';
 import '../../app/version.dart';
 import '../viewer/tool_controller.dart';
+import '../../core/library/auto_backup.dart';
+import 'auto_backup_controller.dart';
+import 'help_dialog.dart';
 import 'sync_controller.dart';
 
 /// Einstellungen in einem eigenen Fenster: Darstellung, Notenansicht und –
@@ -18,6 +24,7 @@ Future<void> showSettingsDialog(
   VoidCallback? onOpenDataFolder,
   VoidCallback? onCreateBackup,
   VoidCallback? onRestoreBackup,
+  AutoBackupController? autoBackup,
 }) {
   final tools = ToolScope.read(context);
   return showDialog<void>(
@@ -31,6 +38,7 @@ Future<void> showSettingsDialog(
       onOpenDataFolder: onOpenDataFolder,
       onCreateBackup: onCreateBackup,
       onRestoreBackup: onRestoreBackup,
+      autoBackup: autoBackup,
     ),
   );
 }
@@ -45,9 +53,11 @@ class _SettingsDialog extends StatelessWidget {
     this.onOpenDataFolder,
     this.onCreateBackup,
     this.onRestoreBackup,
+    this.autoBackup,
   });
 
   final ToolController tools;
+  final AutoBackupController? autoBackup;
   final SyncController? sync;
   final VoidCallback? onSetupSync, onStopSync, onOpenDataFolder, onCreateBackup, onRestoreBackup;
   final String? dataFolder;
@@ -181,12 +191,35 @@ class _SettingsDialog extends StatelessWidget {
                             ),
                         ],
                       ),
+                      if (autoBackup != null) ...[const SizedBox(height: 12), AutoBackupSection(autoBackup!)],
                     ],
                     if (sync != null) ..._syncSection(context, sync!),
                     const _Section('Über Volti'),
                     Text('Version $voltiVersion', style: theme.textTheme.bodyMedium),
                     const SizedBox(height: 8),
                     const UpdateSection(),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => showHelpDialog(context),
+                          icon: const Icon(Icons.help_outline),
+                          label: const Text('Kurzanleitung'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => showErrorLogDialog(context),
+                          icon: const Icon(Icons.bug_report_outlined),
+                          label: const Text('Fehlerprotokoll'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => showVoltiLicenses(context),
+                          icon: const Icon(Icons.gavel_outlined),
+                          label: const Text('Lizenzen'),
+                        ),
+                      ],
+                    ),
                     if (dataFolder != null) ...[
                       const _Section('Datenordner'),
                       Text(
@@ -471,7 +504,8 @@ Future<void> _installWithProgress(BuildContext context, UpdateInfo u) async {
   );
   try {
     await Updater.installWindows(u, onProgress: (v) => progress.value = v);
-  } catch (e) {
+  } catch (e, st) {
+    ErrorLog.record(e, st, where: 'Update');
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Das Update ging nicht: $e')));
@@ -497,5 +531,183 @@ Future<void> reportLastUpdate(BuildContext context) async {
               ),
             ),
     ),
+  );
+}
+
+String _when(DateTime d) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(d.day)}.${two(d.month)}.${d.year}, ${two(d.hour)}:${two(d.minute)}';
+}
+
+/// Wöchentliche automatische Sicherung: an/aus, Ordner, jetzt sichern.
+class AutoBackupSection extends StatefulWidget {
+  const AutoBackupSection(this.backup, {super.key});
+  final AutoBackupController backup;
+
+  @override
+  State<AutoBackupSection> createState() => _AutoBackupSectionState();
+}
+
+class _AutoBackupSectionState extends State<AutoBackupSection> {
+  String? _folder;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFolder();
+  }
+
+  Future<void> _loadFolder() async {
+    final f = await widget.backup.folder();
+    if (mounted) setState(() => _folder = f);
+  }
+
+  Future<void> _chooseFolder() async {
+    final dir = await getDirectoryPath(confirmButtonText: 'Hier sichern', initialDirectory: _folder);
+    if (dir == null) return;
+    await widget.backup.setFolder(dir);
+    await _loadFolder();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final small = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return ListenableBuilder(
+      listenable: widget.backup,
+      builder: (context, _) {
+        final b = widget.backup;
+        final last = b.last;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Jede Woche automatisch sichern'),
+              subtitle: Text(
+                b.running
+                    ? 'Sicherung läuft gerade …'
+                    : b.lastError != null
+                    ? 'Die letzte Sicherung ging nicht: ${b.lastError}'
+                    : last == null
+                    ? 'Noch keine automatische Sicherung.'
+                    : 'Zuletzt: ${_when(last)}. Die letzten ${AutoBackup.keep} bleiben liegen.',
+              ),
+              value: b.enabled,
+              onChanged: b.setEnabled,
+            ),
+            if (b.enabled) ...[
+              if (_folder != null) SelectableText('Ordner: $_folder', style: small),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: b.running ? null : b.runNow,
+                    icon: const Icon(Icons.backup_outlined),
+                    label: const Text('Jetzt sichern'),
+                  ),
+                  if (!Platform.isAndroid)
+                    OutlinedButton.icon(
+                      onPressed: _chooseFolder,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Anderer Ordner …'),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Fehlerprotokoll ansehen, kopieren (z. B. um es weiterzuschicken) oder leeren.
+Future<void> showErrorLogDialog(BuildContext context) async {
+  var text = await ErrorLog.read();
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setState) {
+        final theme = Theme.of(c);
+        final empty = text.trim().isEmpty;
+        return AlertDialog(
+          title: const Text('Fehlerprotokoll'),
+          content: SizedBox(
+            width: 560,
+            child: empty
+                ? const Text('Es sind keine Fehler aufgezeichnet. 👍')
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Wenn etwas nicht klappt: „Kopieren“ antippen und den Text weiterschicken. '
+                        'Er enthält keine Noten und keine persönlichen Inhalte, nur die technischen Fehlermeldungen.',
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: SingleChildScrollView(
+                            reverse: true,
+                            child: SelectableText(
+                              text,
+                              style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'VoltiMono'),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+          actions: [
+            if (!empty) ...[
+              TextButton(
+                onPressed: () async {
+                  await ErrorLog.clear();
+                  setState(() => text = '');
+                },
+                child: const Text('Leeren'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (c.mounted) {
+                    ScaffoldMessenger.of(c).showSnackBar(const SnackBar(content: Text('Fehlerprotokoll kopiert.')));
+                  }
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text('Kopieren'),
+              ),
+            ],
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('Schliessen')),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+/// Lizenzen der verwendeten Bausteine (Schriften, PDF-Technik, Flutter …).
+void showVoltiLicenses(BuildContext context) {
+  showLicensePage(
+    context: context,
+    applicationName: 'Volti',
+    applicationVersion: voltiVersion,
+    applicationIcon: Padding(
+      padding: const EdgeInsets.all(8),
+      child: Image.asset('assets/brand/volti_mark.png', height: 48),
+    ),
+    applicationLegalese:
+        'Notenzeichen: Bravura (Steinberg, SIL Open Font License). '
+        'Schriften: Roboto, Roboto Mono und Noto Serif (SIL Open Font License).',
   );
 }

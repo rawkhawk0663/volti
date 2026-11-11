@@ -10,6 +10,9 @@ on:
 
 env:
   FLUTTER_VERSION: "3.47.9"
+  # Vorderer Teil der Versionsnummer. Die letzte Zahl ist die laufende Nummer
+  # des Builds (zählt immer weiter, darauf verlässt sich die Update-Suche).
+  VERSION_PREFIX: "0.1"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -40,15 +43,37 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: flutter build windows --release --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v0.1.${{ github.run_number }}
+      - run: flutter build windows --release --build-name=${{ env.VERSION_PREFIX }}.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v${{ env.VERSION_PREFIX }}.${{ github.run_number }}
       - name: ZIP erstellen
         shell: pwsh
         run: |
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Volti-Windows.zip
+      # Installationsprogramm (Inno Setup): Startmenü, Deinstallieren in den
+      # Windows-Einstellungen. Die ZIP-Datei bleibt für die Updates in der App.
+      - name: Installationsprogramm erstellen
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          # Deutsche Texte in Schweizer Schreibweise (ss statt ß).
+          $isl = "${env:ProgramFiles(x86)}\Inno Setup 6\Languages\German.isl"
+          $bytes = [IO.File]::ReadAllBytes($isl)
+          $out = "windows\installer\German-CH.isl"
+          if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            $text = [IO.File]::ReadAllText($isl, [Text.UTF8Encoding]::new($true))
+            [IO.File]::WriteAllText($out, $text.Replace([string][char]0xDF, 'ss'), [Text.UTF8Encoding]::new($true))
+          } else {
+            Copy-Item $isl $out
+          }
+          & $iscc "/DAppVersion=${{ env.VERSION_PREFIX }}.${{ github.run_number }}" windows\installer\volti.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item build\installer\Volti-Setup.exe Volti-Setup.exe
       - uses: actions/upload-artifact@v4
         with:
           name: Volti-Windows
-          path: Volti-Windows.zip
+          path: |
+            Volti-Windows.zip
+            Volti-Setup.exe
 
   android:
     name: Android-Build
@@ -68,8 +93,8 @@ jobs:
       # nochmals versuchen (bereits Geladenes bleibt erhalten).
       - name: Android-App bauen
         run: |
-          flutter build apk --release --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v0.1.${{ github.run_number }} \
-            || (echo "Zweiter Versuch …" && sleep 30 && flutter build apk --release --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v0.1.${{ github.run_number }})
+          ARGS="--release --build-name=${{ env.VERSION_PREFIX }}.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
+          flutter build apk $ARGS || (echo "Zweiter Versuch …" && sleep 30 && flutter build apk $ARGS)
       - run: cp build/app/outputs/flutter-apk/app-release.apk Volti-Android.apk
       - uses: actions/upload-artifact@v4
         with:
@@ -95,7 +120,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          TAG="v0.1.${{ github.run_number }}"
+          TAG="v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
           MSG=$(printf '%s' "$COMMIT_MSG" | head -1)
           gh release create "$TAG" dist/* \
             --repo "${{ github.repository }}" \
@@ -114,7 +139,7 @@ jobs:
             echo "Kein RELEASES_TOKEN hinterlegt – übersprungen."
             exit 0
           fi
-          TAG="v0.1.${{ github.run_number }}"
+          TAG="v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
           MSG=$(printf '%s' "$COMMIT_MSG" | head -1)
           gh release create "$TAG" dist/* \
             --repo "rawkhawk0663/volti-releases" \

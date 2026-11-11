@@ -13,6 +13,7 @@ import '../../core/library/score_importer.dart';
 import '../../core/library/score_meta.dart';
 import '../../core/library/setlist.dart';
 import '../../core/library/sidecar_store.dart';
+import 'auto_backup_controller.dart';
 
 /// Hält den Zustand der Bibliothek: Stücke und Setlists.
 ///
@@ -25,6 +26,9 @@ class LibraryController extends ChangeNotifier {
 
   /// Voltis Datenordner (siehe [ScoreImporter] für den Aufbau).
   final String root;
+
+  /// Wöchentliche automatische Sicherung dieses Geräts.
+  late final autoBackup = AutoBackupController(settings: settings, root: root);
 
   final _scanner = const LibraryScanner();
   final _sidecars = const SidecarStore();

@@ -20,6 +20,7 @@ import '../viewer/page_setup_screen.dart';
 import '../viewer/viewer_screen.dart';
 import 'edit_meta_dialog.dart';
 import 'folder_widgets.dart';
+import 'help_dialog.dart';
 import 'library_actions.dart';
 import 'library_controller.dart';
 import 'open_scores.dart';
@@ -56,6 +57,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // Einmal beim Start nach einer neuen Version schauen (leise).
     Future<void>.delayed(const Duration(seconds: 6), () {
       if (mounted) checkForUpdateQuietly(context);
+    });
+    // Beim ersten Start die Kurzanleitung zeigen.
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) showHelpOnFirstStart(context, lib.settings);
     });
   }
 

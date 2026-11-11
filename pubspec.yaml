@@ -11,6 +11,8 @@ dependencies:
   file_selector: ^1.1.0
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   flutter_soloud: 5.2.3
   path: ^1.9.1
   path_provider: ^2.1.6
@@ -29,6 +31,11 @@ flutter:
   assets:
     - assets/brand/volti_mark.png
     - assets/brand/volti_wordmark.png
+    # Lizenztexte der Schriften (erscheinen unter ⚙ → Lizenzen)
+    - assets/fonts/OFL-Bravura.txt
+    - assets/fonts/OFL-NotoSerif.txt
+    - assets/fonts/OFL-Roboto.txt
+    - assets/fonts/OFL-RobotoMono.txt
   # Schriften für Text-Notizen (SIL Open Font License, siehe assets/fonts/OFL-*.txt)
   fonts:
     - family: VoltiSans

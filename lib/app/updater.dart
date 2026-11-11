@@ -35,10 +35,26 @@ class Updater {
 
   static const repo = 'rawkhawk0663/volti-releases';
 
-  /// Laufende Nummer aus „v0.1.42“ (null = unbekannt, z. B. Testversion).
-  static int? numberOf(String tag) {
-    final m = RegExp(r'v?\d+\.\d+\.(\d+)').firstMatch(tag);
-    return m == null ? null : int.tryParse(m.group(1)!);
+  /// Laufende Nummer aus „v0.1.42“ bzw. „v1.0.60“ (null = unbekannt, z. B.
+  /// Testversion). Sie zählt bei jedem Build weiter, auch über den Wechsel
+  /// von 0.1 auf 1.0 hinweg.
+  static int? numberOf(String tag) => partsOf(tag)?.$3;
+
+  /// Alle drei Teile einer Version („v1.0.60“ → 1, 0, 60).
+  static (int, int, int)? partsOf(String tag) {
+    final m = RegExp(r'v?(\d+)\.(\d+)\.(\d+)').firstMatch(tag);
+    if (m == null) return null;
+    return (int.parse(m.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!));
+  }
+
+  /// Ist Version [a] neuer als [b]? Unbekannte Versionen gelten als ganz alt.
+  static bool newerThan(String a, String b) {
+    final x = partsOf(a), y = partsOf(b);
+    if (x == null) return false;
+    if (y == null) return true;
+    if (x.$1 != y.$1) return x.$1 > y.$1;
+    if (x.$2 != y.$2) return x.$2 > y.$2;
+    return x.$3 > y.$3;
   }
 
   static int get currentNumber => numberOf(voltiVersion) ?? 0;
@@ -78,7 +94,7 @@ class Updater {
     }
   }
 
-  static bool isNewer(UpdateInfo u) => u.number > currentNumber;
+  static bool isNewer(UpdateInfo u) => newerThan(u.tag, voltiVersion);
 
   /// Kann sich Volti hier selbst ersetzen? (Windows, Ordner beschreibbar.)
   static Future<bool> canSelfInstall() async {

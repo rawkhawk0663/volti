@@ -31,6 +31,7 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
         onOpenDataFolder: Platform.isWindows || Platform.isLinux ? library.revealDataFolder : null,
         onCreateBackup: createBackup,
         onRestoreBackup: restoreBackup,
+        autoBackup: library.autoBackup,
       ),
     ),
     // Schliessen, Minimieren, Maximieren (statt der Windows-Titelleiste).

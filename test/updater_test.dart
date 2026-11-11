@@ -12,6 +12,12 @@ void main() {
     final u = UpdateInfo(tag: 'v0.1.100', number: 100, page: Uri.parse('https://example.org'));
     // Eine lokal gebaute Testversion gilt als Nummer 0 – also ist alles neuer.
     expect(Updater.isNewer(u), isTrue);
+    // Wechsel auf 1.0: neuer, obwohl es weiterzählt wie bisher.
+    expect(Updater.newerThan('v1.0.60', 'v0.1.59'), isTrue);
+    expect(Updater.newerThan('v0.1.59', 'v1.0.60'), isFalse);
+    expect(Updater.newerThan('v1.0.60', 'v1.0.60'), isFalse);
+    expect(Updater.newerThan('v1.1.61', 'v1.0.70'), isTrue);
+    expect(Updater.numberOf('v1.0.60'), 60);
   });
 
   group('Dateien austauschen', () {

@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 
+import 'app/error_log.dart';
 import 'app/theme.dart';
 import 'app/touch_keyboard.dart';
 import 'app/updater.dart';
@@ -19,14 +23,17 @@ import 'features/viewer/tool_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Voltis eigener Datenordner für Noten, Infos, Anmerkungen und Setlists.
+  final support = (await getApplicationSupportDirectory()).path;
+  // Fehler in eine Datei schreiben (⚙ → Fehlerprotokoll).
+  ErrorLog.install(support);
+  _registerFontLicenses();
   await pdfrxFlutterInitialize();
   await initFullscreenSupport();
   // Windows: eigene Fensterknöpfe statt der Titelleiste (cleaner Look).
   await hideNativeTitleBar();
   // Windows: Bildschirmtastatur beim Antippen von Textfeldern (Tablet-Modus).
   TouchKeyboard.install();
-  // Voltis eigener Datenordner für Noten, Infos, Anmerkungen und Setlists.
-  final support = (await getApplicationSupportDirectory()).path;
   final settings = await AppSettings.load();
   final library = LibraryController(settings, root: p.join(support, 'Bibliothek'));
   final sync = SyncController(library: library, settings: settings, deviceDataDir: support);
@@ -45,6 +52,8 @@ Future<void> main() async {
     await tools.load();
     await stamps.load();
     sync.start();
+    // Einmal pro Woche alles sichern.
+    library.autoBackup.start();
   });
   // Nach einem Update: alte, beiseitegeschobene Programmdateien wegräumen.
   Future<void>.delayed(const Duration(seconds: 5), Updater.cleanUp);
@@ -69,10 +78,31 @@ class VoltiApp extends StatelessWidget {
           theme: buildVoltiTheme(Brightness.light),
           darkTheme: buildVoltiTheme(Brightness.dark),
           themeMode: mode,
+          // Eingebaute Texte (Kopieren/Einfügen, Lizenzen …) auf Deutsch, Schweizer Schreibweise.
+          locale: const Locale('de', 'CH'),
+          supportedLocales: const [Locale('de', 'CH'), Locale('de')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
           home: home,
         ),
         child: LibraryScreen(library: library, sync: sync),
       ),
     );
   }
+}
+
+/// Lizenzen der Schriften, die Volti mitbringt (⚙ → Lizenzen).
+void _registerFontLicenses() {
+  const fonts = {
+    'Bravura': 'OFL-Bravura.txt',
+    'Noto Serif': 'OFL-NotoSerif.txt',
+    'Roboto': 'OFL-Roboto.txt',
+    'Roboto Mono': 'OFL-RobotoMono.txt',
+  };
+  LicenseRegistry.addLicense(() async* {
+    for (final e in fonts.entries) {
+      try {
+        yield LicenseEntryWithLineBreaks([e.key], await rootBundle.loadString('assets/fonts/${e.value}'));
+      } catch (_) {}
+    }
+  });
 }
