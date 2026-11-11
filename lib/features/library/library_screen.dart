@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../app/window_buttons.dart';
 import '../../core/library/folders.dart';
 import '../../core/library/library_filter.dart';
 import '../../core/library/library_scanner.dart';
@@ -90,9 +91,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       selectedIndex: _tab,
                       onDestinationSelected: _select,
                       labelType: NavigationRailLabelType.all,
-                      leading: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Image.asset('assets/brand/volti_mark.png', height: 34),
+                      // Am Logo lässt sich das Fenster verschieben (keine Titelleiste).
+                      leading: WindowDragArea(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                          child: Image.asset('assets/brand/volti_mark.png', height: 34),
+                        ),
                       ),
                       destinations: [
                         for (final (icon, sel, label) in destinations)
@@ -790,6 +794,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                 onPressed: none ? null : () => _deleteMany(chosen),
                 icon: const Icon(Icons.delete_outline),
               ),
+              const WindowButtons(),
             ],
           ),
         ),

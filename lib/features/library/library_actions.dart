@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/library/backup.dart';
+import '../../app/window_buttons.dart';
 import 'library_controller.dart';
 import 'settings_dialog.dart';
 import 'sync_controller.dart';
@@ -32,6 +33,8 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
         onRestoreBackup: restoreBackup,
       ),
     ),
+    // Schliessen, Minimieren, Maximieren (statt der Windows-Titelleiste).
+    const WindowButtons(),
   ];
 
   /// Sync über einen Ordner gibt es vorerst nur am Computer.

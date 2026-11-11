@@ -29,6 +29,7 @@ import 'text_layer.dart';
 import 'tool_controller.dart';
 import 'tool_palette.dart';
 import 'zoom_area.dart';
+import '../../app/window_buttons.dart';
 import 'metronome.dart';
 import 'metronome_panel.dart';
 import '../../core/library/score_meta.dart';
@@ -1267,119 +1268,125 @@ class _TopBar extends StatelessWidget {
           decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
           child: SafeArea(
             bottom: false,
-            child: SizedBox(
-              height: 52,
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Zurück zur Bibliothek',
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  Expanded(child: _TitleArea(state: state)),
-                  if (state._pageCount > 0)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        state._pageLabel,
-                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+            // Ohne Titelleiste: an der Leiste lässt sich das Fenster verschieben.
+            child: WindowDragArea(
+              doubleTapMaximizes: false,
+              mouseOnly: true,
+              child: SizedBox(
+                height: 52,
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Zurück zur Bibliothek',
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    Expanded(child: _TitleArea(state: state)),
+                    if (state._pageCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          state._pageLabel,
+                          style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                        ),
+                      ),
+                    FilledButton.tonalIcon(
+                      onPressed: tools.startEditing,
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Bearbeiten'),
+                    ),
+                    ListenableBuilder(
+                      listenable: state._metronome,
+                      builder: (context, _) => IconButton(
+                        tooltip: 'Metronom (M)',
+                        isSelected: state._metronomeOpen || state._metronome.running,
+                        icon: MetronomeIcon(
+                          color: state._metronome.running ? Theme.of(context).colorScheme.primary : null,
+                        ),
+                        onPressed: state._toggleMetronome,
                       ),
                     ),
-                  FilledButton.tonalIcon(
-                    onPressed: tools.startEditing,
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Bearbeiten'),
-                  ),
-                  ListenableBuilder(
-                    listenable: state._metronome,
-                    builder: (context, _) => IconButton(
-                      tooltip: 'Metronom (M)',
-                      isSelected: state._metronomeOpen || state._metronome.running,
-                      icon: MetronomeIcon(
-                        color: state._metronome.running ? Theme.of(context).colorScheme.primary : null,
-                      ),
-                      onPressed: state._toggleMetronome,
+                    IconButton(
+                      tooltip: 'Als PDF teilen oder drucken',
+                      icon: const Icon(Icons.ios_share),
+                      onPressed: state._export,
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Als PDF teilen oder drucken',
-                    icon: const Icon(Icons.ios_share),
-                    onPressed: state._export,
-                  ),
-                  IconButton(
-                    tooltip: 'Lesezeichen',
-                    icon: const Icon(Icons.bookmarks_outlined),
-                    onPressed: state._openBookmarks,
-                  ),
-                  IconButton(
-                    tooltip: state._fullscreen ? 'Vollbild beenden (F11)' : 'Vollbild (F11)',
-                    icon: Icon(state._fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
-                    onPressed: state._toggleFullscreen,
-                  ),
-                  PopupMenuButton<VoidCallback>(
-                    tooltip: 'Mehr',
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: (a) => a(),
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: () => showSettingsDialog(context),
-                        child: const ListTile(
-                          leading: Icon(Icons.settings_outlined),
-                          title: Text('Einstellungen …'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: state._reflow,
-                        child: const ListTile(
-                          leading: Icon(Icons.view_day_outlined),
-                          title: Text('Endlosband (Notenzeilen untereinander)'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: state._insertBlank,
-                        child: const ListTile(
-                          leading: Icon(Icons.note_add_outlined),
-                          title: Text('Leere Seite einfügen (für Notizen)'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      if (state._onBlankPage)
+                    IconButton(
+                      tooltip: 'Lesezeichen',
+                      icon: const Icon(Icons.bookmarks_outlined),
+                      onPressed: state._openBookmarks,
+                    ),
+                    IconButton(
+                      tooltip: state._fullscreen ? 'Vollbild beenden (F11)' : 'Vollbild (F11)',
+                      icon: Icon(state._fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+                      onPressed: state._toggleFullscreen,
+                    ),
+                    PopupMenuButton<VoidCallback>(
+                      tooltip: 'Mehr',
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (a) => a(),
+                      itemBuilder: (_) => [
                         PopupMenuItem(
-                          value: state._removeBlank,
+                          value: () => showSettingsDialog(context),
                           child: const ListTile(
-                            leading: Icon(Icons.delete_outline),
-                            title: Text('Diese leere Seite entfernen'),
+                            leading: Icon(Icons.settings_outlined),
+                            title: Text('Einstellungen …'),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
-                      PopupMenuItem(
-                        value: state._editPages,
-                        child: const ListTile(
-                          leading: Icon(Icons.auto_stories_outlined),
-                          title: Text('Seiten anordnen und zuschneiden …'),
-                          contentPadding: EdgeInsets.zero,
+                        const PopupMenuDivider(),
+                        PopupMenuItem(
+                          value: state._reflow,
+                          child: const ListTile(
+                            leading: Icon(Icons.view_day_outlined),
+                            title: Text('Endlosband (Notenzeilen untereinander)'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ),
-                      ),
-                      PopupMenuItem(
-                        value: tools.openLayers,
-                        child: const ListTile(
-                          leading: Icon(Icons.layers_outlined),
-                          title: Text('Ebenen …'),
-                          contentPadding: EdgeInsets.zero,
+                        PopupMenuItem(
+                          value: state._insertBlank,
+                          child: const ListTile(
+                            leading: Icon(Icons.note_add_outlined),
+                            title: Text('Leere Seite einfügen (für Notizen)'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ),
-                      ),
-                      CheckedPopupMenuItem(
-                        value: state._toggleDiagnostics,
-                        checked: state._showDiagnostics,
-                        child: const Text('Stift-Test anzeigen'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 4),
-                ],
+                        if (state._onBlankPage)
+                          PopupMenuItem(
+                            value: state._removeBlank,
+                            child: const ListTile(
+                              leading: Icon(Icons.delete_outline),
+                              title: Text('Diese leere Seite entfernen'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        PopupMenuItem(
+                          value: state._editPages,
+                          child: const ListTile(
+                            leading: Icon(Icons.auto_stories_outlined),
+                            title: Text('Seiten anordnen und zuschneiden …'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: tools.openLayers,
+                          child: const ListTile(
+                            leading: Icon(Icons.layers_outlined),
+                            title: Text('Ebenen …'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: state._toggleDiagnostics,
+                          checked: state._showDiagnostics,
+                          child: const Text('Stift-Test anzeigen'),
+                        ),
+                      ],
+                    ),
+                    const WindowButtons(),
+                    const SizedBox(width: 4),
+                  ],
+                ),
               ),
             ),
           ),

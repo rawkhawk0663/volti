@@ -6,6 +6,7 @@ import '../../core/library/page_setup.dart';
 import '../../core/pdf/auto_crop.dart';
 import '../../core/pdf/page_image_cache.dart';
 import 'cropped_page.dart';
+import '../../app/window_buttons.dart';
 
 /// Seiten eines Stücks anordnen und zuschneiden. Gibt die neue Einrichtung
 /// zurück (null = abgebrochen). Das PDF selbst wird nie verändert.
@@ -151,6 +152,7 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
           const SizedBox(width: 8),
           FilledButton(onPressed: () => Navigator.of(context).pop(_result()), child: const Text('Fertig')),
           const SizedBox(width: 12),
+          const WindowButtons(),
         ],
       ),
       body: Column(

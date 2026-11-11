@@ -5,6 +5,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import 'app/theme.dart';
 import 'app/touch_keyboard.dart';
+import 'app/window_buttons.dart';
 import 'core/app_settings.dart';
 import 'core/ink/custom_stamps.dart';
 import 'core/ink/tool_settings.dart';
@@ -19,6 +20,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await pdfrxFlutterInitialize();
   await initFullscreenSupport();
+  // Windows: eigene Fensterknöpfe statt der Titelleiste (cleaner Look).
+  await hideNativeTitleBar();
   // Windows: Bildschirmtastatur beim Antippen von Textfeldern (Tablet-Modus).
   TouchKeyboard.install();
   // Voltis eigener Datenordner für Noten, Infos, Anmerkungen und Setlists.

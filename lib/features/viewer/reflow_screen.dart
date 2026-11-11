@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
+import '../../app/window_buttons.dart';
 import '../../core/library/page_setup.dart';
 import '../../core/pdf/systems.dart';
 import 'page_export.dart';
@@ -135,6 +136,8 @@ class _ReflowScreenState extends State<_ReflowScreen> {
                 padding: const EdgeInsets.only(right: 16),
                 child: Center(child: Text('Seite $_done von $total …')),
               ),
+            const WindowButtons(),
+            const SizedBox(width: 4),
           ],
         ),
         body: GestureDetector(

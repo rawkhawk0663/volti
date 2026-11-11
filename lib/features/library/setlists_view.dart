@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../app/window_buttons.dart';
 import '../../core/library/folders.dart';
 import '../../core/library/library_filter.dart';
 import '../../core/library/library_scanner.dart';
@@ -386,6 +387,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
                   onPressed: chosen.isEmpty ? null : () => _delete(chosen),
                   icon: const Icon(Icons.delete_outline),
                 ),
+                const WindowButtons(),
               ],
             ),
           ),
@@ -770,7 +772,9 @@ class SetlistDetailScreen extends StatelessWidget {
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Spielen'),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+                const WindowButtons(),
+                const SizedBox(width: 4),
               ],
             ),
             floatingActionButton: Row(
