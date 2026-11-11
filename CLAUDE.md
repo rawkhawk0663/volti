@@ -140,6 +140,8 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 32. **Versionsnummer** (`lib/app/version.dart`, `voltiVersion`): wird beim Bauen gesetzt (`--dart-define=VOLTI_VERSION=v0.1.<run_number>` in `build.yml`, gleich wie der Release-Tag) und steht im Einstellungsfenster unter „Über Volti“. Lokal gebaut heisst es „Testversion“.
 
+33. **Updates in der App** (`lib/app/updater.dart`, „Nach Updates suchen“ unter „Über Volti“, leise Prüfung 6 s nach dem Start): Das Projekt ist privat, deshalb legt der Build die Downloads zusätzlich im **öffentlichen** Projekt `rawkhawk0663/volti-releases` ab (ohne Programmcode; Schritt in `build.yml` mit dem Geheimnis `RELEASES_TOKEN`, ohne Geheimnis übersprungen). Volti fragt dort ohne Anmeldung `releases/latest` ab und vergleicht die laufende Nummer (`v0.1.<n>`). Unter Windows: ZIP herunterladen, auspacken, ein PowerShell-Skript wartet auf das Ende von Volti, kopiert die Dateien in den Programmordner (`robocopy`) und startet neu. Ist der Programmordner nicht beschreibbar, oder auf Android, öffnet sich die Download-Seite. Die Noten (AppData) bleiben unberührt.
+
 ## Prüfen
 ```bash
 flutter analyze

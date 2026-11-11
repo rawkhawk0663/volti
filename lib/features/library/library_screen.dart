@@ -25,6 +25,7 @@ import 'library_controller.dart';
 import 'open_scores.dart';
 import 'score_card.dart';
 import 'setlists_view.dart';
+import 'settings_dialog.dart';
 import 'sync_controller.dart';
 
 /// Hauptbildschirm: Bibliothek mit Noten und Setlists.
@@ -44,6 +45,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final _reset = [ValueNotifier(0), ValueNotifier(0)];
 
   LibraryController get lib => widget.library;
+
+  @override
+  void initState() {
+    super.initState();
+    // Einmal beim Start nach einer neuen Version schauen (leise).
+    Future<void>.delayed(const Duration(seconds: 6), () {
+      if (mounted) checkForUpdateQuietly(context);
+    });
+  }
 
   void _select(int i) {
     if (i == _tab) {

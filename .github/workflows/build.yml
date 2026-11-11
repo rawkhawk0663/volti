@@ -103,3 +103,21 @@ jobs:
             --title "Volti $TAG" \
             --notes "Automatischer Build. Änderung: ${MSG:-manuell gestartet}" \
             --prerelease=false --latest
+      # Zusätzlich im öffentlichen Download-Projekt ablegen (ohne Programmcode).
+      # Von dort sucht Volti nach Updates. Fehlt der Schlüssel, wird es übersprungen.
+      - name: Downloads im öffentlichen Projekt ablegen
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Kein RELEASES_TOKEN hinterlegt – übersprungen."
+            exit 0
+          fi
+          TAG="v0.1.${{ github.run_number }}"
+          MSG=$(printf '%s' "$COMMIT_MSG" | head -1)
+          gh release create "$TAG" dist/* \
+            --repo "rawkhawk0663/volti-releases" \
+            --title "Volti $TAG" \
+            --notes "${MSG:-Neue Version}" \
+            --latest

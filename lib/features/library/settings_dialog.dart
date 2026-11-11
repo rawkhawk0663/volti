@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../app/updater.dart';
 import '../../app/version.dart';
 import '../viewer/tool_controller.dart';
 import 'sync_controller.dart';
@@ -184,6 +185,8 @@ class _SettingsDialog extends StatelessWidget {
                     if (sync != null) ..._syncSection(context, sync!),
                     const _Section('Über Volti'),
                     Text('Version $voltiVersion', style: theme.textTheme.bodyMedium),
+                    const SizedBox(height: 8),
+                    const UpdateSection(),
                     if (dataFolder != null) ...[
                       const _Section('Datenordner'),
                       Text(
@@ -284,5 +287,186 @@ class _Section extends StatelessWidget {
         style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.primary, letterSpacing: 1.1),
       ),
     );
+  }
+}
+
+/// „Nach Updates suchen“ und – unter Windows – gleich installieren.
+class UpdateSection extends StatefulWidget {
+  const UpdateSection({super.key});
+
+  @override
+  State<UpdateSection> createState() => _UpdateSectionState();
+}
+
+class _UpdateSectionState extends State<UpdateSection> {
+  bool _busy = false;
+  String? _message;
+  UpdateInfo? _found;
+  double? _progress;
+
+  Future<void> _check() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+      _found = null;
+    });
+    try {
+      final u = await Updater.latest();
+      if (!mounted) return;
+      setState(() {
+        if (u == null) {
+          _message = 'Noch keine Versionen zum Herunterladen gefunden.';
+        } else if (Updater.isNewer(u)) {
+          _found = u;
+        } else {
+          _message = 'Du hast die neueste Version.';
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => _message = 'Keine Verbindung zu GitHub. Bist du online?');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _install(UpdateInfo u) async {
+    if (!await Updater.canSelfInstall()) {
+      await Updater.openPage(u);
+      if (mounted) {
+        setState(() => _message = 'Die Download-Seite ist im Browser geöffnet.');
+      }
+      return;
+    }
+    setState(() => _progress = 0);
+    try {
+      await Updater.installWindows(
+        u,
+        onProgress: (v) {
+          if (mounted) setState(() => _progress = v);
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _progress = null;
+          _message = 'Das Update ging nicht: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final u = _found;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (u == null)
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _check,
+            icon: _busy
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.system_update_alt),
+            label: const Text('Nach Updates suchen'),
+          )
+        else ...[
+          Text('Neue Version ${u.tag} ist bereit.', style: theme.textTheme.titleSmall),
+          if (u.notes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                u.notes.split('\n').first,
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
+          const SizedBox(height: 8),
+          if (_progress != null) ...[
+            LinearProgressIndicator(value: _progress),
+            const SizedBox(height: 4),
+            Text(
+              _progress! < 1 ? 'Wird heruntergeladen …' : 'Volti startet gleich neu …',
+              style: theme.textTheme.bodySmall,
+            ),
+          ] else
+            FilledButton.icon(
+              onPressed: () => Platform.isWindows ? _install(u) : Updater.openPage(u),
+              icon: const Icon(Icons.download),
+              label: Text(Platform.isWindows ? 'Jetzt installieren und neu starten' : 'Herunterladen'),
+            ),
+          if (!Platform.isWindows)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: SelectableText(u.page.toString(), style: theme.textTheme.bodySmall),
+            ),
+        ],
+        if (_message != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_message!, style: theme.textTheme.bodySmall),
+          ),
+      ],
+    );
+  }
+}
+
+/// Beim Start einmal leise nachschauen; gibt es eine neue Version, erscheint
+/// unten ein Hinweis mit „Installieren“. Ohne Verbindung passiert nichts.
+Future<void> checkForUpdateQuietly(BuildContext context) async {
+  if (Updater.currentNumber == 0) return; // Testversion
+  UpdateInfo? u;
+  try {
+    u = await Updater.latest();
+  } catch (_) {
+    return;
+  }
+  if (u == null || !Updater.isNewer(u) || !context.mounted) return;
+  final found = u;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      persist: false,
+      duration: const Duration(seconds: 10),
+      content: Text('Neue Version ${found.tag} ist bereit.'),
+      action: SnackBarAction(
+        label: Platform.isWindows ? 'Installieren' : 'Herunterladen',
+        onPressed: () => _installWithProgress(context, found),
+      ),
+    ),
+  );
+}
+
+Future<void> _installWithProgress(BuildContext context, UpdateInfo u) async {
+  if (!await Updater.canSelfInstall()) {
+    await Updater.openPage(u);
+    return;
+  }
+  if (!context.mounted) return;
+  final progress = ValueNotifier<double>(0);
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (c) => AlertDialog(
+      title: Text('Update auf ${u.tag}'),
+      content: ValueListenableBuilder<double>(
+        valueListenable: progress,
+        builder: (context, v, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LinearProgressIndicator(value: v),
+            const SizedBox(height: 8),
+            Text(v < 1 ? 'Wird heruntergeladen …' : 'Volti startet gleich neu …'),
+          ],
+        ),
+      ),
+    ),
+  );
+  try {
+    await Updater.installWindows(u, onProgress: (v) => progress.value = v);
+  } catch (e) {
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Das Update ging nicht: $e')));
+    }
   }
 }
