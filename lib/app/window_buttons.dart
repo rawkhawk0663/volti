@@ -57,8 +57,8 @@ class _WindowButtonsState extends State<WindowButtons> {
           padding: widget.padding,
           child: Row(
             mainAxisSize: MainAxisSize.min,
+            // Reihenfolge wie bei Windows (vom Besitzer gewünscht): gelb, grün, rot ganz rechts.
             children: [
-              _Dot(color: _red, glyph: _Glyph.close, hover: _hover, tooltip: 'Schliessen', onTap: windowManager.close),
               _Dot(
                 color: _yellow,
                 glyph: _Glyph.minimize,
@@ -67,6 +67,7 @@ class _WindowButtonsState extends State<WindowButtons> {
                 onTap: windowManager.minimize,
               ),
               _Dot(color: _green, glyph: _Glyph.maximize, hover: _hover, tooltip: 'Maximieren', onTap: _toggleMaximize),
+              _Dot(color: _red, glyph: _Glyph.close, hover: _hover, tooltip: 'Schliessen', onTap: windowManager.close),
             ],
           ),
         ),
