@@ -5,6 +5,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import 'app/theme.dart';
 import 'app/touch_keyboard.dart';
+import 'app/updater.dart';
 import 'app/window_buttons.dart';
 import 'core/app_settings.dart';
 import 'core/ink/custom_stamps.dart';
@@ -45,6 +46,8 @@ Future<void> main() async {
     await stamps.load();
     sync.start();
   });
+  // Nach einem Update: alte, beiseitegeschobene Programmdateien wegräumen.
+  Future<void>.delayed(const Duration(seconds: 5), Updater.cleanUp);
   runApp(VoltiApp(library: library, sync: sync, tools: tools));
 }
 

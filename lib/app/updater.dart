@@ -95,9 +95,11 @@ class Updater {
   }
 
   /// Windows: Update herunterladen, auspacken und Volti durch die neue
-  /// Version ersetzen lassen. Ein kleines Skript wartet, bis Volti beendet
-  /// ist, kopiert die neuen Dateien und startet Volti neu. Die Noten liegen in
-  /// einem anderen Ordner und bleiben unberührt. [onProgress]: 0..1.
+  /// Version ersetzen. Windows erlaubt, ein laufendes Programm umzubenennen:
+  /// Volti schiebt seine Dateien beiseite ([swapFiles]), legt die neuen hin,
+  /// startet die neue Version und beendet sich sofort. Kein Skript, kein
+  /// schwarzes Fenster. Die Noten liegen in einem anderen Ordner und bleiben
+  /// unberührt. [onProgress]: 0..1.
   static Future<void> installWindows(UpdateInfo u, {void Function(double)? onProgress}) async {
     final url = u.windowsZip;
     if (url == null) throw const FileSystemException('In dieser Version fehlt die Windows-Datei.');
@@ -126,48 +128,153 @@ class Updater {
       client.close(force: true);
     }
 
-    // Auspacken
+    // Auspacken – im Hintergrund, damit Volti nicht einfriert („Keine Rückmeldung“).
     final unpacked = Directory(p.join(work.path, 'neu'));
-    // Im Hintergrund auspacken, damit Volti nicht einfriert („Keine Rückmeldung“).
     final zipPath = zip.path, outPath = unpacked.path;
     await Isolate.run(() => extractFileToDisk(zipPath, outPath));
     if (!await File(p.join(unpacked.path, 'Volti.exe')).exists()) {
       throw const FileSystemException('Das Update ist unvollständig (Volti.exe fehlt).');
     }
-    onProgress?.call(1);
+    onProgress?.call(0.95);
 
-    // Ersetzen, sobald Volti beendet ist – und neu starten. Ein einfaches
-    // Windows-Skript (cmd) erledigt das und schreibt jeden Schritt ins
-    // Protokoll; beim nächsten Start meldet Volti, ob es geklappt hat.
     final target = File(Platform.resolvedExecutable).parent.path;
     final log = await _logFile();
-    await log.writeAsString('Update ${u.tag}\r\nHeruntergeladen und ausgepackt\r\n');
-    final script = File(p.join(work.path, 'update.cmd'));
-    final me = pid;
-    await script.writeAsString(
-      '@echo off\r\n'
-      'chcp 65001 >nul\r\n'
-      'set /a n=0\r\n'
-      ':wait\r\n'
-      // Warten, bis Volti beendet ist (höchstens rund eine Minute).
-      'tasklist /FI "PID eq $me" 2>nul | find "$me" >nul\r\n'
-      'if not errorlevel 1 (\r\n'
-      '  set /a n+=1\r\n'
-      '  if %n% GEQ 60 goto copy\r\n'
-      '  ping -n 2 127.0.0.1 >nul\r\n'
-      '  goto wait\r\n'
-      ')\r\n'
-      ':copy\r\n'
-      'ping -n 2 127.0.0.1 >nul\r\n'
-      'echo Volti beendet, kopiere >> "${log.path}"\r\n'
-      'robocopy "${unpacked.path}" "$target" /E /R:10 /W:1 /NFL /NDL /NJH /NJS /NP >> "${log.path}"\r\n'
-      'if %ERRORLEVEL% GEQ 8 (echo FEHLER beim Kopieren %ERRORLEVEL% >> "${log.path}") else (echo FERTIG >> "${log.path}")\r\n'
-      'start "" "${p.join(target, 'Volti.exe')}"\r\n',
+    final lines = <String>['Update ${u.tag}', 'Ziel ${u.number}', 'Heruntergeladen und ausgepackt'];
+    Future<void> writeLog() => log.writeAsString('${lines.join('\r\n')}\r\n');
+    await writeLog();
+
+    // Dateien austauschen (im Hintergrund). Geht etwas nicht, wird alles
+    // zurückgestellt, und Volti läuft unverändert weiter.
+    final swap = await Isolate.run(() => swapFiles(outPath, target));
+    lines.addAll(swap.log);
+    if (!swap.ok) {
+      try {
+        await log.delete();
+      } catch (_) {}
+      throw FileSystemException('Die neuen Dateien liessen sich nicht in den Volti-Ordner legen. ${swap.log.last}');
+    }
+    lines.add('FERTIG');
+    await writeLog();
+    onProgress?.call(1);
+
+    // Neue Version starten (ein Fensterprogramm, also ohne Konsole) …
+    await Process.start(
+      p.join(target, 'Volti.exe'),
+      const [],
+      workingDirectory: target,
+      mode: ProcessStartMode.detached,
     );
-    await Process.start('cmd.exe', ['/c', script.path], mode: ProcessStartMode.detached);
-    // Kurz stehen lassen, damit man sieht, dass Volti absichtlich neu startet.
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    // … und diese hart beenden. Ein normales Beenden kann hängen bleiben
+    // (z. B. wenn die Ton-Bibliothek noch aufräumt). Gespeichert ist längst alles.
+    quitNow();
+  }
+
+  /// Volti sofort beenden (Windows: TerminateProcess).
+  static Never quitNow() {
+    try {
+      Process.killPid(pid, ProcessSignal.sigkill);
+    } catch (_) {}
     exit(0);
+  }
+
+  /// Endung der beiseitegeschobenen alten Dateien.
+  static const oldSuffix = '.volti-alt';
+
+  /// Legt alle Dateien aus [newDir] nach [targetDir]. Bestehende Dateien
+  /// werden erst umbenannt (`<name>.<zeit>.volti-alt`, das geht auch, wenn
+  /// Volti sie gerade benutzt), dann kommt die neue Datei an ihren Platz.
+  /// Unveränderte Dateien bleiben, wie sie sind. Schlägt ein Schritt fehl,
+  /// wird alles zurückgestellt (ok = false).
+  static Future<({bool ok, List<String> log})> swapFiles(String newDir, String targetDir) async {
+    final log = <String>[];
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final files = <String>[];
+    await for (final e in Directory(newDir).list(recursive: true, followLinks: false)) {
+      if (e is File) files.add(p.relative(e.path, from: newDir));
+    }
+    files.sort();
+    // Was schon getan ist, für das Zurückstellen: (Ziel, beiseitegeschoben unter).
+    final done = <(String, String?)>[];
+    var skipped = 0;
+    String? current;
+    try {
+      for (final rel in files) {
+        current = rel;
+        final src = File(p.join(newDir, rel));
+        final dst = File(p.join(targetDir, rel));
+        String? moved;
+        if (await dst.exists()) {
+          if (await _sameContent(src, dst)) {
+            skipped++;
+            continue;
+          }
+          moved = '${dst.path}.$stamp$oldSuffix';
+          await dst.rename(moved);
+        } else {
+          await dst.parent.create(recursive: true);
+        }
+        done.add((dst.path, moved));
+        await src.copy(dst.path);
+      }
+      log.add('Ausgetauscht: ${done.length} Dateien, unverändert: $skipped');
+      return (ok: true, log: log);
+    } catch (e) {
+      log.add('Fehler bei $current: $e');
+      for (final (path, moved) in done.reversed) {
+        try {
+          final f = File(path);
+          if (await f.exists()) await f.delete();
+          if (moved != null) await File(moved).rename(path);
+        } catch (e2) {
+          log.add('Zurückstellen von $path ging nicht: $e2');
+        }
+      }
+      log.add('Alles zurückgestellt');
+      return (ok: false, log: log);
+    }
+  }
+
+  static Future<bool> _sameContent(File a, File b) async {
+    try {
+      if (await a.length() != await b.length()) return false;
+      final x = await a.readAsBytes(), y = await b.readAsBytes();
+      for (var i = 0; i < x.length; i++) {
+        if (x[i] != y[i]) return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Beim Start: alte, beiseitegeschobene Dateien und heruntergeladene
+  /// Updates wegräumen. Was noch benutzt wird, bleibt bis zum nächsten Mal.
+  static Future<void> cleanUp() async {
+    if (!Platform.isWindows) return;
+    await cleanUpDir(File(Platform.resolvedExecutable).parent.path);
+    try {
+      await for (final e in (await getTemporaryDirectory()).list(followLinks: false)) {
+        if (e is Directory && p.basename(e.path).startsWith('volti-update-')) {
+          try {
+            await e.delete(recursive: true);
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Löscht alle `*.volti-alt` unter [dir].
+  static Future<void> cleanUpDir(String dir) async {
+    try {
+      await for (final e in Directory(dir).list(recursive: true, followLinks: false)) {
+        if (e is File && e.path.endsWith(oldSuffix)) {
+          try {
+            await e.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
 
   static Future<File> _logFile() async => File(p.join((await getApplicationSupportDirectory()).path, 'update.log'));
@@ -181,9 +288,12 @@ class Updater {
       if (!await f.exists()) return null;
       final text = await f.readAsString();
       await f.delete();
-      if (text.contains('FERTIG')) return (ok: true, message: 'Update installiert – jetzt läuft Volti $voltiVersion.');
-      final reason = text.contains('FEHLER')
-          ? 'Die neuen Dateien liessen sich nicht in den Volti-Ordner kopieren.'
+      final goal = int.tryParse(RegExp(r'Ziel (\d+)').firstMatch(text)?.group(1) ?? '');
+      if (text.contains('FERTIG') && (goal == null || currentNumber >= goal)) {
+        return (ok: true, message: 'Update installiert – jetzt läuft Volti $voltiVersion.');
+      }
+      final reason = text.contains('FERTIG')
+          ? 'Die neuen Dateien sind da, aber es läuft noch die alte Version.'
           : 'Das Ersetzen wurde nicht abgeschlossen.';
       return (ok: false, message: 'Das Update ging nicht: $reason Bitte lade es von Hand herunter.');
     } catch (_) {

@@ -457,7 +457,13 @@ Future<void> _installWithProgress(BuildContext context, UpdateInfo u) async {
           children: [
             LinearProgressIndicator(value: v),
             const SizedBox(height: 8),
-            Text(v < 1 ? 'Wird heruntergeladen …' : 'Volti schliesst sich kurz und startet in der neuen Version neu …'),
+            Text(
+              v < 0.9
+                  ? 'Wird heruntergeladen …'
+                  : v < 1
+                  ? 'Wird eingerichtet …'
+                  : 'Volti startet in der neuen Version neu …',
+            ),
           ],
         ),
       ),
