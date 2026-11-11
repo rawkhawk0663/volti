@@ -11,6 +11,7 @@ import '../../core/ink/selection.dart';
 import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
+import '../../core/ink/text_marks.dart';
 import '../../core/library/sidecar_store.dart';
 
 /// Eine rückgängig machbare Aktion: was dazukam, was entfernt und was
@@ -241,6 +242,7 @@ class InkController extends ChangeNotifier {
     TextFont font = TextFont.sans,
     bool bold = false,
     bool italic = false,
+    List<TextMark> marks = const [],
   }) {
     if (text.trim().isEmpty) return null;
     final note = TextNote(
@@ -255,6 +257,7 @@ class InkController extends ChangeNotifier {
       font: font,
       bold: bold,
       italic: italic,
+      marks: clampMarks(marks, text.trimRight().length),
       createdAt: DateTime.now().toUtc(),
       layer: _layerForNew(),
     );
@@ -275,6 +278,7 @@ class InkController extends ChangeNotifier {
     TextFont? font,
     bool? bold,
     bool? italic,
+    List<TextMark>? marks,
   }) {
     final before = _annotations.text(id);
     if (before == null || before.deleted) return;
@@ -292,9 +296,11 @@ class InkController extends ChangeNotifier {
       font: font,
       bold: bold,
       italic: italic,
+      marks: marks == null ? null : clampMarks(marks, (text?.trimRight() ?? before.text).length),
       modifiedAt: DateTime.now().toUtc(),
     );
     if (after.text == before.text &&
+        listEquals(after.marks, before.marks) &&
         after.x == before.x &&
         after.y == before.y &&
         after.size == before.size &&

@@ -132,6 +132,8 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 28. **Seitenleiste immer sichtbar** (Wunsch des Besitzers): Bibliothek und Setlists liegen in einem `IndexedStack`, beim Wechsel bleibt man am selben Ort (Ordner, offene Setlist). Eine geöffnete Setlist steckt in der Übersicht (`SetlistsView._detailId`, `SetlistDetailScreen(onBack:)`), nicht als eigene Seite. Nochmals auf den gewählten Punkt tippen führt zur Übersicht zurück (`reset`). Die Zurück-Taste wirkt nur auf die sichtbare Seite (`active`).
 
+29. **Formatierung innerhalb einer Text-Notiz** (wie in Word, Wunsch des Besitzers): `TextNote.marks` (`TextMark`: Bereich + `CharStyle` mit fett/kursiv/unterstrichen/Farbe als Abweichung vom Stil der Notiz, Feld `marks` in der Zusatzdatei; alte Notizen ohne `marks` bleiben gültig). Der Editor (`RichNoteController`) hält die Formatierung pro Zeichen, neu Getipptes übernimmt die des Zeichens davor (`adjustChars`). Ist etwas markiert, wirken B/I/U und Textfarbe im Text-Fenster nur darauf (`ToolController.richText`, `RichTextTarget`), sonst wie bisher auf die ganze Notiz. Strg+B/I/U im Editor. Darstellung überall über `noteSpan` (Seite, Lasso, Radierer-Fläche, Export).
+
 ## Prüfen
 ```bash
 flutter analyze

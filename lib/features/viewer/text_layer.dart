@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../../core/ink/text_note.dart';
 import '../../app/theme.dart';
+import '../../core/ink/text_marks.dart';
 import 'ink_controller.dart';
+import 'rich_text.dart';
 import 'tool_controller.dart';
 
 /// Schriftfamilie zu einer Schriftart (Schriften liegen in der App).
@@ -35,12 +37,13 @@ TextStyle voltiTextStyle({
 TextStyle noteStyle(TextNote t, double pageWidth) =>
     voltiTextStyle(font: t.font, bold: t.bold, italic: t.italic, fontSize: t.size * pageWidth, color: Color(t.color));
 
+/// Text einer Notiz samt formatierten Teilen.
+TextSpan noteSpan(TextNote t, double pageWidth) =>
+    richSpan(t.text, charsFromMarks(t.marks, t.text.length), noteStyle(t, pageWidth));
+
 /// Fläche einer Text-Notiz auf der Seite (für den Radierer).
 Rect textNoteBounds(TextNote t, Size size) {
-  final painter = TextPainter(
-    text: TextSpan(text: t.text, style: noteStyle(t, size.width)),
-    textDirection: TextDirection.ltr,
-  )..layout();
+  final painter = TextPainter(text: noteSpan(t, size.width), textDirection: TextDirection.ltr)..layout();
   final r = Offset(t.x * size.width, t.y * size.height) & painter.size;
   painter.dispose();
   return r;
@@ -49,10 +52,7 @@ Rect textNoteBounds(TextNote t, Size size) {
 /// Malt eine Text-Notiz direkt (für die Lasso-Auswahl), so wie sie auch
 /// als Widget erscheint.
 void paintTextNote(Canvas canvas, TextNote t, Size size) {
-  final painter = TextPainter(
-    text: TextSpan(text: t.text, style: noteStyle(t, size.width)),
-    textDirection: TextDirection.ltr,
-  )..layout();
+  final painter = TextPainter(text: noteSpan(t, size.width), textDirection: TextDirection.ltr)..layout();
   final origin = Offset(t.x * size.width, t.y * size.height);
   if (t.background != TextNote.noBackground) {
     canvas.drawRRect(
@@ -97,7 +97,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
   /// ID der bearbeiteten Notiz (null = neue Notiz).
   String? _editId;
 
-  final _text = TextEditingController();
+  final _text = RichNoteController();
   final _focus = FocusNode();
 
   /// Verschieben: ID und aktuelle Verschiebung in Pixeln.
@@ -125,7 +125,8 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
   void dispose() {
     // Ungespeicherten Text noch übernehmen – erst nach dem Abbau, weil die
     // Anzeige währenddessen nicht verändert werden darf.
-    final at = _editAt, id = _editId, text = _text.text, page = widget.page, ctrl = c;
+    final at = _editAt, id = _editId, text = _text.text, marks = _text.marks, page = widget.page, ctrl = c;
+    if (tools.richText.value?.controller == _text) tools.richText.value = null;
     final st = tools.textStyle;
     if (at != null) {
       Future.microtask(() {
@@ -142,6 +143,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
                 font: st.font,
                 bold: st.bold,
                 italic: st.italic,
+                marks: marks,
               )
             : ctrl.updateText(
                 id,
@@ -152,6 +154,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
                 font: st.font,
                 bold: st.bold,
                 italic: st.italic,
+                marks: marks,
               );
       });
     }
@@ -179,9 +182,14 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     setState(() {
       _editAt = existing == null ? normalized : Offset(existing.x, existing.y);
       _editId = existing?.id;
-      _text.text = existing?.text ?? '';
-      _text.selection = TextSelection.collapsed(offset: _text.text.length);
+      _text.load(existing?.text ?? '', existing?.marks ?? const []);
     });
+    // Das Text-Fenster formatiert ab jetzt markierte Teile dieser Notiz.
+    tools.richText.value = RichTextTarget(
+      _text,
+      baseBold: () => tools.textStyle.bold,
+      baseItalic: () => tools.textStyle.italic,
+    );
     widget.onEditingChanged(true);
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
   }
@@ -190,11 +198,13 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     final at = _editAt;
     if (at == null) return;
     final text = _text.text;
+    final marks = _text.marks;
     final id = _editId;
     setState(() {
       _editAt = null;
       _editId = null;
     });
+    if (tools.richText.value?.controller == _text) tools.richText.value = null;
     final st = tools.textStyle;
     if (id == null) {
       c.addText(
@@ -208,6 +218,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
         font: st.font,
         bold: st.bold,
         italic: st.italic,
+        marks: marks,
       );
     } else {
       c.updateText(
@@ -219,12 +230,30 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
         font: st.font,
         bold: st.bold,
         italic: st.italic,
+        marks: marks,
       );
     }
     widget.onEditingChanged(false);
   }
 
+  void _format({bool bold = false, bool italic = false, bool underline = false}) {
+    final t = tools.richText.value;
+    final st = tools.textStyle;
+    if (t != null && t.hasSelection) {
+      if (bold) t.toggleBold();
+      if (italic) t.toggleItalic();
+      if (underline) t.toggleUnderline();
+    } else if (bold || italic) {
+      tools.setTextStyle(st.copyWith(bold: bold ? !st.bold : null, italic: italic ? !st.italic : null));
+    } else if (underline) {
+      _text.selection = TextSelection(baseOffset: 0, extentOffset: _text.text.length);
+      t?.toggleUnderline();
+      _text.selection = TextSelection.collapsed(offset: _text.text.length);
+    }
+  }
+
   void _cancel() {
+    if (tools.richText.value?.controller == _text) tools.richText.value = null;
     setState(() {
       _editAt = null;
       _editId = null;
@@ -275,7 +304,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     final dragging = n.id == _dragId;
     final left = n.x * size.width + (dragging ? _dragDelta.dx : 0);
     final top = n.y * size.height + (dragging ? _dragDelta.dy : 0);
-    final label = Text(n.text, style: noteStyle(n, size.width));
+    final label = Text.rich(noteSpan(n, size.width));
     return Positioned(
       left: left,
       top: top,
@@ -335,6 +364,10 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
               const SingleActivator(LogicalKeyboardKey.enter): _commit,
               const SingleActivator(LogicalKeyboardKey.numpadEnter): _commit,
               const SingleActivator(LogicalKeyboardKey.escape): _cancel,
+              // Wie in Word: Strg+B/I/U für den markierten Teil (sonst die ganze Notiz).
+              const SingleActivator(LogicalKeyboardKey.keyB, control: true): () => _format(bold: true),
+              const SingleActivator(LogicalKeyboardKey.keyI, control: true): () => _format(italic: true),
+              const SingleActivator(LogicalKeyboardKey.keyU, control: true): () => _format(underline: true),
             },
             child: TextField(
               controller: _text,

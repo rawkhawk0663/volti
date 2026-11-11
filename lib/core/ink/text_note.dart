@@ -1,4 +1,5 @@
 import 'annotation_layer.dart';
+import 'text_marks.dart';
 
 /// Eine getippte Notiz auf einer Notenseite (z. B. "Bogen ab", "Atmen!").
 ///
@@ -31,7 +32,11 @@ class TextNote {
     this.modifiedAt,
     this.deleted = false,
     this.layer,
+    this.marks = const [],
   });
+
+  /// Formatierte Teile (z. B. ein Wort fett). Leer = alles im Stil der Notiz.
+  final List<TextMark> marks;
 
   /// Kein Hintergrund (durchsichtig).
   static const noBackground = 0;
@@ -84,6 +89,7 @@ class TextNote {
     DateTime? modifiedAt,
     bool? deleted,
     String? layer,
+    List<TextMark>? marks,
   }) => TextNote(
     id: id ?? this.id,
     page: page ?? this.page,
@@ -100,6 +106,7 @@ class TextNote {
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted ?? this.deleted,
     layer: layer ?? this.layer,
+    marks: marks ?? this.marks,
   );
 
   static double _round(double v) => (v * 100000).roundToDouble() / 100000;
@@ -120,6 +127,7 @@ class TextNote {
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
     if (layer != null && layer != kDefaultLayer) 'layer': layer,
+    if (marks.isNotEmpty && !deleted) 'marks': [for (final m in marks) m.toJson()],
   };
 
   static TextNote fromJson(Map<String, dynamic> json) => TextNote(
@@ -139,5 +147,6 @@ class TextNote {
     modifiedAt: json['modified'] == null ? null : DateTime.parse(json['modified'] as String),
     deleted: json['deleted'] == true,
     layer: json['layer'] as String?,
+    marks: [for (final m in json['marks'] as List<dynamic>? ?? const []) ?TextMark.fromJson(m)],
   );
 }

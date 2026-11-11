@@ -8,6 +8,7 @@ import '../../core/ink/selection.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
+import 'rich_text.dart';
 
 /// Was gerade aktiv ist.
 enum ToolMode {
@@ -134,6 +135,10 @@ class ToolController extends ChangeNotifier {
   // ------------------------------------------------------------- Werkzeuge
   /// "Bearbeiten": mit dem zuletzt benutzten Werkzeug beginnen.
   void startEditing() => setMode(_lastTool);
+
+  /// Die gerade getippte Text-Notiz (für Fett/Kursiv/Farbe nur im markierten
+  /// Teil). null = es wird keine Notiz getippt.
+  final richText = ValueNotifier<RichTextTarget?>(null);
 
   /// Startpunkt einer Sprungmarke, die noch auf ihr Ziel wartet.
   final linkStart = ValueNotifier<({InkController ink, int page, double x, double y})?>(null);

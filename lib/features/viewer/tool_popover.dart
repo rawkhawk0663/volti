@@ -16,6 +16,7 @@ import 'ink_layer.dart';
 import 'layers_panel.dart';
 import 'shapes.dart';
 import 'stamp_paint.dart';
+import 'rich_text.dart';
 import 'text_layer.dart';
 import 'tool_controller.dart';
 
@@ -894,62 +895,103 @@ class _TextSettings extends StatelessWidget {
           ),
           child: _TextSample(style: s, fontSize: (s.size * 900).clamp(11, 36), text: 'Bogen ab'),
         ),
-        const _Label('Schrift'),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _FontPicker(
-                selected: s.font,
-                onSelected: (f) => tools.setTextStyle(s.copyWith(font: f)),
-              ),
-            ),
-            const SizedBox(width: 6),
-            _ToggleBox(
-              selected: s.bold,
-              tooltip: 'Bold',
-              onTap: () => tools.setTextStyle(s.copyWith(bold: !s.bold)),
-              child: const Text(
-                'B',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87),
-              ),
-            ),
-            const SizedBox(width: 6),
-            _ToggleBox(
-              selected: s.italic,
-              tooltip: 'Italic',
-              onTap: () => tools.setTextStyle(s.copyWith(italic: !s.italic)),
-              child: const Text(
-                'I',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontStyle: FontStyle.italic,
-                  fontFamily: 'VoltiSerif',
-                  color: Colors.black87,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const _Label('Grösse'),
-        Slider(
-          min: TextStyleSetting.minSize,
-          max: TextStyleSetting.maxSize,
-          value: s.size.clamp(TextStyleSetting.minSize, TextStyleSetting.maxSize),
-          onChanged: (v) => tools.setTextStyle(s.copyWith(size: v)),
-        ),
-        const _Label('Textfarbe'),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final c in penColors.where((c) => c != 0xFFFFFFFF))
-              _Swatch(
-                color: Color(c),
-                selected: s.color == c,
-                onTap: () => tools.setTextStyle(s.copyWith(color: c)),
-              ),
-          ],
+        // Ist in der getippten Notiz etwas markiert, gelten Fett, Kursiv,
+        // Unterstrichen und Farbe nur für diesen Teil (wie in Word).
+        ValueListenableBuilder<RichTextTarget?>(
+          valueListenable: tools.richText,
+          builder: (context, target, _) => ListenableBuilder(
+            listenable: target?.controller ?? tools.richText,
+            builder: (context, _) {
+              final part = target != null && target.hasSelection;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Label(part ? 'Schrift · nur Markiertes' : 'Schrift'),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _FontPicker(
+                          selected: s.font,
+                          onSelected: (f) => tools.setTextStyle(s.copyWith(font: f)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _ToggleBox(
+                        selected: part ? target.bold : s.bold,
+                        tooltip: 'Fett (Strg+B)',
+                        onTap: () => part ? target.toggleBold() : tools.setTextStyle(s.copyWith(bold: !s.bold)),
+                        child: const Text(
+                          'B',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _ToggleBox(
+                        selected: part ? target.italic : s.italic,
+                        tooltip: 'Kursiv (Strg+I)',
+                        onTap: () => part ? target.toggleItalic() : tools.setTextStyle(s.copyWith(italic: !s.italic)),
+                        child: const Text(
+                          'I',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontStyle: FontStyle.italic,
+                            fontFamily: 'VoltiSerif',
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _ToggleBox(
+                        selected: part && target.underline,
+                        tooltip: 'Unterstrichen (Strg+U) – für markierten Text',
+                        onTap: target == null
+                            ? null
+                            : () {
+                                if (part) {
+                                  target.toggleUnderline();
+                                } else {
+                                  // Nichts markiert: die ganze Notiz.
+                                  final c = target.controller;
+                                  final sel = c.selection;
+                                  c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+                                  target.toggleUnderline();
+                                  c.selection = sel;
+                                }
+                              },
+                        child: const Text(
+                          'U',
+                          style: TextStyle(fontSize: 17, decoration: TextDecoration.underline, color: Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const _Label('Grösse'),
+                  Slider(
+                    min: TextStyleSetting.minSize,
+                    max: TextStyleSetting.maxSize,
+                    value: s.size.clamp(TextStyleSetting.minSize, TextStyleSetting.maxSize),
+                    onChanged: (v) => tools.setTextStyle(s.copyWith(size: v)),
+                  ),
+                  _Label(part ? 'Textfarbe · nur Markiertes' : 'Textfarbe'),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final c in penColors.where((c) => c != 0xFFFFFFFF))
+                        _Swatch(
+                          color: Color(c),
+                          selected: part
+                              ? target.controller.allSelected((x) => (x.color ?? s.color) == c)
+                              : s.color == c,
+                          onTap: () => part ? target.setColor(c) : tools.setTextStyle(s.copyWith(color: c)),
+                        ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         ),
         const _Label('Hintergrund'),
         Wrap(
@@ -1068,7 +1110,7 @@ class _ToggleBox extends StatelessWidget {
   const _ToggleBox({required this.selected, required this.tooltip, required this.onTap, required this.child});
   final bool selected;
   final String tooltip;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Widget child;
 
   @override
