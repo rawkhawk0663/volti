@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../app/version.dart';
 import '../viewer/tool_controller.dart';
 import 'sync_controller.dart';
 
@@ -181,6 +182,8 @@ class _SettingsDialog extends StatelessWidget {
                       ),
                     ],
                     if (sync != null) ..._syncSection(context, sync!),
+                    const _Section('Über Volti'),
+                    Text('Version $voltiVersion', style: theme.textTheme.bodyMedium),
                     if (dataFolder != null) ...[
                       const _Section('Datenordner'),
                       Text(

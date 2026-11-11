@@ -138,6 +138,8 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 31. **Eigene Fensterknöpfe statt Windows-Titelleiste** (Wunsch des Besitzers, „super cleaner Look“): Beim Start wird die Titelleiste ausgeblendet (`hideNativeTitleBar`, `TitleBarStyle.hidden`, der Rand zum Vergrössern bleibt). `WindowButtons` zeigt drei runde Punkte wie bei macOS, aber in Windows-Reihenfolge **gelb (minimieren), grün (maximieren/zurück, im Vollbild: Vollbild aus), rot (schliessen) ganz rechts**, **oben rechts** (so gewünscht): in den Kopfzeilen von Bibliothek und Setlists (`headerActions`, auch in den Auswahl-Leisten), in der geöffneten Setlist, in „Seiten anordnen“, im Endlosband und in der oberen Leiste der Notenansicht (nur wenn diese sichtbar ist). Verschieben des Fensters: am Logo in der Seitenleiste (doppelt tippen = maximieren) und an der Leiste der Notenansicht (nur mit der Maus, nie im Vollbild; `WindowDragArea`).
 
+32. **Versionsnummer** (`lib/app/version.dart`, `voltiVersion`): wird beim Bauen gesetzt (`--dart-define=VOLTI_VERSION=v0.1.<run_number>` in `build.yml`, gleich wie der Release-Tag) und steht im Einstellungsfenster unter „Über Volti“. Lokal gebaut heisst es „Testversion“.
+
 ## Prüfen
 ```bash
 flutter analyze
