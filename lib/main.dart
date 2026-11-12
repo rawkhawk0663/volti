@@ -19,7 +19,6 @@ import 'features/library/library_controller.dart';
 import 'features/library/library_screen.dart';
 import 'features/library/sync_controller.dart';
 import 'features/viewer/custom_stamp_registry.dart';
-import 'features/viewer/fullscreen.dart';
 import 'features/viewer/tool_controller.dart';
 
 Future<void> main() async {
@@ -30,9 +29,8 @@ Future<void> main() async {
   ErrorLog.install(support);
   _registerFontLicenses();
   await pdfrxFlutterInitialize();
-  await initFullscreenSupport();
-  // Windows: eigene Fensterknöpfe statt der Titelleiste (cleaner Look).
-  await hideNativeTitleBar();
+  // Windows: eigene Fensterknöpfe statt der Titelleiste (cleaner Look), maximiert.
+  await prepareWindow();
   // Windows: Bildschirmtastatur beim Antippen von Textfeldern (Tablet-Modus).
   TouchKeyboard.install();
   final settings = await AppSettings.load();

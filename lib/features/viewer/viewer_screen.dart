@@ -8,7 +8,6 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../../app/theme.dart';
 import '../../core/pdf/page_image_cache.dart';
-import 'fullscreen.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
 import '../../core/ink/selection.dart';
@@ -54,8 +53,7 @@ class ViewerItem {
 
 /// Die Notenansicht.
 ///
-/// **Spielansicht** (Standard): nur die Noten, bildschirmfüllend, auf Wunsch
-/// im Vollbild. Rechts tippen oder Pedal = weiter, links = zurück, Mitte =
+/// **Spielansicht** (Standard): nur die Noten, fensterfüllend. Rechts tippen oder Pedal = weiter, links = zurück, Mitte =
 /// Leiste kurz einblenden. Mit dem Stift ziehen zeichnet sofort.
 ///
 /// **Bearbeiten**: Werkzeug-Palette am Seitenrand.
@@ -202,7 +200,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// Leiste oben/unten sichtbar (in der Spielansicht nur kurz).
   bool _controlsVisible = true;
   Timer? _hideTimer;
-  bool _fullscreen = false;
   PointerDeviceKind? _dragKind;
   int? _reportedPiece;
 
@@ -254,7 +251,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
     super.initState();
     tools.setMode(ToolMode.read);
     tools.addListener(_onToolsChanged);
-    appFullscreen.addListener(_onAppFullscreen);
     _zoom.settled.addListener(_onRenderScale);
     _zoom.matrix.addListener(_onZoom);
     _ensureAround(_left.piece);
@@ -457,14 +453,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void dispose() {
     _hideTimer?.cancel();
     tools.removeListener(_onToolsChanged);
-    appFullscreen.removeListener(_onAppFullscreen);
     _zoom.settled.removeListener(_onRenderScale);
     _zoom.matrix.removeListener(_onZoom);
     _zoom.dispose();
     _metronome.dispose();
     tools.viewScale = 1;
     tools.setMode(ToolMode.read);
-    if (_fullscreen) setAppFullscreen(false);
     for (final p in _pieces.values) {
       p.dispose();
     }
@@ -618,7 +612,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     if (target != null) _show(target);
   }
 
-  // --------------------------------------------------- Leiste und Vollbild
+  // ------------------------------------------------------------ Leiste
   void _showControlsBriefly() {
     setState(() => _controlsVisible = true);
     _restartHideTimer();
@@ -639,20 +633,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
       _showControlsBriefly();
     }
   }
-
-  Future<void> _setFullscreen(bool on) async {
-    setState(() => _fullscreen = on);
-    await setAppFullscreen(on);
-  }
-
-  /// Das Vollbild wurde von aussen beendet (z. B. beim Wechsel zu einer
-  /// anderen App): Symbol und Zustand anpassen.
-  void _onAppFullscreen() {
-    if (mounted && _fullscreen != appFullscreen.value) setState(() => _fullscreen = appFullscreen.value);
-  }
-
-  /// Vollbild von Hand: F11, Esc oder das Symbol in der Leiste.
-  Future<void> _toggleFullscreen() => _setFullscreen(!_fullscreen);
 
   /// Strg + Plus/Minus: um die Mitte vergrössern bzw. verkleinern.
   void _zoomStep(double factor) {
@@ -768,8 +748,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
       _zoomStep(0.8);
     } else if (ctrl && (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0)) {
       _zoom.reset();
-    } else if (down && key == LogicalKeyboardKey.f11) {
-      _toggleFullscreen();
     } else if (down && key == LogicalKeyboardKey.keyP) {
       tools.setMode(ToolMode.pen);
     } else if (down && key == LogicalKeyboardKey.keyH) {
@@ -802,8 +780,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
         tools.finishEditing();
       } else if (_zoom.isZoomed) {
         _zoom.reset();
-      } else if (_fullscreen) {
-        _toggleFullscreen();
       } else {
         Navigator.of(context).maybePop();
       }
@@ -1359,13 +1335,6 @@ class _TopBar extends StatelessWidget {
                       tooltip: tr('Lesezeichen', 'Bookmarks'),
                       icon: const Icon(Icons.bookmarks_outlined),
                       onPressed: state._openBookmarks,
-                    ),
-                    IconButton(
-                      tooltip: state._fullscreen
-                          ? tr('Vollbild beenden (F11)', 'Exit full screen (F11)')
-                          : tr('Vollbild (F11)', 'Full screen (F11)'),
-                      icon: Icon(state._fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
-                      onPressed: state._toggleFullscreen,
                     ),
                     PopupMenuButton<VoidCallback>(
                       tooltip: tr('Mehr', 'More'),

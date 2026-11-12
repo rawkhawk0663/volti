@@ -4,19 +4,29 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../features/viewer/fullscreen.dart';
-
 import 'l10n.dart';
 
 /// Hat Volti ein eigenes Fenster mit eigenen Fensterknöpfen? (Am Computer.)
-/// Unter Windows ist die Titelleiste ausgeblendet ([hideNativeTitleBar]).
+/// Unter Windows ist die Titelleiste ausgeblendet ([prepareWindow]).
 bool get hasWindowButtons => Platform.isWindows || Platform.isLinux;
 
-/// Titelleiste von Windows ausblenden (der Rand zum Vergrössern bleibt).
-Future<void> hideNativeTitleBar() async {
+/// Fenster vorbereiten (einmal beim Start): Unter Windows die Titelleiste
+/// ausblenden (der Rand zum Vergrössern bleibt) und maximiert öffnen.
+///
+/// Ein Vollbild gibt es nicht mehr (Wunsch des Besitzers): Die Leiste der
+/// Notenansicht verschwindet beim Spielen von selbst, so blieb nur die
+/// Taskleiste übrig, und das Vollbild machte unter Windows immer wieder Ärger.
+Future<void> prepareWindow() async {
+  if (!hasWindowButtons) return;
+  try {
+    await windowManager.ensureInitialized();
+  } catch (_) {
+    return; // ohne Fenster-Unterstützung (z. B. in Tests)
+  }
   if (!Platform.isWindows) return;
   try {
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
+    await windowManager.maximize();
   } catch (_) {
     // Dann bleibt eben die normale Titelleiste.
   }
@@ -40,10 +50,7 @@ class _WindowButtonsState extends State<WindowButtons> {
 
   Future<void> _toggleMaximize() async {
     try {
-      if (await windowManager.isFullScreen()) {
-        // Gleicher Weg wie F11: stellt ein vorher maximiertes Fenster wieder her.
-        await setAppFullscreen(false);
-      } else if (await windowManager.isMaximized()) {
+      if (await windowManager.isMaximized()) {
         await windowManager.unmaximize();
       } else {
         await windowManager.maximize();
@@ -193,7 +200,6 @@ class WindowDragArea extends StatelessWidget {
       supportedDevices: mouseOnly ? const {PointerDeviceKind.mouse} : null,
       onPanStart: (_) async {
         try {
-          if (await windowManager.isFullScreen()) return;
           await windowManager.startDragging();
         } catch (_) {}
       },
