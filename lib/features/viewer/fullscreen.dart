@@ -27,14 +27,47 @@ final appFullscreen = ValueNotifier<bool>(false);
 /// wenn er aus dem Vollbild weggewechselt hat.
 class _LeaveOnSwitch with WindowListener {
   @override
-  void onWindowBlur() {
-    if (appFullscreen.value) setAppFullscreen(false);
-  }
+  void onWindowBlur() => _leaveIfSwitchedAway();
 
   @override
   void onWindowMinimize() {
-    if (appFullscreen.value) setAppFullscreen(false);
+    if (appFullscreen.value) _leave();
   }
+
+  @override
+  void onWindowFocus() {
+    // Zurück in Volti: ein vorher maximiertes Fenster wieder maximieren.
+    if (!_maximizeOnReturn) return;
+    _maximizeOnReturn = false;
+    windowManager.maximize().catchError((_) {});
+  }
+}
+
+/// Wann zuletzt ins Vollbild oder heraus geschaltet wurde.
+DateTime _changedAt = DateTime(2000);
+
+/// Beim Wegwechseln nicht sofort maximieren (das holt Volti unter Windows
+/// wieder nach vorne), sondern erst, wenn man zurückkommt.
+bool _maximizeOnReturn = false;
+
+Future<void> _leaveIfSwitchedAway() async {
+  if (!appFullscreen.value) return;
+  // Beim Umschalten selbst meldet Windows manchmal kurz „nicht mehr vorne“.
+  // Deshalb kurz warten und nachsehen, ob Volti wirklich nicht mehr vorne ist.
+  await Future<void>.delayed(const Duration(milliseconds: 400));
+  if (!appFullscreen.value) return;
+  if (DateTime.now().difference(_changedAt) < const Duration(milliseconds: 1500)) return;
+  try {
+    if (await windowManager.isFocused()) return;
+  } catch (_) {}
+  await _leave();
+}
+
+Future<void> _leave() async {
+  final maximize = _wasMaximized;
+  _wasMaximized = false; // nicht jetzt maximieren, erst beim Zurückkommen
+  await setAppFullscreen(false);
+  _maximizeOnReturn = maximize;
 }
 
 /// Schaltet das Vollbild ein oder aus: am Computer verschwinden Titel- und
@@ -44,10 +77,15 @@ class _LeaveOnSwitch with WindowListener {
 /// die Titelleiste stehen. Deshalb wird das Fenster vorher auf normale Grösse
 /// gesetzt und beim Verlassen wieder maximiert.
 Future<void> setAppFullscreen(bool on) async {
+  _changedAt = DateTime.now();
+  _maximizeOnReturn = false;
   try {
     if (_isDesktop) {
       if (on) {
-        if (await windowManager.isFullScreen()) return;
+        if (await windowManager.isFullScreen()) {
+          appFullscreen.value = true;
+          return;
+        }
         _wasMaximized = await windowManager.isMaximized();
         if (_wasMaximized) await windowManager.unmaximize();
         await windowManager.setFullScreen(true);
