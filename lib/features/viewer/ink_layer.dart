@@ -21,6 +21,7 @@ import 'page_export.dart';
 import 'stamp_paint.dart';
 import 'tool_controller.dart';
 import 'text_layer.dart';
+import '../../app/l10n.dart';
 
 /// Rechnet den rohen Stiftdruck des Geräts auf 0..1 um.
 /// Geräte ohne Drucksensor (Maus) liefern 0.5.
@@ -585,7 +586,7 @@ class _InkLayerState extends State<InkLayer> {
     img.dispose();
     if (png == null || !mounted) return;
     final s = await registry.add(
-      name: 'Notenausschnitt',
+      name: tr('Notenausschnitt', 'Music excerpt'),
       png: png.buffer.asUint8List(),
       anchorX: 0.5,
       anchorY: 0.5,
@@ -606,7 +607,14 @@ class _InkLayerState extends State<InkLayer> {
     tools.putOnClipboard(InkClip(stamps: [stamp]), InkSelection(c, widget.page, const SelectionIds()));
     if (mounted) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Takte kopiert – jetzt eine Seite antippen und «Einfügen» (Strg+V).')),
+        SnackBar(
+          content: Text(
+            tr(
+              'Takte kopiert – jetzt eine Seite antippen und «Einfügen» (Strg+V).',
+              'Bars copied – now tap a page and «Paste» (Ctrl+V).',
+            ),
+          ),
+        ),
       );
     }
   }

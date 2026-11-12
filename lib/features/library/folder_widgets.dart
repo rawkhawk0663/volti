@@ -6,6 +6,7 @@ import '../../core/library/library_scanner.dart';
 import '../../core/library/setlist.dart';
 import 'library_controller.dart';
 import 'setlists_view.dart';
+import '../../app/l10n.dart';
 
 /// Was gezogen wird: Stücke, Setlists oder ein Ordner.
 class LibraryDrag {
@@ -112,15 +113,16 @@ class FolderDropTarget extends StatelessWidget {
         }
         if (!context.mounted) return;
         final where = folder == null
-            ? (setlists ? 'Setlists' : 'Bibliothek')
-            : (_book.tree.byId(folder)?.name ?? 'Ordner');
+            ? (setlists ? tr('Setlists', 'Setlists') : tr('Bibliothek', 'Library'))
+            : (_book.tree.byId(folder)?.name ?? tr('Ordner', 'Folder'));
         final n = setlists ? d.data.setlists.length : d.data.scores.length;
         final what = f != null
-            ? '„${f.name}“'
+            ? tr('„${f.name}“', '“${f.name}”')
             : n == 1
             ? '„${setlists ? d.data.setlists.first.name : d.data.scores.first.title}“'
-            : '$n ${setlists ? 'Setlists' : 'Stücke'}';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$what liegt jetzt in „$where“')));
+            : '$n ${setlists ? tr('Setlists', 'setlists') : tr('Stücke', 'pieces')}';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(tr('$what liegt jetzt in „$where“', '$what is now in “$where”'))));
       },
       builder: (context, candidates, _) => builder(context, candidates.isNotEmpty),
     );
@@ -201,7 +203,7 @@ class FolderTile extends StatelessWidget {
               ),
               if (menuBuilder != null)
                 PopupMenuButton<VoidCallback>(
-                  tooltip: 'Mehr',
+                  tooltip: tr('Mehr', 'More'),
                   icon: const Icon(Icons.more_vert, size: 20),
                   itemBuilder: menuBuilder!,
                   onSelected: (a) => a(),
@@ -272,7 +274,10 @@ Future<FolderChoice?> pickFolder(
               Icon(icon, size: 20, color: here ? theme.disabledColor : theme.colorScheme.primary),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(here ? '$name (hier)' : name, style: here ? TextStyle(color: theme.disabledColor) : null),
+                child: Text(
+                  here ? tr('$name (hier)', '$name (here)') : name,
+                  style: here ? TextStyle(color: theme.disabledColor) : null,
+                ),
               ),
             ],
           ),
@@ -284,7 +289,9 @@ Future<FolderChoice?> pickFolder(
         children: [
           option(
             null,
-            setlists ? 'Setlists (kein Ordner)' : 'Bibliothek (kein Ordner)',
+            setlists
+                ? tr('Setlists (kein Ordner)', 'Setlists (no folder)')
+                : tr('Bibliothek (kein Ordner)', 'Library (no folder)'),
             0,
             setlists ? Icons.queue_music_outlined : Icons.library_music_outlined,
           ),
@@ -295,8 +302,12 @@ Future<FolderChoice?> pickFolder(
           SimpleDialogOption(
             onPressed: () => Navigator.pop(c, newOne),
             padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
-            child: const Row(
-              children: [Icon(Icons.create_new_folder_outlined, size: 20), SizedBox(width: 10), Text('Neuer Ordner …')],
+            child: Row(
+              children: [
+                Icon(Icons.create_new_folder_outlined, size: 20),
+                SizedBox(width: 10),
+                Text(tr('Neuer Ordner …', 'New folder …')),
+              ],
             ),
           ),
         ],
@@ -305,7 +316,7 @@ Future<FolderChoice?> pickFolder(
   );
   if (choice == null || !context.mounted) return null;
   if (identical(choice, newOne)) {
-    final name = await askForName(context, title: 'Neuer Ordner', initial: '');
+    final name = await askForName(context, title: tr('Neuer Ordner', 'New folder'), initial: '');
     if (name == null) return null;
     final f = await book.create(name);
     return FolderChoice(f.id);

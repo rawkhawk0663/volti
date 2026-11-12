@@ -12,6 +12,7 @@ import '../../core/library/auto_backup.dart';
 import 'auto_backup_controller.dart';
 import 'help_dialog.dart';
 import 'sync_controller.dart';
+import '../../app/l10n.dart';
 
 /// Einstellungen in einem eigenen Fenster: Darstellung, Notenansicht und –
 /// aus der Bibliothek – Sync und Datenordner. Änderungen gelten sofort.
@@ -82,9 +83,9 @@ class _SettingsDialog extends StatelessWidget {
                   children: [
                     Icon(Icons.settings_outlined, color: theme.colorScheme.primary),
                     const SizedBox(width: 12),
-                    Expanded(child: Text('Einstellungen', style: theme.textTheme.titleLarge)),
+                    Expanded(child: Text(tr('Einstellungen', 'Settings'), style: theme.textTheme.titleLarge)),
                     IconButton(
-                      tooltip: 'Schliessen',
+                      tooltip: tr('Schliessen', 'Close'),
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.close),
                     ),
@@ -96,36 +97,53 @@ class _SettingsDialog extends StatelessWidget {
                   shrinkWrap: true,
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                   children: [
-                    const _Section('Darstellung'),
+                    _Section(tr('Darstellung', 'Appearance')),
                     SegmentedButton<ThemeMode>(
                       segments: [
-                        const ButtonSegment(
+                        ButtonSegment(
                           value: ThemeMode.light,
                           icon: Icon(Icons.light_mode_outlined),
-                          label: Text('Hell'),
+                          label: Text(tr('Hell', 'Light')),
                         ),
-                        const ButtonSegment(
+                        ButtonSegment(
                           value: ThemeMode.dark,
                           icon: Icon(Icons.dark_mode_outlined),
-                          label: Text('Dunkel'),
+                          label: Text(tr('Dunkel', 'Dark')),
                         ),
                         ButtonSegment(
                           value: ThemeMode.system,
                           icon: const Icon(Icons.brightness_auto_outlined),
-                          label: Text(Platform.isWindows ? 'Wie Windows' : 'Wie das System'),
+                          label: Text(
+                            Platform.isWindows
+                                ? tr('Wie Windows', 'Like Windows')
+                                : tr('Wie das System', 'Like the system'),
+                          ),
                         ),
                       ],
                       selected: {tools.themeMode.value},
                       onSelectionChanged: (s) => tools.setThemeMode(s.first),
                     ),
-                    const _Section('Notenansicht'),
-                    Text('Seiten nebeneinander', style: theme.textTheme.bodyMedium),
+                    const SizedBox(height: 16),
+                    // Absichtlich zweisprachig, damit man die Sprache auch findet,
+                    // wenn man die eingestellte nicht versteht.
+                    Text('Sprache · Language', style: theme.textTheme.bodyMedium),
+                    const SizedBox(height: 8),
+                    SegmentedButton<AppLanguage>(
+                      segments: [
+                        for (final l in AppLanguage.values)
+                          ButtonSegment(value: l, icon: const Icon(Icons.translate), label: Text(l.label)),
+                      ],
+                      selected: {L10n.language.value},
+                      onSelectionChanged: (s) => tools.setLanguage(s.first),
+                    ),
+                    _Section(tr('Notenansicht', 'Music view')),
+                    Text(tr('Seiten nebeneinander', 'Pages side by side'), style: theme.textTheme.bodyMedium),
                     const SizedBox(height: 8),
                     SegmentedButton<PageLayout>(
-                      segments: const [
-                        ButtonSegment(value: PageLayout.auto, label: Text('Automatisch')),
-                        ButtonSegment(value: PageLayout.single, label: Text('Immer eine')),
-                        ButtonSegment(value: PageLayout.double, label: Text('Immer zwei')),
+                      segments: [
+                        ButtonSegment(value: PageLayout.auto, label: Text(tr('Automatisch', 'Automatic'))),
+                        ButtonSegment(value: PageLayout.single, label: Text(tr('Immer eine', 'Always one'))),
+                        ButtonSegment(value: PageLayout.double, label: Text(tr('Immer zwei', 'Always two'))),
                       ],
                       selected: {tools.pageLayout},
                       onSelectionChanged: (s) => tools.setPageLayout(s.first),
@@ -133,48 +151,77 @@ class _SettingsDialog extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
-                        'Automatisch: im Querformat zwei Seiten, im Hochformat eine.',
+                        tr(
+                          'Automatisch: im Querformat zwei Seiten, im Hochformat eine.',
+                          'Automatic: two pages in landscape, one in portrait.',
+                        ),
                         style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ),
                     const SizedBox(height: 8),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Halbe Seitenwechsel'),
-                      subtitle: const Text('Bei einer Seite: zuerst wechselt nur die obere Hälfte.'),
+                      title: Text(tr('Halbe Seitenwechsel', 'Half page turns')),
+                      subtitle: Text(
+                        tr(
+                          'Bei einer Seite: zuerst wechselt nur die obere Hälfte.',
+                          'With one page: only the top half changes first.',
+                        ),
+                      ),
                       value: tools.halfTurns,
                       onChanged: tools.setHalfTurns,
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Mit dem Stift sofort zeichnen'),
-                      subtitle: const Text('Auch in der Spielansicht, ohne zuerst „Bearbeiten“.'),
+                      title: Text(tr('Mit dem Stift sofort zeichnen', 'Draw with the pen right away')),
+                      subtitle: Text(
+                        tr(
+                          'Auch in der Spielansicht, ohne zuerst „Bearbeiten“.',
+                          'Also while playing, without tapping “Edit” first.',
+                        ),
+                      ),
                       value: tools.instantPen,
                       onChanged: tools.setInstantPen,
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Beim Bearbeiten mit dem Finger blättern'),
-                      subtitle: const Text(
-                        'Mit einem Finger zügig nach links oder rechts wischen. '
-                        'Eine aufliegende Hand blättert nicht, ebenso wenig, solange der Stift in der Nähe ist.',
+                      title: Text(
+                        tr('Beim Bearbeiten mit dem Finger blättern', 'Turn pages with a finger while editing'),
+                      ),
+                      subtitle: Text(
+                        tr(
+                          'Mit einem Finger zügig nach links oder rechts wischen. '
+                              'Eine aufliegende Hand blättert nicht, ebenso wenig, solange der Stift in der Nähe ist.',
+                          'Swipe quickly left or right with one finger. '
+                              'A resting hand does not turn pages, and neither does anything while the pen is nearby.',
+                        ),
                       ),
                       value: tools.swipeWhileEditing,
                       onChanged: tools.setSwipeWhileEditing,
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Werkzeugleiste links'),
-                      subtitle: const Text('Aus: am rechten Rand (z. B. für Linkshänder).'),
+                      title: Text(tr('Werkzeugleiste links', 'Toolbar on the left')),
+                      subtitle: Text(
+                        tr(
+                          'Aus: am rechten Rand (z. B. für Linkshänder).',
+                          'Off: on the right edge (e.g. for left-handers).',
+                        ),
+                      ),
                       value: tools.paletteLeft,
                       onChanged: (_) => tools.togglePaletteSide(),
                     ),
                     if (onCreateBackup != null) ...[
-                      const _Section('Sicherung'),
+                      _Section(tr('Sicherung', 'Backup')),
                       Text(
-                        'Alle Noten mit Infos und Anmerkungen, Setlists, Ordnern, eigenen Stempeln und '
-                        'Stift-Vorlagen in einer einzigen Datei. Beim Einspielen wird nichts gelöscht oder '
-                        'überschrieben: Was fehlt, kommt dazu, Anmerkungen werden zusammengeführt.',
+                        tr(
+                          'Alle Noten mit Infos und Anmerkungen, Setlists, Ordnern, eigenen Stempeln und '
+                              'Stift-Vorlagen in einer einzigen Datei. Beim Einspielen wird nichts gelöscht oder '
+                              'überschrieben: Was fehlt, kommt dazu, Anmerkungen werden zusammengeführt.',
+                          'All your music with details and notes, setlists, folders, your own stamps and '
+                              'pen presets in a single file. Restoring never deletes or '
+                              'overwrites anything: whatever is missing is added, and notes are merged.',
+                        ),
                         style: theme.textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 8),
@@ -188,7 +235,7 @@ class _SettingsDialog extends StatelessWidget {
                               onCreateBackup!();
                             },
                             icon: const Icon(Icons.save_alt),
-                            label: const Text('Sicherung erstellen …'),
+                            label: Text(tr('Sicherung erstellen …', 'Create backup …')),
                           ),
                           if (onRestoreBackup != null)
                             OutlinedButton.icon(
@@ -197,15 +244,21 @@ class _SettingsDialog extends StatelessWidget {
                                 onRestoreBackup!();
                               },
                               icon: const Icon(Icons.restore),
-                              label: const Text('Sicherung einspielen …'),
+                              label: Text(tr('Sicherung einspielen …', 'Restore backup …')),
                             ),
                         ],
                       ),
                       if (autoBackup != null) ...[const SizedBox(height: 12), AutoBackupSection(autoBackup!)],
                     ],
                     if (sync != null) ..._syncSection(context, sync!),
-                    const _Section('Über Volti'),
-                    Text('Version $voltiVersion', style: theme.textTheme.bodyMedium),
+                    _Section(tr('Über Volti', 'About Volti')),
+                    Text(
+                      tr(
+                        'Version $voltiVersion',
+                        'Version ${voltiVersion == 'Testversion' ? 'test build' : voltiVersion}',
+                      ),
+                      style: theme.textTheme.bodyMedium,
+                    ),
                     const SizedBox(height: 8),
                     const UpdateSection(),
                     const SizedBox(height: 8),
@@ -216,24 +269,27 @@ class _SettingsDialog extends StatelessWidget {
                         OutlinedButton.icon(
                           onPressed: () => showHelpDialog(context),
                           icon: const Icon(Icons.help_outline),
-                          label: const Text('Kurzanleitung'),
+                          label: Text(tr('Kurzanleitung', 'Quick guide')),
                         ),
                         OutlinedButton.icon(
                           onPressed: () => showErrorLogDialog(context),
                           icon: const Icon(Icons.bug_report_outlined),
-                          label: const Text('Fehlerprotokoll'),
+                          label: Text(tr('Fehlerprotokoll', 'Error log')),
                         ),
                         OutlinedButton.icon(
                           onPressed: () => showVoltiLicenses(context),
                           icon: const Icon(Icons.gavel_outlined),
-                          label: const Text('Lizenzen'),
+                          label: Text(tr('Lizenzen', 'Licences')),
                         ),
                       ],
                     ),
                     if (dataFolder != null) ...[
-                      const _Section('Datenordner'),
+                      _Section(tr('Datenordner', 'Data folder')),
                       Text(
-                        'Hier liegen deine importierten Noten, Infos und Anmerkungen:',
+                        tr(
+                          'Hier liegen deine importierten Noten, Infos und Anmerkungen:',
+                          'Your imported music, details and notes are stored here:',
+                        ),
                         style: theme.textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 4),
@@ -245,7 +301,7 @@ class _SettingsDialog extends StatelessWidget {
                           child: OutlinedButton.icon(
                             onPressed: onOpenDataFolder,
                             icon: const Icon(Icons.folder_open),
-                            label: const Text('Datenordner öffnen'),
+                            label: Text(tr('Datenordner öffnen', 'Open data folder')),
                           ),
                         ),
                       ],
@@ -270,17 +326,26 @@ class _SettingsDialog extends StatelessWidget {
     String two(int n) => n.toString().padLeft(2, '0');
     final last = sync.lastSync;
     final status = switch (sync.status) {
-      SyncStatus.off => 'Aus',
-      SyncStatus.syncing => 'Wird gerade abgeglichen …',
-      SyncStatus.error => sync.error ?? 'Fehler beim Abgleich',
-      SyncStatus.idle => last == null ? 'Aktiv' : 'Aktiv, zuletzt abgeglichen um ${two(last.hour)}:${two(last.minute)}',
+      SyncStatus.off => tr('Aus', 'Off'),
+      SyncStatus.syncing => tr('Wird gerade abgeglichen …', 'Syncing …'),
+      SyncStatus.error => sync.error ?? tr('Fehler beim Abgleich', 'Sync error'),
+      SyncStatus.idle =>
+        last == null
+            ? tr('Aktiv', 'Active')
+            : tr(
+                'Aktiv, zuletzt abgeglichen um ${two(last.hour)}:${two(last.minute)}',
+                'Active, last synced at ${two(last.hour)}:${two(last.minute)}',
+              ),
     };
     return [
-      const _Section('Sync'),
+      _Section(tr('Sync', 'Sync')),
       Text(status, style: theme.textTheme.bodyMedium),
       if (sync.folder != null) ...[
         const SizedBox(height: 4),
-        SelectableText('Sync-Ordner: ${sync.folder}', style: theme.textTheme.bodySmall),
+        SelectableText(
+          tr('Sync-Ordner: ${sync.folder}', 'Sync folder: ${sync.folder}'),
+          style: theme.textTheme.bodySmall,
+        ),
       ],
       const SizedBox(height: 8),
       Wrap(
@@ -291,23 +356,23 @@ class _SettingsDialog extends StatelessWidget {
             FilledButton.icon(
               onPressed: () => close(onSetupSync),
               icon: const Icon(Icons.cloud_sync_outlined),
-              label: const Text('Sync einrichten …'),
+              label: Text(tr('Sync einrichten …', 'Set up sync …')),
             )
           else ...[
             FilledButton.tonalIcon(
               onPressed: sync.status == SyncStatus.syncing ? null : sync.syncNow,
               icon: const Icon(Icons.sync),
-              label: const Text('Jetzt abgleichen'),
+              label: Text(tr('Jetzt abgleichen', 'Sync now')),
             ),
             OutlinedButton.icon(
               onPressed: () => close(onSetupSync),
               icon: const Icon(Icons.drive_file_move_outline),
-              label: const Text('Anderer Ordner …'),
+              label: Text(tr('Anderer Ordner …', 'Other folder …')),
             ),
             OutlinedButton.icon(
               onPressed: () => close(onStopSync),
               icon: const Icon(Icons.cloud_off_outlined),
-              label: const Text('Sync beenden'),
+              label: Text(tr('Sync beenden', 'Stop sync')),
             ),
           ],
         ],
@@ -358,15 +423,20 @@ class _UpdateSectionState extends State<UpdateSection> {
       if (!mounted) return;
       setState(() {
         if (u == null) {
-          _message = 'Noch keine Versionen zum Herunterladen gefunden.';
+          _message = tr('Noch keine Versionen zum Herunterladen gefunden.', 'No versions available for download yet.');
         } else if (Updater.isNewer(u)) {
           _found = u;
         } else {
-          _message = 'Du hast die neueste Version.';
+          _message = tr('Du hast die neueste Version.', 'You have the latest version.');
         }
       });
     } catch (e) {
-      if (mounted) setState(() => _message = 'Keine Verbindung zu GitHub. Bist du online?');
+      if (mounted) {
+        setState(
+          () =>
+              _message = tr('Keine Verbindung zu GitHub. Bist du online?', 'No connection to GitHub. Are you online?'),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -376,7 +446,12 @@ class _UpdateSectionState extends State<UpdateSection> {
     if (!await Updater.canSelfInstall()) {
       await Updater.openPage(u);
       if (mounted) {
-        setState(() => _message = 'Die Download-Seite ist im Browser geöffnet.');
+        setState(
+          () => _message = tr(
+            'Die Download-Seite ist im Browser geöffnet.',
+            'The download page has opened in your browser.',
+          ),
+        );
       }
       return;
     }
@@ -392,7 +467,7 @@ class _UpdateSectionState extends State<UpdateSection> {
       if (mounted) {
         setState(() {
           _progress = null;
-          _message = 'Das Update ging nicht: $e';
+          _message = tr('Das Update ging nicht: $e', 'The update didn’t work: $e');
         });
       }
     }
@@ -411,10 +486,13 @@ class _UpdateSectionState extends State<UpdateSection> {
             icon: _busy
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.system_update_alt),
-            label: const Text('Nach Updates suchen'),
+            label: Text(tr('Nach Updates suchen', 'Check for updates')),
           )
         else ...[
-          Text('Neue Version ${u.tag} ist bereit.', style: theme.textTheme.titleSmall),
+          Text(
+            tr('Neue Version ${u.tag} ist bereit.', 'New version ${u.tag} is ready.'),
+            style: theme.textTheme.titleSmall,
+          ),
           if (u.notes.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
@@ -429,15 +507,22 @@ class _UpdateSectionState extends State<UpdateSection> {
             const SizedBox(height: 4),
             Text(
               _progress! < 1
-                  ? 'Wird heruntergeladen …'
-                  : 'Volti schliesst sich kurz und startet in der neuen Version neu …',
+                  ? tr('Wird heruntergeladen …', 'Downloading …')
+                  : tr(
+                      'Volti schliesst sich kurz und startet in der neuen Version neu …',
+                      'Volti closes briefly and restarts in the new version …',
+                    ),
               style: theme.textTheme.bodySmall,
             ),
           ] else
             FilledButton.icon(
               onPressed: () => Platform.isWindows ? _install(u) : Updater.openPage(u),
               icon: const Icon(Icons.download),
-              label: Text(Platform.isWindows ? 'Jetzt installieren und neu starten' : 'Herunterladen'),
+              label: Text(
+                Platform.isWindows
+                    ? tr('Jetzt installieren und neu starten', 'Install now and restart')
+                    : tr('Herunterladen', 'Download'),
+              ),
             ),
           if (!Platform.isWindows)
             Padding(
@@ -471,9 +556,9 @@ Future<void> checkForUpdateQuietly(BuildContext context) async {
     SnackBar(
       persist: false,
       duration: const Duration(seconds: 10),
-      content: Text('Neue Version ${found.tag} ist bereit.'),
+      content: Text(tr('Neue Version ${found.tag} ist bereit.', 'New version ${found.tag} is ready.')),
       action: SnackBarAction(
-        label: Platform.isWindows ? 'Installieren' : 'Herunterladen',
+        label: Platform.isWindows ? tr('Installieren', 'Install') : tr('Herunterladen', 'Download'),
         onPressed: () => _installWithProgress(context, found),
       ),
     ),
@@ -491,7 +576,7 @@ Future<void> _installWithProgress(BuildContext context, UpdateInfo u) async {
     context: context,
     barrierDismissible: false,
     builder: (c) => AlertDialog(
-      title: Text('Update auf ${u.tag}'),
+      title: Text(tr('Update auf ${u.tag}', 'Update to ${u.tag}')),
       content: ValueListenableBuilder<double>(
         valueListenable: progress,
         builder: (context, v, _) => Column(
@@ -502,10 +587,10 @@ Future<void> _installWithProgress(BuildContext context, UpdateInfo u) async {
             const SizedBox(height: 8),
             Text(
               v < 0.9
-                  ? 'Wird heruntergeladen …'
+                  ? tr('Wird heruntergeladen …', 'Downloading …')
                   : v < 1
-                  ? 'Wird eingerichtet …'
-                  : 'Volti startet in der neuen Version neu …',
+                  ? tr('Wird eingerichtet …', 'Setting up …')
+                  : tr('Volti startet in der neuen Version neu …', 'Volti is restarting in the new version …'),
             ),
           ],
         ),
@@ -518,7 +603,8 @@ Future<void> _installWithProgress(BuildContext context, UpdateInfo u) async {
     ErrorLog.record(e, st, where: 'Update');
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Das Update ging nicht: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(tr('Das Update ging nicht: $e', 'The update didn’t work: $e'))));
     }
   }
 }
@@ -535,7 +621,7 @@ Future<void> reportLastUpdate(BuildContext context) async {
       action: r.ok
           ? null
           : SnackBarAction(
-              label: 'Download-Seite',
+              label: tr('Download-Seite', 'Download page'),
               onPressed: () => Updater.openPage(
                 UpdateInfo(tag: '', number: 0, page: Uri.parse('https://github.com/${Updater.repo}/releases/latest')),
               ),
@@ -573,7 +659,10 @@ class _AutoBackupSectionState extends State<AutoBackupSection> {
   }
 
   Future<void> _chooseFolder() async {
-    final dir = await getDirectoryPath(confirmButtonText: 'Hier sichern', initialDirectory: _folder);
+    final dir = await getDirectoryPath(
+      confirmButtonText: tr('Hier sichern', 'Back up here'),
+      initialDirectory: _folder,
+    );
     if (dir == null) return;
     await widget.backup.setFolder(dir);
     await _loadFolder();
@@ -593,21 +682,27 @@ class _AutoBackupSectionState extends State<AutoBackupSection> {
           children: [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Jede Woche automatisch sichern'),
+              title: Text(tr('Jede Woche automatisch sichern', 'Back up automatically every week')),
               subtitle: Text(
                 b.running
-                    ? 'Sicherung läuft gerade …'
+                    ? tr('Sicherung läuft gerade …', 'Backup in progress …')
                     : b.lastError != null
-                    ? 'Die letzte Sicherung ging nicht: ${b.lastError}'
+                    ? tr(
+                        'Die letzte Sicherung ging nicht: ${b.lastError}',
+                        'The last backup didn’t work: ${b.lastError}',
+                      )
                     : last == null
-                    ? 'Noch keine automatische Sicherung.'
-                    : 'Zuletzt: ${_when(last)}. Die letzten ${AutoBackup.keep} bleiben liegen.',
+                    ? tr('Noch keine automatische Sicherung.', 'No automatic backup yet.')
+                    : tr(
+                        'Zuletzt: ${_when(last)}. Die letzten ${AutoBackup.keep} bleiben liegen.',
+                        'Last: ${_when(last)}. The latest ${AutoBackup.keep} are kept.',
+                      ),
               ),
               value: b.enabled,
               onChanged: b.setEnabled,
             ),
             if (b.enabled) ...[
-              if (_folder != null) SelectableText('Ordner: $_folder', style: small),
+              if (_folder != null) SelectableText(tr('Ordner: $_folder', 'Folder: $_folder'), style: small),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -616,13 +711,13 @@ class _AutoBackupSectionState extends State<AutoBackupSection> {
                   OutlinedButton.icon(
                     onPressed: b.running ? null : b.runNow,
                     icon: const Icon(Icons.backup_outlined),
-                    label: const Text('Jetzt sichern'),
+                    label: Text(tr('Jetzt sichern', 'Back up now')),
                   ),
                   if (!Platform.isAndroid)
                     OutlinedButton.icon(
                       onPressed: _chooseFolder,
                       icon: const Icon(Icons.folder_open),
-                      label: const Text('Anderer Ordner …'),
+                      label: Text(tr('Anderer Ordner …', 'Other folder …')),
                     ),
                 ],
               ),
@@ -645,18 +740,22 @@ Future<void> showErrorLogDialog(BuildContext context) async {
         final theme = Theme.of(c);
         final empty = text.trim().isEmpty;
         return AlertDialog(
-          title: const Text('Fehlerprotokoll'),
+          title: Text(tr('Fehlerprotokoll', 'Error log')),
           content: SizedBox(
             width: 560,
             child: empty
-                ? const Text('Es sind keine Fehler aufgezeichnet. 👍')
+                ? Text(tr('Es sind keine Fehler aufgezeichnet. 👍', 'No errors recorded. 👍'))
                 : Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        'Wenn etwas nicht klappt: „Kopieren“ antippen und den Text weiterschicken. '
-                        'Er enthält keine Noten und keine persönlichen Inhalte, nur die technischen Fehlermeldungen.',
+                      Text(
+                        tr(
+                          'Wenn etwas nicht klappt: „Kopieren“ antippen und den Text weiterschicken. '
+                              'Er enthält keine Noten und keine persönlichen Inhalte, nur die technischen Fehlermeldungen.',
+                          'If something doesn’t work: tap “Copy” and send the text on. '
+                              'It contains no music and no personal content, only the technical error messages.',
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Flexible(
@@ -685,20 +784,21 @@ Future<void> showErrorLogDialog(BuildContext context) async {
                   await ErrorLog.clear();
                   setState(() => text = '');
                 },
-                child: const Text('Leeren'),
+                child: Text(tr('Leeren', 'Clear')),
               ),
               FilledButton.tonalIcon(
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: text));
                   if (c.mounted) {
-                    ScaffoldMessenger.of(c).showSnackBar(const SnackBar(content: Text('Fehlerprotokoll kopiert.')));
+                    ScaffoldMessenger.of(c)
+                        .showSnackBar(SnackBar(content: Text(tr('Fehlerprotokoll kopiert.', 'Error log copied.'))));
                   }
                 },
                 icon: const Icon(Icons.copy),
-                label: const Text('Kopieren'),
+                label: Text(tr('Kopieren', 'Copy')),
               ),
             ],
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('Schliessen')),
+            TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Schliessen', 'Close'))),
           ],
         );
       },
@@ -716,8 +816,11 @@ void showVoltiLicenses(BuildContext context) {
       padding: const EdgeInsets.all(8),
       child: Image.asset('assets/brand/volti_mark.png', height: 48),
     ),
-    applicationLegalese:
-        'Notenzeichen: Bravura (Steinberg, SIL Open Font License). '
-        'Schriften: Roboto, Roboto Mono und Noto Serif (SIL Open Font License).',
+    applicationLegalese: tr(
+      'Notenzeichen: Bravura (Steinberg, SIL Open Font License). '
+          'Schriften: Roboto, Roboto Mono und Noto Serif (SIL Open Font License).',
+      'Music symbols: Bravura (Steinberg, SIL Open Font License). '
+          'Fonts: Roboto, Roboto Mono and Noto Serif (SIL Open Font License).',
+    ),
   );
 }

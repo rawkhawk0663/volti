@@ -7,6 +7,7 @@ import '../library/folders.dart';
 import '../library/setlist.dart';
 import '../library/sidecar_store.dart';
 import 'sync_store.dart';
+import '../../app/l10n.dart';
 
 /// Was bei einem Abgleich passiert ist.
 class SyncReport {
@@ -85,7 +86,10 @@ class SyncEngine {
     final report = SyncReport();
     if (!await remote.exists(markerPath)) {
       throw SyncException(
-        'Der Sync-Ordner ist nicht erreichbar. Läuft Proton Drive, und ist der Ordner noch vorhanden?',
+        tr(
+          'Der Sync-Ordner ist nicht erreichbar. Läuft Proton Drive, und ist der Ordner noch vorhanden?',
+          'The sync folder cannot be reached. Is Proton Drive running, and does the folder still exist?',
+        ),
       );
     }
 
@@ -110,8 +114,12 @@ class SyncEngine {
     final wouldDelete = localPdfs.where((r) => base.contains(r) && !remoteFiles.contains(r)).length;
     if (localPdfs.length > 3 && wouldDelete > localPdfs.length / 2) {
       throw SyncException(
-        'Der Abgleich würde $wouldDelete von ${localPdfs.length} Stücken auf diesem Gerät löschen. '
-        'Zur Sicherheit wurde nichts verändert. Prüfe bitte den Sync-Ordner.',
+        tr(
+          'Der Abgleich würde $wouldDelete von ${localPdfs.length} Stücken auf diesem Gerät löschen. '
+              'Zur Sicherheit wurde nichts verändert. Prüfe bitte den Sync-Ordner.',
+          'The sync would delete $wouldDelete of ${localPdfs.length} pieces on this device. '
+              'To be safe, nothing was changed. Please check the sync folder.',
+        ),
       );
     }
 

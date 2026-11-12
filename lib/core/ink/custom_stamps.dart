@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
+import '../../app/l10n.dart';
+
 /// Ein eigener Stempel: ein Bild, das man selbst importiert hat.
 ///
 /// Das Bild liegt als PNG in `Bibliothek/.volti/stamps/<id>.png` und wird nie
@@ -71,7 +73,7 @@ class CustomStamp {
 
   static CustomStamp fromJson(Map<String, dynamic> j) => CustomStamp(
     id: j['id'] as String,
-    name: j['name'] as String? ?? 'Stempel',
+    name: j['name'] as String? ?? tr('Stempel', 'Stamp'),
     anchorX: (j['ax'] as num?)?.toDouble() ?? 0.5,
     anchorY: (j['ay'] as num?)?.toDouble() ?? 0.5,
     aspect: (j['aspect'] as num?)?.toDouble() ?? 1,

@@ -29,11 +29,15 @@ SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
+ShowLanguageDialog=no
+LanguageDetectionMethod=uilanguage
 CloseApplications=force
 RestartApplications=no
 
 [Languages]
+; Sprache nach Windows: Deutsch (Schweizer Schreibweise) oder Englisch.
 Name: "de"; MessagesFile: "German-CH.isl"
+Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"

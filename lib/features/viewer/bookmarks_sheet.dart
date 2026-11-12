@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/ink/navigation_marks.dart';
 import 'ink_controller.dart';
+import '../../app/l10n.dart';
 
 /// Lesezeichen eines Stücks: anspringen, anlegen, umbenennen, Bereich ändern,
 /// löschen – und als eigenes Stück in eine Setlist legen.
@@ -43,8 +44,8 @@ class _BookmarksSheet extends StatelessWidget {
 
   String _range(Bookmark b) {
     final a = _display(b.page), e = _display(b.lastPage);
-    if (a == 0) return 'Seite ausgeblendet';
-    return e > a ? 'Seiten $a–$e' : 'Seite $a';
+    if (a == 0) return tr('Seite ausgeblendet', 'Page hidden');
+    return e > a ? tr('Seiten $a–$e', 'Pages $a–$e') : tr('Seite $a', 'Page $a');
   }
 
   @override
@@ -65,11 +66,13 @@ class _BookmarksSheet extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(20, 0, 12, 4),
                   child: Row(
                     children: [
-                      Expanded(child: Text('Lesezeichen', style: Theme.of(context).textTheme.titleLarge)),
+                      Expanded(
+                        child: Text(tr('Lesezeichen', 'Bookmarks'), style: Theme.of(context).textTheme.titleLarge),
+                      ),
                       FilledButton.tonalIcon(
                         onPressed: () => _edit(context, null),
                         icon: const Icon(Icons.bookmark_add_outlined),
-                        label: Text('Seite $current merken'),
+                        label: Text(tr('Seite $current merken', 'Bookmark page $current')),
                       ),
                     ],
                   ),
@@ -77,15 +80,19 @@ class _BookmarksSheet extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                   child: Text(
-                    'Zum Beispiel ein Lied in einem Sammelband. Antippen springt hin. Mit einem Seitenbereich lässt '
-                    'es sich als eigenes Stück in eine Setlist legen.',
+                    tr(
+                      'Zum Beispiel ein Lied in einem Sammelband. Antippen springt hin. Mit einem Seitenbereich lässt '
+                          'es sich als eigenes Stück in eine Setlist legen.',
+                      'For example a song in a songbook. Tap to jump there. With a page range it can '
+                          'be put into a setlist as a piece of its own.',
+                    ),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ),
                 if (marks.isEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(child: Text('Noch keine Lesezeichen.')),
+                    child: Center(child: Text(tr('Noch keine Lesezeichen.', 'No bookmarks yet.'))),
                   )
                 else
                   Flexible(
@@ -105,17 +112,20 @@ class _BookmarksSheet extends StatelessWidget {
                                   },
                             onLongPress: () => _edit(context, b),
                             trailing: PopupMenuButton<String>(
-                              tooltip: 'Mehr',
+                              tooltip: tr('Mehr', 'More'),
                               onSelected: (v) async {
                                 if (v == 'edit') await _edit(context, b);
                                 if (v == 'setlist') await onAddToSetlist?.call(b);
                                 if (v == 'delete') ink.deleteBookmark(b.id);
                               },
                               itemBuilder: (_) => [
-                                const PopupMenuItem(value: 'edit', child: Text('Name und Seiten …')),
+                                PopupMenuItem(value: 'edit', child: Text(tr('Name und Seiten …', 'Name and pages …'))),
                                 if (onAddToSetlist != null)
-                                  const PopupMenuItem(value: 'setlist', child: Text('Zu Setlist hinzufügen …')),
-                                const PopupMenuItem(value: 'delete', child: Text('Löschen')),
+                                  PopupMenuItem(
+                                    value: 'setlist',
+                                    child: Text(tr('Zu Setlist hinzufügen …', 'Add to setlist …')),
+                                  ),
+                                PopupMenuItem(value: 'delete', child: Text(tr('Löschen', 'Delete'))),
                               ],
                             ),
                           ),
@@ -186,18 +196,21 @@ class _BookmarkDialogState extends State<_BookmarkDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Lesezeichen'),
+      title: Text(tr('Lesezeichen', 'Bookmark')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _name,
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Name', hintText: 'z. B. Autumn Leaves'),
+            decoration: InputDecoration(
+              labelText: tr('Name', 'Name'),
+              hintText: tr('z. B. Autumn Leaves', 'e.g. Autumn Leaves'),
+            ),
           ),
           const SizedBox(height: 12),
           _picker(
-            'Ab Seite',
+            tr('Ab Seite', 'From page'),
             _from,
             1,
             (v) => setState(() {
@@ -205,14 +218,14 @@ class _BookmarkDialogState extends State<_BookmarkDialog> {
               if (_to < _from) _to = _from;
             }),
           ),
-          _picker('Bis Seite', _to, _from, (v) => setState(() => _to = v)),
+          _picker(tr('Bis Seite', 'To page'), _to, _from, (v) => setState(() => _to = v)),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(tr('Abbrechen', 'Cancel'))),
         FilledButton(
           onPressed: () => Navigator.of(context).pop((name: _name.text, from: _from, to: _to)),
-          child: const Text('Speichern'),
+          child: Text(tr('Speichern', 'Save')),
         ),
       ],
     );

@@ -4,14 +4,17 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../app/l10n.dart';
+
 /// Klang des Metronoms.
 enum ClickSound {
-  soft('Weich'),
-  wood('Holzblock'),
-  beep('Piep');
+  soft('Weich', 'Soft'),
+  wood('Holzblock', 'Wood block'),
+  beep('Piep', 'Beep');
 
-  const ClickSound(this.label);
-  final String label;
+  const ClickSound(this._de, this._en);
+  final String _de, _en;
+  String get label => tr(_de, _en);
 
   static ClickSound fromName(String? n) => ClickSound.values.firstWhere((s) => s.name == n, orElse: () => soft);
 }
@@ -154,8 +157,11 @@ class Metronome extends ChangeNotifier {
       _startedAt = DateTime.now();
       _startTicker();
     } catch (e) {
-      error = 'Der Ton konnte nicht abgespielt werden. Sind Lautsprecher oder Kopfhörer eingeschaltet?';
-      debugPrint('Metronom: $e');
+      error = tr(
+        'Der Ton konnte nicht abgespielt werden. Sind Lautsprecher oder Kopfhörer eingeschaltet?',
+        'The sound could not be played. Are speakers or headphones switched on?',
+      );
+      debugPrint(tr('Metronom: $e', 'Metronome: $e'));
       _running = false;
       _ticker?.cancel();
       if (!_disposed) notifyListeners();

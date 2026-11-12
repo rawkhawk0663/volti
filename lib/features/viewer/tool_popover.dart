@@ -19,6 +19,8 @@ import 'stamp_paint.dart';
 import 'rich_text.dart';
 import 'text_layer.dart';
 import 'tool_controller.dart';
+import '../../app/l10n.dart';
+import '../../core/ink/stamp_names.dart';
 
 /// Farben für Stift und Text (deckend) und Textmarker (hell).
 const penColors = [
@@ -41,15 +43,15 @@ int _withAlpha(int rgb, double a) => ((a * 255).round() << 24) | (rgb & 0xFFFFFF
 double _alpha(int argb) => (argb >> 24) / 255.0;
 
 String toolName(ToolMode m) => switch (m) {
-  ToolMode.pen => 'Stift',
-  ToolMode.highlighter => 'Textmarker',
-  ToolMode.eraser => 'Radierer',
-  ToolMode.text => 'Text',
-  ToolMode.stamp => 'Stempel',
-  ToolMode.shape => 'Formen',
-  ToolMode.lasso => 'Auswählen',
-  ToolMode.link => 'Sprungmarke',
-  ToolMode.move => 'Verschieben',
+  ToolMode.pen => tr('Stift', 'Pen'),
+  ToolMode.highlighter => tr('Textmarker', 'Highlighter'),
+  ToolMode.eraser => tr('Radierer', 'Eraser'),
+  ToolMode.text => tr('Text', 'Text'),
+  ToolMode.stamp => tr('Stempel', 'Stamps'),
+  ToolMode.shape => tr('Formen', 'Shapes'),
+  ToolMode.lasso => tr('Auswählen', 'Select'),
+  ToolMode.link => tr('Sprungmarke', 'Jump link'),
+  ToolMode.move => tr('Verschieben', 'Move'),
   _ => '',
 };
 
@@ -101,12 +103,14 @@ class ToolPopover extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          tools.layersOpen ? 'Ebenen' : toolName(mode),
+                          tools.layersOpen ? tr('Ebenen', 'Layers') : toolName(mode),
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                       ),
                       IconButton(
-                        tooltip: tools.layersOpen ? 'Ebenen schliessen' : 'Werkzeug abwählen',
+                        tooltip: tools.layersOpen
+                            ? tr('Ebenen schliessen', 'Close layers')
+                            : tr('Werkzeug abwählen', 'Deselect tool'),
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(Icons.close, size: 18),
                         onPressed: () => tools.layersOpen ? tools.toggleLayers() : tools.setMode(ToolMode.none),
@@ -174,7 +178,7 @@ class _StrokeSettings extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Label('Favoriten'),
+        _Label(tr('Favoriten', 'Favourites')),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -182,14 +186,16 @@ class _StrokeSettings extends StatelessWidget {
             for (final f in favorites)
               _FavoriteChip(
                 selected: f.sameLook(current),
-                tooltip: 'Antippen = verwenden · lange drücken = entfernen',
+                tooltip: tr('Antippen = verwenden · lange drücken = entfernen', 'Tap = use · long press = remove'),
                 onTap: () => tools.applyFavorite(f),
                 onLongPress: () => _confirmRemove(context, () => tools.removeFavorite(f)),
                 child: _StrokeSwatch(preset: f),
               ),
             _FavoriteChip(
               selected: false,
-              tooltip: isFavorite ? 'Schon als Favorit gespeichert' : 'Aktuelle Einstellung als Favorit speichern',
+              tooltip: isFavorite
+                  ? tr('Schon als Favorit gespeichert', 'Already saved as a favourite')
+                  : tr('Aktuelle Einstellung als Favorit speichern', 'Save current setting as a favourite'),
               onTap: isFavorite ? null : () => tools.addCurrentAsFavorite(tool),
               child: Icon(isFavorite ? Icons.star : Icons.star_outline, size: 20),
             ),
@@ -205,7 +211,7 @@ class _StrokeSettings extends StatelessWidget {
           ),
           child: CustomPaint(painter: _PreviewPainter(current)),
         ),
-        const _Label('Farbe'),
+        _Label(tr('Farbe', 'Colour')),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -218,14 +224,14 @@ class _StrokeSettings extends StatelessWidget {
               ),
           ],
         ),
-        const _Label('Breite'),
+        _Label(tr('Breite', 'Width')),
         Slider(
           min: minW,
           max: maxW,
           value: current.width.clamp(minW, maxW),
           onChanged: (v) => set(current.copyWith(width: v)),
         ),
-        const _Label('Deckkraft'),
+        _Label(tr('Deckkraft', 'Opacity')),
         Slider(
           min: 0.2,
           max: 1,
@@ -241,10 +247,10 @@ Future<void> _confirmRemove(BuildContext context, VoidCallback remove) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
-      title: const Text('Favorit entfernen?'),
+      title: Text(tr('Favorit entfernen?', 'Remove favourite?')),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Entfernen')),
+        TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Entfernen', 'Remove'))),
       ],
     ),
   );
@@ -295,15 +301,15 @@ class _EraserSettings extends StatelessWidget {
         const SizedBox(height: 6),
         SegmentedButton<bool>(
           showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: false, label: Text('Ganze Elemente')),
-            ButtonSegment(value: true, label: Text('Teilweise')),
+          segments: [
+            ButtonSegment(value: false, label: Text(tr('Ganze Elemente', 'Whole elements'))),
+            ButtonSegment(value: true, label: Text(tr('Teilweise', 'Partial'))),
           ],
           selected: {partial},
           onSelectionChanged: (v) => tools.setEraserPartial(v.first),
         ),
         if (partial) ...[
-          const _Label('Grösse'),
+          _Label(tr('Grösse', 'Size')),
           Row(
             children: [
               Expanded(
@@ -336,13 +342,19 @@ class _EraserSettings extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           partial
-              ? 'Löscht nur die Stellen, über die du fährst – wie ein Radiergummi. Text-Notizen werden ganz gelöscht.'
-              : 'Löscht ganze Striche und Text-Notizen, die du berührst.',
+              ? tr(
+                  'Löscht nur die Stellen, über die du fährst – wie ein Radiergummi. Text-Notizen werden ganz gelöscht.',
+                  'Erases only where you move – like a rubber. Text notes are erased completely.',
+                )
+              : tr(
+                  'Löscht ganze Striche und Text-Notizen, die du berührst.',
+                  'Erases whole strokes and text notes that you touch.',
+                ),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 4),
         Text(
-          'Das Radierer-Ende des Stifts radiert genauso.',
+          tr('Das Radierer-Ende des Stifts radiert genauso.', 'The eraser end of the pen erases the same way.'),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
@@ -389,7 +401,7 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
     final scheme = Theme.of(context).colorScheme;
     Widget cell(int glyph) => _FavoriteChip(
       selected: st.custom == null && st.glyph == glyph,
-      tooltip: stampGlyph(glyph)?.label ?? '',
+      tooltip: stampName(stampGlyph(glyph)?.label ?? ''),
       onTap: () => tools.setStamp(st.copyWith(glyph: glyph)),
       child: SizedBox(width: 36, height: 36, child: CustomPaint(painter: _GlyphPainter(glyph, Color(st.color)))),
     );
@@ -397,7 +409,7 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (recent.isNotEmpty) ...[
-          const _Label('Zuletzt benutzt'),
+          _Label(tr('Zuletzt benutzt', 'Recently used')),
           Wrap(spacing: 6, runSpacing: 6, children: [for (final g in recent.take(5)) cell(g)]),
           const SizedBox(height: 6),
         ],
@@ -412,8 +424,8 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
           unselectedLabelStyle: const TextStyle(fontSize: 13),
           dividerColor: scheme.outlineVariant,
           tabs: [
-            for (final c in stampCatalog) Tab(height: 34, text: c.name),
-            const Tab(height: 34, text: 'Eigene'),
+            for (final c in stampCatalog) Tab(height: 34, text: stampName(c.name)),
+            Tab(height: 34, text: tr('Eigene', 'Own')),
           ],
         ),
         SizedBox(
@@ -445,10 +457,13 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
         _PageDots(controller: _tabs),
         const SizedBox(height: 4),
         Text(
-          'Auf die Seite tippen, um den Stempel zu setzen. Einen gesetzten Stempel ziehen, um ihn zu verschieben.',
+          tr(
+            'Auf die Seite tippen, um den Stempel zu setzen. Einen gesetzten Stempel ziehen, um ihn zu verschieben.',
+            'Tap the page to place the stamp. Drag a placed stamp to move it.',
+          ),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
-        const _Label('Grösse'),
+        _Label(tr('Grösse', 'Size')),
         Slider(
           min: StampSetting.minSize,
           max: StampSetting.maxSize,
@@ -457,7 +472,7 @@ class _StampSettingsState extends State<_StampSettings> with SingleTickerProvide
         ),
         // Eigene Stempel behalten ihre Farben.
         if (st.custom == null) ...[
-          const _Label('Farbe'),
+          _Label(tr('Farbe', 'Colour')),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -498,7 +513,7 @@ class _CustomStampsTab extends StatelessWidget {
               for (final s in registry.stamps)
                 _FavoriteChip(
                   selected: st.custom == s.id,
-                  tooltip: '${s.name} · lange drücken = ändern',
+                  tooltip: tr('${s.name} · lange drücken = ändern', '${s.name} · long press = edit'),
                   onTap: () => tools.setStamp(st.copyWith(custom: s.id)),
                   onLongPress: () => _menu(context, s),
                   child: SizedBox(width: 36, height: 36, child: CustomPaint(painter: _CustomStampIcon(s.id))),
@@ -506,7 +521,7 @@ class _CustomStampsTab extends StatelessWidget {
               _FavoriteChip(
                 selected: false,
                 plain: true,
-                tooltip: 'Eigenes Bild als Stempel importieren',
+                tooltip: tr('Eigenes Bild als Stempel importieren', 'Import your own image as a stamp'),
                 onTap: () => importCustomStamp(context, tools),
                 child: Icon(Icons.add_photo_alternate_outlined, size: 22, color: Theme.of(context).colorScheme.primary),
               ),
@@ -525,11 +540,11 @@ class _CustomStampsTab extends StatelessWidget {
         children: [
           SimpleDialogOption(
             onPressed: () => Navigator.of(context).pop('edit'),
-            child: const Text('Mittelpunkt und Name ändern …'),
+            child: Text(tr('Mittelpunkt und Name ändern …', 'Change centre point and name …')),
           ),
           SimpleDialogOption(
             onPressed: () => Navigator.of(context).pop('remove'),
-            child: const Text('Aus der Auswahl entfernen'),
+            child: Text(tr('Aus der Auswahl entfernen', 'Remove from the selection')),
           ),
         ],
       ),
@@ -594,23 +609,36 @@ class _LinkSettings extends StatelessWidget {
         children: [
           const SizedBox(height: 6),
           if (start == null) ...[
-            Text('1. Startpunkt antippen', style: Theme.of(context).textTheme.titleSmall),
+            Text(tr('1. Startpunkt antippen', '1. Tap the start point'), style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 4),
             Text(
-              'Zum Beispiel beim «D.S.» oder am Ende einer Wiederholung. Dort erscheint ein blauer Punkt.',
+              tr(
+                'Zum Beispiel beim «D.S.» oder am Ende einer Wiederholung. Dort erscheint ein blauer Punkt.',
+                'For example at the «D.S.» or at the end of a repeat. A blue dot appears there.',
+              ),
               style: hint,
             ),
           ] else ...[
-            Text('2. Ziel antippen', style: Theme.of(context).textTheme.titleSmall),
+            Text(tr('2. Ziel antippen', '2. Tap the target'), style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 4),
-            Text('Zum Beispiel beim Segno. Du kannst vorher umblättern.', style: hint),
+            Text(
+              tr(
+                'Zum Beispiel beim Segno. Du kannst vorher umblättern.',
+                'For example at the segno. You can turn pages first.',
+              ),
+              style: hint,
+            ),
             const SizedBox(height: 8),
-            OutlinedButton(onPressed: () => tools.linkStart.value = null, child: const Text('Abbrechen')),
+            OutlinedButton(onPressed: () => tools.linkStart.value = null, child: Text(tr('Abbrechen', 'Cancel'))),
           ],
           const SizedBox(height: 12),
           Text(
-            'Beim Spielen springt Volti beim Antippen des blauen Punkts zum Ziel, das kurz orange aufblinkt. '
-            'Hier: Punkt ziehen verschiebt ihn, antippen zeigt Ziel ändern und Löschen.',
+            tr(
+              'Beim Spielen springt Volti beim Antippen des blauen Punkts zum Ziel, das kurz orange aufblinkt. '
+                  'Hier: Punkt ziehen verschiebt ihn, antippen zeigt Ziel ändern und Löschen.',
+              'While playing, tapping the blue dot jumps to the target, which briefly flashes orange. '
+                  'Here: drag a dot to move it, tap it to change the target or delete it.',
+            ),
             style: hint,
           ),
         ],
@@ -656,9 +684,9 @@ class _LassoSettings extends StatelessWidget {
             // Was das Einkreisen tut: Anmerkungen auswählen oder Takte kopieren.
             SegmentedButton<bool>(
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: false, label: Text('Anmerkungen')),
-                ButtonSegment(value: true, label: Text('Takte kopieren')),
+              segments: [
+                ButtonSegment(value: false, label: Text(tr('Anmerkungen', 'Notes'))),
+                ButtonSegment(value: true, label: Text(tr('Takte kopieren', 'Copy bars'))),
               ],
               selected: {tools.snippetMode},
               onSelectionChanged: (v) => tools.setSnippetMode(v.first),
@@ -666,18 +694,27 @@ class _LassoSettings extends StatelessWidget {
             const SizedBox(height: 8),
             if (tools.snippetMode)
               Text(
-                'Takte einkreisen: Sie werden samt Anmerkungen als Bild kopiert. Dann eine Seite antippen (auch in '
-                'einem anderen Stück) und «Einfügen». Danach lässt es sich wie ein Stempel verschieben und vergrössern.',
+                tr(
+                  'Takte einkreisen: Sie werden samt Anmerkungen als Bild kopiert. Dann eine Seite antippen (auch in '
+                      'einem anderen Stück) und «Einfügen». Danach lässt es sich wie ein Stempel verschieben und vergrössern.',
+                  'Circle the bars: they are copied as an image, including your notes. Then tap a page (even in '
+                      'another piece) and «Paste». After that you can move and resize it like a stamp.',
+                ),
                 style: hint,
               )
             else if (count == 0)
               Text(
-                'Mit dem Stift oder der Maus einkreisen, was du auswählen möchtest. Strg+A wählt alles auf der Seite.',
+                tr(
+                  'Mit dem Stift oder der Maus einkreisen, was du auswählen möchtest. Strg+A wählt alles auf der Seite.',
+                  'Circle what you want to select with the pen or mouse. Ctrl+A selects everything on the page.',
+                ),
                 style: hint,
               )
             else ...[
               Text(
-                count == 1 ? '1 Element ausgewählt' : '$count Elemente ausgewählt',
+                count == 1
+                    ? tr('1 Element ausgewählt', '1 element selected')
+                    : tr('$count Elemente ausgewählt', '$count elements selected'),
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
@@ -685,10 +722,15 @@ class _LassoSettings extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  action(Icons.copy, 'Kopieren', 'Strg+C', tools.copySelection),
-                  action(Icons.content_cut, 'Ausschneiden', 'Strg+X', tools.cutSelection),
-                  action(Icons.library_add_outlined, 'Duplizieren', 'Strg+D', tools.duplicateSelection),
-                  action(Icons.delete_outline, 'Löschen', 'Entf', tools.deleteSelection),
+                  action(Icons.copy, tr('Kopieren', 'Copy'), tr('Strg+C', 'Ctrl+C'), tools.copySelection),
+                  action(Icons.content_cut, tr('Ausschneiden', 'Cut'), tr('Strg+X', 'Ctrl+X'), tools.cutSelection),
+                  action(
+                    Icons.library_add_outlined,
+                    tr('Duplizieren', 'Duplicate'),
+                    tr('Strg+D', 'Ctrl+D'),
+                    tools.duplicateSelection,
+                  ),
+                  action(Icons.delete_outline, tr('Löschen', 'Delete'), tr('Entf', 'Del'), tools.deleteSelection),
                 ],
               ),
               if (ink != null && ink!.drawableLayers.length > 1) ...[
@@ -696,7 +738,7 @@ class _LassoSettings extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: PopupMenuButton<String>(
-                    tooltip: 'Auf eine andere Ebene legen',
+                    tooltip: tr('Auf eine andere Ebene legen', 'Put on another layer'),
                     onSelected: (id) {
                       final s = tools.selection.value;
                       if (s != null) s.controller.moveToLayer(s.live, id);
@@ -716,7 +758,7 @@ class _LassoSettings extends StatelessWidget {
                       child: OutlinedButton.icon(
                         onPressed: () {},
                         icon: const Icon(Icons.layers_outlined, size: 18),
-                        label: const Text('Auf Ebene …'),
+                        label: Text(tr('Auf Ebene …', 'To layer …')),
                         style: OutlinedButton.styleFrom(
                           visualDensity: VisualDensity.compact,
                           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -726,7 +768,7 @@ class _LassoSettings extends StatelessWidget {
                   ),
                 ),
               ],
-              const _Label('Farbe ändern'),
+              _Label(tr('Farbe ändern', 'Change colour')),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
@@ -737,7 +779,10 @@ class _LassoSettings extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                'Ziehen verschiebt die Auswahl. Am runden Griff unten rechts ziehen macht sie grösser oder kleiner.',
+                tr(
+                  'Ziehen verschiebt die Auswahl. Am runden Griff unten rechts ziehen macht sie grösser oder kleiner.',
+                  'Dragging moves the selection. Dragging the round handle at the bottom right makes it bigger or smaller.',
+                ),
                 style: hint,
               ),
             ],
@@ -746,10 +791,16 @@ class _LassoSettings extends StatelessWidget {
               FilledButton.tonalIcon(
                 onPressed: () => tools.pasteInto(ink!, page),
                 icon: const Icon(Icons.content_paste, size: 18),
-                label: Text('Einfügen auf Seite $page'),
+                label: Text(tr('Einfügen auf Seite $page', 'Paste on page $page')),
               ),
               const SizedBox(height: 4),
-              Text('Auch in ein anderes Stück: dort eine Seite antippen, dann einfügen (Strg+V).', style: hint),
+              Text(
+                tr(
+                  'Auch in ein anderes Stück: dort eine Seite antippen, dann einfügen (Strg+V).',
+                  'Into another piece too: tap a page there, then paste (Ctrl+V).',
+                ),
+                style: hint,
+              ),
             ],
           ],
         );
@@ -759,15 +810,15 @@ class _LassoSettings extends StatelessWidget {
 }
 
 // -------------------------------------------------------------------- Formen
-const _shapeNames = {
-  ShapeKind.line: 'Linie',
-  ShapeKind.arrow: 'Pfeil',
-  ShapeKind.rectangle: 'Rechteck',
-  ShapeKind.ellipse: 'Ellipse',
-  ShapeKind.crescendo: 'Crescendo',
-  ShapeKind.decrescendo: 'Decrescendo',
-  ShapeKind.slur: 'Bogen',
-  ShapeKind.staff: 'Notenlinien',
+Map<ShapeKind, String> get _shapeNames => {
+  ShapeKind.line: tr('Linie', 'Line'),
+  ShapeKind.arrow: tr('Pfeil', 'Arrow'),
+  ShapeKind.rectangle: tr('Rechteck', 'Rectangle'),
+  ShapeKind.ellipse: tr('Ellipse', 'Ellipse'),
+  ShapeKind.crescendo: tr('Crescendo', 'Crescendo'),
+  ShapeKind.decrescendo: tr('Decrescendo', 'Decrescendo'),
+  ShapeKind.slur: tr('Bogen', 'Slur'),
+  ShapeKind.staff: tr('Notenlinien', 'Staff lines'),
 };
 
 class _ShapeSettings extends StatelessWidget {
@@ -780,7 +831,7 @@ class _ShapeSettings extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Label('Form'),
+        _Label(tr('Form', 'Shape')),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -797,11 +848,14 @@ class _ShapeSettings extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           tools.shapeKind == ShapeKind.staff
-              ? 'Vom Anfang zum Ende ziehen. Nach unten ziehen bestimmt die Höhe, nur waagrecht ergibt die übliche Höhe.'
-              : 'Auf der Seite vom Anfang zum Ende ziehen.',
+              ? tr(
+                  'Vom Anfang zum Ende ziehen. Nach unten ziehen bestimmt die Höhe, nur waagrecht ergibt die übliche Höhe.',
+                  'Drag from start to end. Dragging downwards sets the height; dragging only sideways gives the usual height.',
+                )
+              : tr('Auf der Seite vom Anfang zum Ende ziehen.', 'Drag on the page from start to end.'),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
-        const _Label('Farbe'),
+        _Label(tr('Farbe', 'Colour')),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -814,7 +868,7 @@ class _ShapeSettings extends StatelessWidget {
               ),
           ],
         ),
-        const _Label('Breite'),
+        _Label(tr('Breite', 'Width')),
         Slider(
           min: DrawingPreset.minPenWidth,
           max: DrawingPreset.maxPenWidth,
@@ -865,7 +919,7 @@ class _TextSettings extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Label('Favoriten'),
+        _Label(tr('Favoriten', 'Favourites')),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -873,14 +927,16 @@ class _TextSettings extends StatelessWidget {
             for (final f in tools.textFavorites)
               _FavoriteChip(
                 selected: f.sameLook(s),
-                tooltip: 'Antippen = verwenden · lange drücken = entfernen',
+                tooltip: tr('Antippen = verwenden · lange drücken = entfernen', 'Tap = use · long press = remove'),
                 onTap: () => tools.setTextStyle(f.copyWith(id: s.id)),
                 onLongPress: () => _confirmRemove(context, () => tools.removeTextFavorite(f)),
                 child: _TextSample(style: f, fontSize: 15, text: 'Aa'),
               ),
             _FavoriteChip(
               selected: false,
-              tooltip: isFavorite ? 'Schon als Favorit gespeichert' : 'Aktuellen Stil als Favorit speichern',
+              tooltip: isFavorite
+                  ? tr('Schon als Favorit gespeichert', 'Already saved as a favourite')
+                  : tr('Aktuellen Stil als Favorit speichern', 'Save current style as a favourite'),
               onTap: isFavorite ? null : tools.addCurrentTextFavorite,
               child: Icon(isFavorite ? Icons.star : Icons.star_outline, size: 20),
             ),
@@ -895,7 +951,7 @@ class _TextSettings extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Theme.of(context).dividerColor),
           ),
-          child: _TextSample(style: s, fontSize: (s.size * 900).clamp(11, 36), text: 'Bogen ab'),
+          child: _TextSample(style: s, fontSize: (s.size * 900).clamp(11, 36), text: tr('Bogen ab', 'Sample')),
         ),
         // Ist in der getippten Notiz etwas markiert, gelten Fett, Kursiv,
         // Unterstrichen und Farbe nur für diesen Teil (wie in Word).
@@ -908,7 +964,7 @@ class _TextSettings extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _Label(part ? 'Schrift · nur Markiertes' : 'Schrift'),
+                  _Label(part ? tr('Schrift · nur Markiertes', 'Font · selection only') : tr('Schrift', 'Font')),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -921,7 +977,7 @@ class _TextSettings extends StatelessWidget {
                       const SizedBox(width: 6),
                       _ToggleBox(
                         selected: part ? target.bold : s.bold,
-                        tooltip: 'Fett (Strg+B)',
+                        tooltip: tr('Fett (Strg+B)', 'Bold (Ctrl+B)'),
                         onTap: () => part ? target.toggleBold() : tools.setTextStyle(s.copyWith(bold: !s.bold)),
                         child: const Text(
                           'B',
@@ -931,7 +987,7 @@ class _TextSettings extends StatelessWidget {
                       const SizedBox(width: 6),
                       _ToggleBox(
                         selected: part ? target.italic : s.italic,
-                        tooltip: 'Kursiv (Strg+I)',
+                        tooltip: tr('Kursiv (Strg+I)', 'Italic (Ctrl+I)'),
                         onTap: () => part ? target.toggleItalic() : tools.setTextStyle(s.copyWith(italic: !s.italic)),
                         child: const Text(
                           'I',
@@ -946,7 +1002,10 @@ class _TextSettings extends StatelessWidget {
                       const SizedBox(width: 6),
                       _ToggleBox(
                         selected: part && target.underline,
-                        tooltip: 'Unterstrichen (Strg+U) – für markierten Text',
+                        tooltip: tr(
+                          'Unterstrichen (Strg+U) – für markierten Text',
+                          'Underline (Ctrl+U) – for selected text',
+                        ),
                         onTap: target == null
                             ? null
                             : () {
@@ -968,14 +1027,18 @@ class _TextSettings extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const _Label('Grösse'),
+                  _Label(tr('Grösse', 'Size')),
                   Slider(
                     min: TextStyleSetting.minSize,
                     max: TextStyleSetting.maxSize,
                     value: s.size.clamp(TextStyleSetting.minSize, TextStyleSetting.maxSize),
                     onChanged: (v) => tools.setTextStyle(s.copyWith(size: v)),
                   ),
-                  _Label(part ? 'Textfarbe · nur Markiertes' : 'Textfarbe'),
+                  _Label(
+                    part
+                        ? tr('Textfarbe · nur Markiertes', 'Text colour · selection only')
+                        : tr('Textfarbe', 'Text colour'),
+                  ),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
@@ -995,7 +1058,7 @@ class _TextSettings extends StatelessWidget {
             },
           ),
         ),
-        const _Label('Hintergrund'),
+        _Label(tr('Hintergrund', 'Background')),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -1003,7 +1066,7 @@ class _TextSettings extends StatelessWidget {
             for (final b in textBackgrounds)
               _Swatch(
                 color: b == TextNote.noBackground ? null : Color(b),
-                tooltip: b == TextNote.noBackground ? 'Ohne Hintergrund' : null,
+                tooltip: b == TextNote.noBackground ? tr('Ohne Hintergrund', 'No background') : null,
                 selected: s.background == b,
                 onTap: () => tools.setTextStyle(s.copyWith(background: b)),
               ),
@@ -1308,8 +1371,12 @@ class _MoveSettings extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Text(
-        'Einen Strich, Stempel oder eine Text-Notiz mit dem Stift (oder der Maus) anfassen und an die '
-        'neue Stelle ziehen. Mehrere auf einmal: mit „Auswählen“ einkreisen.',
+        tr(
+          'Einen Strich, Stempel oder eine Text-Notiz mit dem Stift (oder der Maus) anfassen und an die '
+              'neue Stelle ziehen. Mehrere auf einmal: mit „Auswählen“ einkreisen.',
+          'Grab a stroke, stamp or text note with the pen (or mouse) and drag it to its '
+              'new place. Several at once: circle them with “Select”.',
+        ),
         style: theme.textTheme.bodyMedium,
       ),
     );

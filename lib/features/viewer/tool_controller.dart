@@ -9,6 +9,7 @@ import '../../core/ink/stroke.dart';
 import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
 import 'rich_text.dart';
+import '../../app/l10n.dart';
 
 /// Was gerade aktiv ist.
 enum ToolMode {
@@ -162,6 +163,16 @@ class ToolController extends ChangeNotifier {
   void setThemeMode(ThemeMode m) {
     themeMode.value = m;
     settings.setText('themeMode', m.name);
+  }
+
+  /// Sprache der App (nur auf diesem Gerät gemerkt). Ohne eigene Wahl wie
+  /// das System: Englisch, wenn Windows englisch ist, sonst Deutsch.
+  AppLanguage get language => AppLanguage.fromCode(settings.text('language')) ?? AppLanguage.system;
+
+  Future<void> setLanguage(AppLanguage l) async {
+    await settings.setText('language', l.name);
+    L10n.set(l);
+    notifyListeners();
   }
 
   /// Zeigt das Werkzeug-Fenster die Ebenen? (Am selben Ort wie die

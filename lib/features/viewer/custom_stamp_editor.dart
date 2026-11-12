@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../core/ink/custom_stamps.dart';
 import 'custom_stamp_registry.dart';
 import 'tool_controller.dart';
+import '../../app/l10n.dart';
 
 /// Längste Seite eines Stempel-Bildes in Bildpunkten (scharf genug, klein).
 const _maxSide = 600;
@@ -19,17 +20,18 @@ Future<void> importCustomStamp(BuildContext context, ToolController tools) async
   final registry = CustomStamps.instance;
   if (registry == null) return;
   final file = await openFile(
-    acceptedTypeGroups: const [
-      XTypeGroup(label: 'Bilder', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif']),
+    acceptedTypeGroups: [
+      XTypeGroup(label: tr('Bilder', 'Images'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif']),
     ],
-    confirmButtonText: 'Als Stempel verwenden',
+    confirmButtonText: tr('Als Stempel verwenden', 'Use as stamp'),
   );
   if (file == null || !context.mounted) return;
   final raw = await _decodeLimited(await file.readAsBytes());
   if (raw == null) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Dieses Bild konnte nicht gelesen werden.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('Dieses Bild konnte nicht gelesen werden.', 'This image could not be read.'))),
+      );
     }
     return;
   }
@@ -175,7 +177,9 @@ class _CustomStampEditorState extends State<_CustomStampEditor> {
     final scheme = Theme.of(context).colorScheme;
     final img = _preview;
     return AlertDialog(
-      title: Text(widget.source == null ? 'Eigener Stempel' : 'Neuer eigener Stempel'),
+      title: Text(
+        widget.source == null ? tr('Eigener Stempel', 'Own stamp') : tr('Neuer eigener Stempel', 'New own stamp'),
+      ),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -183,8 +187,12 @@ class _CustomStampEditorState extends State<_CustomStampEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Tippe auf den Punkt, der beim Setzen genau unter dem Stift liegen soll – bei einer Note z. B. '
-              'die Mitte des Notenkopfs.',
+              tr(
+                'Tippe auf den Punkt, der beim Setzen genau unter dem Stift liegen soll – bei einer Note z. B. '
+                    'die Mitte des Notenkopfs.',
+                'Tap the point that should sit exactly under the pen when placing it – for a note, e.g. '
+                    'the middle of the note head.',
+              ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 10),
@@ -193,7 +201,12 @@ class _CustomStampEditorState extends State<_CustomStampEditor> {
               child: img == null
                   ? Center(
                       child: widget.source != null && _pixels == null && _preview == null
-                          ? const Text('Im Bild ist nichts zu sehen. Versuche es ohne «Weiss entfernen».')
+                          ? Text(
+                              tr(
+                                'Im Bild ist nichts zu sehen. Versuche es ohne «Weiss entfernen».',
+                                'There is nothing to see in the image. Try without «Remove white».',
+                              ),
+                            )
                           : const CircularProgressIndicator(),
                     )
                   : Center(
@@ -213,7 +226,7 @@ class _CustomStampEditorState extends State<_CustomStampEditor> {
             if (widget.source != null)
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Weissen Hintergrund entfernen'),
+                title: Text(tr('Weissen Hintergrund entfernen', 'Remove white background')),
                 value: _whiteToClear,
                 onChanged: (v) {
                   setState(() => _whiteToClear = v);
@@ -222,18 +235,18 @@ class _CustomStampEditorState extends State<_CustomStampEditor> {
               ),
             TextField(
               controller: _name,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: InputDecoration(labelText: tr('Name', 'Name')),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(tr('Abbrechen', 'Cancel'))),
         FilledButton(
           onPressed: img == null
               ? null
               : () => Navigator.of(context).pop(_EditResult(_name.text, _anchor.dx, _anchor.dy, _pixels)),
-          child: const Text('Speichern'),
+          child: Text(tr('Speichern', 'Save')),
         ),
       ],
     );

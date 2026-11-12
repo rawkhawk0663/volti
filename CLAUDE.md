@@ -3,7 +3,12 @@
 Volti ist ein PDF-Notenleser mit Stift-Anmerkungen. Hauptziel ist Windows (Surface Pro 9 mit Surface Pen), danach Android. Der Besitzer ist Berufsmusiker und programmiert nicht selbst. Erkläre Änderungen deshalb in einfacher Sprache und ohne Fachjargon.
 
 ## Sprache
-- Die Oberfläche und die Code-Kommentare sind auf **Deutsch**, mit Schweizer Schreibweise: „ss“ statt „ß“ in Texten, die der Nutzer sieht.
+- Die Oberfläche gibt es auf **Deutsch** (Grundsprache, Schweizer Schreibweise: „ss“ statt „ß“) und **Englisch** (britische Schreibweise: colour, favourite, licence). Die Code-Kommentare sind auf Deutsch.
+- **Jeder sichtbare Text** steht als `tr('Deutsch', 'English')` im Code (`lib/app/l10n.dart`), beide Fassungen nebeneinander. Neue Texte immer so schreiben. `tr` ist nicht `const`: Kein `const` um Widgets mit `tr(...)`, Listen und Maps mit Texten als Getter (`get _sortNames => {...}`), Enums speichern beide Fassungen (`ClickSound`). Texte, die einmal berechnet und gespeichert werden (z. B. in `initState`), wechseln erst beim nächsten Öffnen.
+- Stempel-Namen: `stampName()` in `core/ink/stamp_names.dart` (die erzeugte `stamp_catalog.dart` bleibt deutsch).
+- Die Sprache wählt man unter ⚙ → Darstellung („Sprache · Language“, absichtlich zweisprachig). Gerätevorliebe `language`, ohne Wahl wie das System (`AppLanguage.system`). `L10n.set` baut alles neu auf. Eingebaute Flutter-Texte über `flutter_localizations` (`de_CH`/`en`). Das Installationsprogramm wählt die Sprache nach Windows.
+- **Nie übersetzen:** Ordner- und Dateinamen auf der Festplatte (`Bibliothek`, `Noten`, `Volti-Sicherungen` …), Schlüssel in den JSON-Dateien, Inhalte von `update.log`/`fehler.log` (nur für die Fehlersuche).
+- Die Beschreibung im öffentlichen Download-Projekt (`rawkhawk0663/volti-releases`) steht in `README.md` (Deutsch) und `README.en.md` (Englisch). Bei neuen Grundfunktionen dort nachtragen. Die Release-Texte dort erzeugt `build.yml` zweisprachig.
 - Bezeichner im Code sind auf Englisch.
 
 ## Technik

@@ -1,3 +1,5 @@
+import '../../app/l10n.dart';
+
 /// Eine Sprungmarke: Ein Punkt auf einer Seite (z. B. beim "D.S."), der beim
 /// Antippen zu einem Ziel springt (z. B. zum Segno), auch auf einer anderen
 /// Seite desselben Stücks.
@@ -136,7 +138,7 @@ class Bookmark {
 
   static Bookmark fromJson(Map<String, dynamic> j) => Bookmark(
     id: j['id'] as String,
-    name: j['name'] as String? ?? 'Lesezeichen',
+    name: j['name'] as String? ?? tr('Lesezeichen', 'Bookmark'),
     page: j['page'] as int,
     endPage: j['endPage'] as int?,
     createdAt: DateTime.parse(j['created'] as String),

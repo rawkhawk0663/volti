@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../app/error_log.dart';
 import '../../core/app_settings.dart';
 import '../../core/library/auto_backup.dart';
+import '../../app/l10n.dart';
 
 /// Wöchentliche automatische Sicherung (Einstellung pro Gerät, Standard: an).
 class AutoBackupController extends ChangeNotifier {
@@ -73,7 +74,7 @@ class AutoBackupController extends ChangeNotifier {
       lastError = null;
     } catch (e, s) {
       lastError = '$e';
-      ErrorLog.record(e, s, where: 'Automatische Sicherung');
+      ErrorLog.record(e, s, where: tr('Automatische Sicherung', 'Automatic backup'));
     } finally {
       _running = false;
       notifyListeners();

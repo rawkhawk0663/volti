@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/ink/custom_stamps.dart';
+import '../../app/l10n.dart';
 
 /// Die eigenen Stempel mit ihren fertig geladenen Bildern (app-weit).
 ///
@@ -74,7 +75,7 @@ class CustomStamps extends ChangeNotifier {
   }) async {
     final s = CustomStamp(
       id: _uuid.v4(),
-      name: name.trim().isEmpty ? 'Stempel' : name.trim(),
+      name: name.trim().isEmpty ? tr('Stempel', 'Stamp') : name.trim(),
       anchorX: anchorX,
       anchorY: anchorY,
       aspect: aspect,

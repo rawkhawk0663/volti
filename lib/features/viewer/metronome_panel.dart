@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'metronome.dart';
+import '../../app/l10n.dart';
 
 /// Kleines Fenster mit dem Metronom (in der Notenansicht).
 ///
@@ -59,8 +60,8 @@ class MetronomePanel extends StatelessWidget {
                     children: [
                       const MetronomeIcon(size: 20),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('Metronom', style: theme.textTheme.titleSmall)),
-                      IconButton(tooltip: 'Schliessen', onPressed: onClose, icon: const Icon(Icons.close)),
+                      Expanded(child: Text(tr('Metronom', 'Metronome'), style: theme.textTheme.titleSmall)),
+                      IconButton(tooltip: tr('Schliessen', 'Close'), onPressed: onClose, icon: const Icon(Icons.close)),
                     ],
                   ),
                   Row(
@@ -96,7 +97,9 @@ class MetronomePanel extends StatelessWidget {
                   ),
                   if (songTempo != null && songTitle != null)
                     Text(
-                      differs ? 'Im Stück eingetragen: $songTempo BPM' : 'Tempo aus „$songTitle“',
+                      differs
+                          ? tr('Im Stück eingetragen: $songTempo BPM', 'Entered for the piece: $songTempo BPM')
+                          : tr('Tempo aus „$songTitle“', 'Tempo from “$songTitle”'),
                       style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                     ),
                   Row(
@@ -143,7 +146,7 @@ class MetronomePanel extends StatelessWidget {
                     children: [
                       OutlinedButton(
                         onPressed: m.tap,
-                        child: const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Text('Tippen')),
+                        child: Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Text(tr('Tippen', 'Tap'))),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -152,14 +155,14 @@ class MetronomePanel extends StatelessWidget {
                           icon: Icon(m.running ? Icons.stop : Icons.play_arrow),
                           label: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            child: Text(m.running ? 'Stopp' : 'Start'),
+                            child: Text(m.running ? tr('Stopp', 'Stop') : tr('Start', 'Start')),
                           ),
                         ),
                       ),
                       if (onRemember != null && differs) ...[
                         const SizedBox(width: 4),
                         IconButton(
-                          tooltip: 'Tempo beim Stück speichern',
+                          tooltip: tr('Tempo beim Stück speichern', 'Save tempo with the piece'),
                           onPressed: onRemember,
                           icon: const Icon(Icons.save_outlined),
                         ),

@@ -9,6 +9,7 @@ import '../../core/app_settings.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_store.dart';
 import 'library_controller.dart';
+import '../../app/l10n.dart';
 
 enum SyncStatus { off, idle, syncing, error }
 
@@ -84,10 +85,10 @@ class SyncController extends ChangeNotifier {
     if (rel.startsWith('.volti/setlists/')) {
       final id = p.basenameWithoutExtension(rel);
       final s = library.setlists.where((x) => x.id == id).firstOrNull;
-      return s == null ? 'eine Setlist' : 'Setlist „${s.name}“';
+      return s == null ? tr('eine Setlist', 'a setlist') : tr('Setlist „${s.name}“', 'setlist “${s.name}”');
     }
-    if (rel.startsWith('.volti/stamps')) return 'eigene Stempel';
-    if (rel.startsWith('.volti/')) return 'Einstellungen (${p.basename(rel)})';
+    if (rel.startsWith('.volti/stamps')) return tr('eigene Stempel', 'own stamps');
+    if (rel.startsWith('.volti/')) return tr('Einstellungen (${p.basename(rel)})', 'settings (${p.basename(rel)})');
     return '„${p.basename(rel).replaceAll(RegExp(r'\.volti\.json$'), '').replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '')}“';
   }
 
@@ -137,16 +138,26 @@ class SyncController extends ChangeNotifier {
         // Das meiste ist abgeglichen; einzelne Dateien kommen beim nächsten Mal.
         final names = {for (final f in report.failed) _describe(f)}.toList();
         final list = names.take(5).join(', ') + (names.length > 5 ? ' …' : '');
-        error =
-            '${names.length == 1 ? 'Eine Datei konnte' : '${names.length} Dateien konnten'} diesmal nicht abgeglichen werden: '
-            '$list.\n\nAlles andere ist abgeglichen. Volti versucht es beim nächsten Abgleich automatisch nochmals.\n\n'
-            '${cloudAccessDenied ? 'Windows hat Volti den Zugriff auf diese Dateien im Cloud-Ordner verweigert. '
-                      'Meist hilft eines davon:\n'
-                      '1. In den Windows-Einstellungen unter „Automatische Dateidownloads“ Volti erlauben '
-                      '(Knopf unten).\n'
-                      '2. Im Explorer den Ordner „_Volti“ mit rechts anklicken → „Immer auf diesem Gerät behalten“ '
-                      'und warten, bis alle Dateien ein grünes Häkchen haben.' : 'Bleibt der Fehler, prüfe bitte, ob die Dateien im Sync-Ordner vollständig heruntergeladen sind '
-                      '(z. B. in Proton Drive „Immer auf diesem Gerät behalten“).'}';
+        error = tr(
+          '${names.length == 1 ? 'Eine Datei konnte' : '${names.length} Dateien konnten'} diesmal nicht abgeglichen werden: '
+              '$list.\n\nAlles andere ist abgeglichen. Volti versucht es beim nächsten Abgleich automatisch nochmals.\n\n'
+              '${cloudAccessDenied ? 'Windows hat Volti den Zugriff auf diese Dateien im Cloud-Ordner verweigert. '
+                        'Meist hilft eines davon:\n'
+                        '1. In den Windows-Einstellungen unter „Automatische Dateidownloads“ Volti erlauben '
+                        '(Knopf unten).\n'
+                        '2. Im Explorer den Ordner „_Volti“ mit rechts anklicken → „Immer auf diesem Gerät behalten“ '
+                        'und warten, bis alle Dateien ein grünes Häkchen haben.' : 'Bleibt der Fehler, prüfe bitte, ob die Dateien im Sync-Ordner vollständig heruntergeladen sind '
+                        '(z. B. in Proton Drive „Immer auf diesem Gerät behalten“).'}',
+          '${names.length == 1 ? 'One file' : '${names.length} files'} could not be synced this time: '
+              '$list.\n\nEverything else is synced. Volti will try again automatically at the next sync.\n\n'
+              '${cloudAccessDenied ? 'Windows denied Volti access to these files in the cloud folder. '
+                        'Usually one of these helps:\n'
+                        '1. In the Windows settings under “Automatic file downloads”, allow Volti '
+                        '(button below).\n'
+                        '2. In Explorer, right-click the folder “_Volti” → “Always keep on this device” '
+                        'and wait until all files have a green tick.' : 'If the error persists, please check whether the files in the sync folder are fully downloaded '
+                        '(e.g. in Proton Drive “Always keep on this device”).'}',
+        );
         _status = SyncStatus.error;
       }
       if (report.changedLocally) {
@@ -158,7 +169,7 @@ class SyncController extends ChangeNotifier {
       partialFailure = false;
       cloudAccessDenied = '$e'.contains('errno = 395');
       errorDetail = null;
-      error = e is SyncException ? e.message : 'Abgleich fehlgeschlagen: $e';
+      error = e is SyncException ? e.message : tr('Abgleich fehlgeschlagen: $e', 'Sync failed: $e');
       _status = SyncStatus.error;
     } finally {
       _running = false;

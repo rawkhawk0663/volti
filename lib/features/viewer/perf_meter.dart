@@ -3,6 +3,8 @@ import 'dart:ui' show FramePhase, FrameTiming;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../app/l10n.dart';
+
 /// Misst, wie flüssig Volti läuft – für den Stift-Test.
 ///
 /// * **Verzögerung:** Zeit vom Stift-Ereignis bis zum Bild, in dem der Strich
@@ -46,8 +48,11 @@ class PerfMeter {
         _recent.last.timestampInMicroseconds(FramePhase.rasterFinish) -
         _recent.first.timestampInMicroseconds(FramePhase.vsyncStart);
     final fps = span > 0 ? (_recent.length - 1) / (span / 1e6) : 0;
-    frames.value =
-        '${fps.toStringAsFixed(0)} Bilder/s · Aufbau ${avg((t) => t.buildDuration).toStringAsFixed(1)} ms · '
-        'Malen ${avg((t) => t.rasterDuration).toStringAsFixed(1)} ms';
+    frames.value = tr(
+      '${fps.toStringAsFixed(0)} Bilder/s · Aufbau ${avg((t) => t.buildDuration).toStringAsFixed(1)} ms · '
+          'Malen ${avg((t) => t.rasterDuration).toStringAsFixed(1)} ms',
+      '${fps.toStringAsFixed(0)} frames/s · build ${avg((t) => t.buildDuration).toStringAsFixed(1)} ms · '
+          'raster ${avg((t) => t.rasterDuration).toStringAsFixed(1)} ms',
+    );
   }
 }

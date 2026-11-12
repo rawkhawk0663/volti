@@ -7,6 +7,7 @@ import '../../core/pdf/auto_crop.dart';
 import '../../core/pdf/page_image_cache.dart';
 import 'cropped_page.dart';
 import '../../app/window_buttons.dart';
+import '../../app/l10n.dart';
 
 /// Seiten eines Stücks anordnen und zuschneiden. Gibt die neue Einrichtung
 /// zurück (null = abgebrochen). Das PDF selbst wird nie verändert.
@@ -79,13 +80,16 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Alles zurücksetzen?'),
-        content: const Text(
-          'Alle Seiten werden wieder so gezeigt wie im PDF: vollständig, in der ursprünglichen Reihenfolge, ohne Zuschnitt.',
+        title: Text(tr('Alles zurücksetzen?', 'Reset everything?')),
+        content: Text(
+          tr(
+            'Alle Seiten werden wieder so gezeigt wie im PDF: vollständig, in der ursprünglichen Reihenfolge, ohne Zuschnitt.',
+            'All pages are shown as in the PDF again: complete, in the original order, without cropping.',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Zurücksetzen')),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: Text(tr('Zurücksetzen', 'Reset'))),
         ],
       ),
     );
@@ -135,22 +139,22 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Abbrechen',
+          tooltip: tr('Abbrechen', 'Cancel'),
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Seiten · ${widget.title}'),
+        title: Text(tr('Seiten · ${widget.title}', 'Pages · ${widget.title}')),
         actions: [
           TextButton.icon(
             onPressed: _busy ? null : _autoAll,
             icon: _busy
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.crop_free),
-            label: const Text('Ränder entfernen'),
+            label: Text(tr('Ränder entfernen', 'Remove margins')),
           ),
-          TextButton(onPressed: _reset, child: const Text('Zurücksetzen')),
+          TextButton(onPressed: _reset, child: Text(tr('Zurücksetzen', 'Reset'))),
           const SizedBox(width: 8),
-          FilledButton(onPressed: () => Navigator.of(context).pop(_result()), child: const Text('Fertig')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(_result()), child: Text(tr('Fertig', 'Done'))),
           const SizedBox(width: 12),
           const WindowButtons(),
         ],
@@ -161,10 +165,16 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Text(
-              'Das PDF bleibt unverändert – Volti merkt sich nur, wie die Seiten gezeigt werden. '
-              'Am Griff ☰ ziehen ändert die Reihenfolge. Eine Seite doppelt zeigen geht z. B. für Wiederholungen '
-              '(Anmerkungen erscheinen dann auf beiden). «Ränder entfernen» schneidet weisse Ränder bei allen Seiten weg. '
-              'Das Blatt mit Plus fügt danach eine leere Seite für Notizen ein.',
+              tr(
+                'Das PDF bleibt unverändert – Volti merkt sich nur, wie die Seiten gezeigt werden. '
+                    'Am Griff ☰ ziehen ändert die Reihenfolge. Eine Seite doppelt zeigen geht z. B. für Wiederholungen '
+                    '(Anmerkungen erscheinen dann auf beiden). «Ränder entfernen» schneidet weisse Ränder bei allen Seiten weg. '
+                    'Das Blatt mit Plus fügt danach eine leere Seite für Notizen ein.',
+                'The PDF stays unchanged – Volti only remembers how the pages are shown. '
+                    'Drag the handle ☰ to change the order. Showing a page twice is useful e.g. for repeats '
+                    '(notes then appear on both). «Remove margins» crops white margins on all pages. '
+                    'The sheet with the plus inserts a blank page for notes after it.',
+              ),
               style: hint,
             ),
           ),
@@ -180,8 +190,8 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                   for (final p in hidden)
                     ActionChip(
                       avatar: const Icon(Icons.visibility_outlined, size: 18),
-                      label: Text('Seite $p'),
-                      tooltip: 'Wieder anzeigen',
+                      label: Text(tr('Seite $p', 'Page $p')),
+                      tooltip: tr('Wieder anzeigen', 'Show again'),
                       onPressed: () => _showAgain(p),
                     ),
                 ],
@@ -238,18 +248,26 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                                 Text('${i + 1}', style: Theme.of(context).textTheme.titleLarge),
                                 Text(
                                   blank
-                                      ? 'Leere Seite (für Notizen)'
+                                      ? tr('Leere Seite (für Notizen)', 'Blank page (for notes)')
                                       : src == i + 1 && duplicates == 1
-                                      ? 'PDF-Seite $src'
-                                      : 'PDF-Seite $src${duplicates > 1 ? ' (mehrfach)' : ''}',
+                                      ? tr('PDF-Seite $src', 'PDF page $src')
+                                      : tr(
+                                          'PDF-Seite $src${duplicates > 1 ? ' (mehrfach)' : ''}',
+                                          'PDF page $src${duplicates > 1 ? ' (several times)' : ''}',
+                                        ),
                                   style: hint,
                                 ),
                                 if (!crop.isNone)
                                   Text(
                                     [
-                                      if (crop.width < 1 || crop.height < 1) 'zugeschnitten',
-                                      if (crop.quarterTurns != 0) 'gedreht ${crop.quarterTurns * 90}°',
-                                      if (crop.skew != 0) 'gerade gerichtet ${crop.skew.toStringAsFixed(1)}°',
+                                      if (crop.width < 1 || crop.height < 1) tr('zugeschnitten', 'cropped'),
+                                      if (crop.quarterTurns != 0)
+                                        tr('gedreht ${crop.quarterTurns * 90}°', 'rotated ${crop.quarterTurns * 90}°'),
+                                      if (crop.skew != 0)
+                                        tr(
+                                          'gerade gerichtet ${crop.skew.toStringAsFixed(1)}°',
+                                          'straightened ${crop.skew.toStringAsFixed(1)}°',
+                                        ),
                                     ].join(' · '),
                                     style: hint,
                                   ),
@@ -258,32 +276,32 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                           ),
                           if (!blank) ...[
                             IconButton(
-                              tooltip: 'Zuschneiden …',
+                              tooltip: tr('Zuschneiden …', 'Crop …'),
                               icon: const Icon(Icons.crop),
                               onPressed: () => _editCrop(src),
                             ),
                             IconButton(
-                              tooltip: 'Drehen',
+                              tooltip: tr('Drehen', 'Rotate'),
                               icon: const Icon(Icons.rotate_right),
                               onPressed: () => _setCrop(src, crop.copyWith(quarterTurns: crop.quarterTurns + 1)),
                             ),
                             IconButton(
-                              tooltip: 'Doppelt zeigen',
+                              tooltip: tr('Doppelt zeigen', 'Show twice'),
                               icon: const Icon(Icons.library_add_outlined),
                               onPressed: () => setState(() => _order.insert(i + 1, src)),
                             ),
                           ],
                           IconButton(
-                            tooltip: 'Leere Seite danach einfügen',
+                            tooltip: tr('Leere Seite danach einfügen', 'Insert blank page after'),
                             icon: const Icon(Icons.note_add_outlined),
                             onPressed: () => _insertBlank(i),
                           ),
                           IconButton(
                             tooltip: blank
-                                ? 'Leere Seite entfernen'
+                                ? tr('Leere Seite entfernen', 'Remove blank page')
                                 : duplicates > 1
-                                ? 'Hier entfernen'
-                                : 'Ausblenden',
+                                ? tr('Hier entfernen', 'Remove here')
+                                : tr('Ausblenden', 'Hide'),
                             icon: Icon(blank ? Icons.delete_outline : Icons.visibility_off_outlined),
                             onPressed: _order.length <= 1 ? null : () => setState(() => _order.removeAt(i)),
                           ),
@@ -459,10 +477,16 @@ class _CropEditorState extends State<_CropEditor> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Seite ${widget.page} zuschneiden', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                tr('Seite ${widget.page} zuschneiden', 'Crop page ${widget.page}'),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 4),
               Text(
-                'Ecken und Kanten ziehen, um den Ausschnitt zu wählen. In der Mitte ziehen verschiebt ihn.',
+                tr(
+                  'Ecken und Kanten ziehen, um den Ausschnitt zu wählen. In der Mitte ziehen verschiebt ihn.',
+                  'Drag the corners and edges to choose the area. Dragging in the middle moves it.',
+                ),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
               const SizedBox(height: 10),
@@ -532,20 +556,20 @@ class _CropEditorState extends State<_CropEditor> {
                     icon: _busy
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.crop_free),
-                    label: const Text('Ränder automatisch'),
+                    label: Text(tr('Ränder automatisch', 'Margins automatically')),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => setState(() => _c = PageCrop(quarterTurns: _c.quarterTurns, skew: _c.skew)),
                     icon: const Icon(Icons.fullscreen),
-                    label: const Text('Ganze Seite'),
+                    label: Text(tr('Ganze Seite', 'Whole page')),
                   ),
                   IconButton(
-                    tooltip: 'Nach links drehen',
+                    tooltip: tr('Nach links drehen', 'Rotate left'),
                     icon: const Icon(Icons.rotate_left),
                     onPressed: () => setState(() => _c = _c.copyWith(quarterTurns: _c.quarterTurns + 3)),
                   ),
                   IconButton(
-                    tooltip: 'Nach rechts drehen',
+                    tooltip: tr('Nach rechts drehen', 'Rotate right'),
                     icon: const Icon(Icons.rotate_right),
                     onPressed: () => setState(() => _c = _c.copyWith(quarterTurns: _c.quarterTurns + 1)),
                   ),
@@ -553,7 +577,7 @@ class _CropEditorState extends State<_CropEditor> {
                     width: 300,
                     child: Row(
                       children: [
-                        const Text('Gerade richten'),
+                        Text(tr('Gerade richten', 'Straighten')),
                         Expanded(
                           child: Slider(
                             min: -PageCrop.maxSkew,
@@ -574,13 +598,13 @@ class _CropEditorState extends State<_CropEditor> {
               Row(
                 children: [
                   Checkbox(value: _forAll, onChanged: (v) => setState(() => _forAll = v ?? false)),
-                  const Flexible(child: Text('Für alle Seiten übernehmen')),
+                  Flexible(child: Text(tr('Für alle Seiten übernehmen', 'Apply to all pages'))),
                   const Spacer(),
-                  TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
+                  TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(tr('Abbrechen', 'Cancel'))),
                   const SizedBox(width: 8),
                   FilledButton(
                     onPressed: () => Navigator.of(context).pop((crop: _c, forAll: _forAll)),
-                    child: const Text('Übernehmen'),
+                    child: Text(tr('Übernehmen', 'Apply')),
                   ),
                 ],
               ),

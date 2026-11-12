@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_settings.dart';
+import '../../app/l10n.dart';
 
 /// Kurzanleitung: ein paar Seiten zum Durchblättern. Erscheint beim ersten
 /// Start und ist jederzeit im Einstellungsfenster zu finden.
@@ -21,41 +22,99 @@ class _HelpPage {
   final List<String> points;
 }
 
-const _pages = [
-  _HelpPage(Icons.waving_hand_outlined, 'Willkommen bei Volti', [
-    'Volti ist dein Notenständer: Noten lesen, umblättern und mit dem Stift hineinschreiben.',
-    'Alles geht mit Finger und Stift. Langes Drücken ist wie ein Rechtsklick und öffnet das Menü.',
-    'Diese Anleitung findest du jederzeit wieder unter ⚙ → Kurzanleitung.',
+List<_HelpPage> get _pages => [
+  _HelpPage(Icons.waving_hand_outlined, tr('Willkommen bei Volti', 'Welcome to Volti'), [
+    tr(
+      'Volti ist dein Notenständer: Noten lesen, umblättern und mit dem Stift hineinschreiben.',
+      'Volti is your music stand: read your music, turn pages and write on it with the pen.',
+    ),
+    tr(
+      'Alles geht mit Finger und Stift. Langes Drücken ist wie ein Rechtsklick und öffnet das Menü.',
+      'Everything works with finger and pen. A long press is like a right-click and opens the menu.',
+    ),
+    tr(
+      'Diese Anleitung findest du jederzeit wieder unter ⚙ → Kurzanleitung.',
+      'You can find this guide again any time under ⚙ → Quick guide.',
+    ),
   ]),
-  _HelpPage(Icons.library_music_outlined, 'Noten in die Bibliothek', [
-    '„Importieren“ holt PDFs in die Bibliothek. Volti legt eine Kopie an, deine Originale bleiben unverändert.',
-    'Mit Ordnern ordnest du deine Noten, z. B. nach Projekt. Jedes Stück liegt in genau einem Ordner.',
-    'Lange auf eine Kachel drücken: Infos wie Titel, Tonart und Tempo, Ordner, Seiten anordnen und mehr.',
-    'Die Suche findet Titel, Komponisten und Tonarten.',
+  _HelpPage(Icons.library_music_outlined, tr('Noten in die Bibliothek', 'Music into the library'), [
+    tr(
+      '„Importieren“ holt PDFs in die Bibliothek. Volti legt eine Kopie an, deine Originale bleiben unverändert.',
+      '“Import” brings PDFs into the library. Volti makes a copy, your originals stay untouched.',
+    ),
+    tr(
+      'Mit Ordnern ordnest du deine Noten, z. B. nach Projekt. Jedes Stück liegt in genau einem Ordner.',
+      'Folders let you organise your music, e.g. by project. Each piece lives in exactly one folder.',
+    ),
+    tr(
+      'Lange auf eine Kachel drücken: Infos wie Titel, Tonart und Tempo, Ordner, Seiten anordnen und mehr.',
+      'Long-press a tile: details such as title, key and tempo, folder, arrange pages and more.',
+    ),
+    tr('Die Suche findet Titel, Komponisten und Tonarten.', 'The search finds titles, composers and keys.'),
   ]),
-  _HelpPage(Icons.menu_book_outlined, 'Spielen', [
-    'Rechts tippen blättert weiter, links zurück. In der Mitte tippen zeigt kurz die Leiste.',
-    'Pedale und Pfeiltasten blättern ebenfalls.',
-    'Zwei Finger zoomen. Vergrössert verschiebt ein Finger die Seite.',
-    'Im Querformat stehen zwei Seiten nebeneinander, jedes Umblättern geht eine Seite weiter.',
+  _HelpPage(Icons.menu_book_outlined, tr('Spielen', 'Playing'), [
+    tr(
+      'Rechts tippen blättert weiter, links zurück. In der Mitte tippen zeigt kurz die Leiste.',
+      'Tap on the right to turn forward, on the left to go back. Tapping in the middle briefly shows the toolbar.',
+    ),
+    tr('Pedale und Pfeiltasten blättern ebenfalls.', 'Pedals and arrow keys turn pages too.'),
+    tr(
+      'Zwei Finger zoomen. Vergrössert verschiebt ein Finger die Seite.',
+      'Two fingers zoom. When zoomed in, one finger moves the page.',
+    ),
+    tr(
+      'Im Querformat stehen zwei Seiten nebeneinander, jedes Umblättern geht eine Seite weiter.',
+      'In landscape, two pages sit side by side, and each turn moves one page on.',
+    ),
   ]),
-  _HelpPage(Icons.edit_outlined, 'Mit dem Stift schreiben', [
-    'Mit dem Stift ziehen zeichnet sofort. Das Radierer-Ende und die Seitentaste radieren.',
-    'Der Finger zeichnet nie, die Hand darf also aufliegen.',
-    '„Bearbeiten“ öffnet die Werkzeugleiste: Stift, Leuchtstift, Radierer, Text, Stempel, Formen, '
-        'Lasso, Verschieben und Sprungmarken. Jedes Werkzeug hat ein eigenes Fenster mit Einstellungen und Favoriten.',
-    'Mit Ebenen trennst du z. B. Fingersätze von Probennotizen und blendest sie einzeln ein und aus.',
+  _HelpPage(Icons.edit_outlined, tr('Mit dem Stift schreiben', 'Writing with the pen'), [
+    tr(
+      'Mit dem Stift ziehen zeichnet sofort. Das Radierer-Ende und die Seitentaste radieren.',
+      'Dragging with the pen draws right away. The eraser end and the side button erase.',
+    ),
+    tr(
+      'Der Finger zeichnet nie, die Hand darf also aufliegen.',
+      'Fingers never draw, so your hand can rest on the screen.',
+    ),
+    tr(
+      '„Bearbeiten“ öffnet die Werkzeugleiste: Stift, Leuchtstift, Radierer, Text, Stempel, Formen, '
+          'Lasso, Verschieben und Sprungmarken. Jedes Werkzeug hat ein eigenes Fenster mit Einstellungen und Favoriten.',
+      '“Edit” opens the toolbar: pen, highlighter, eraser, text, stamps, shapes, '
+          'lasso, move and jump links. Each tool has its own window with settings and favourites.',
+    ),
+    tr(
+      'Mit Ebenen trennst du z. B. Fingersätze von Probennotizen und blendest sie einzeln ein und aus.',
+      'Layers let you separate e.g. fingerings from rehearsal notes and show or hide them one by one.',
+    ),
   ]),
-  _HelpPage(Icons.queue_music_outlined, 'Setlists', [
-    'Eine Setlist stellt Songs für einen Gottesdienst oder ein Konzert zusammen. Sie verhält sich beim Spielen wie ein einziges Heft.',
-    'Ein Notizblatt in der Setlist ist eine leere Seite für deine Notizen.',
-    'Ebenen, die du in einer Setlist anlegst, gibt es nur dort. Notizen aus der Bibliothek erscheinen überall.',
-    'Das Metronom (oben in der Notenansicht) übernimmt das Tempo jedes Songs.',
+  _HelpPage(Icons.queue_music_outlined, tr('Setlists', 'Setlists'), [
+    tr(
+      'Eine Setlist stellt Songs für einen Gottesdienst oder ein Konzert zusammen. Sie verhält sich beim Spielen wie ein einziges Heft.',
+      'A setlist puts together the songs for a service or a concert. While playing, it behaves like a single book.',
+    ),
+    tr(
+      'Ein Notizblatt in der Setlist ist eine leere Seite für deine Notizen.',
+      'A note sheet in the setlist is a blank page for your notes.',
+    ),
+    tr(
+      'Ebenen, die du in einer Setlist anlegst, gibt es nur dort. Notizen aus der Bibliothek erscheinen überall.',
+      'Layers you create in a setlist exist only there. Notes from the library appear everywhere.',
+    ),
+    tr(
+      'Das Metronom (oben in der Notenansicht) übernimmt das Tempo jedes Songs.',
+      'The metronome (at the top of the music view) picks up the tempo of each song.',
+    ),
   ]),
-  _HelpPage(Icons.cloud_sync_outlined, 'Abgleichen und sichern', [
-    'Unter ⚙ → Sync gleicht Volti alles über einen Ordner ab, z. B. in Proton Drive. So sind alle Geräte auf dem gleichen Stand.',
-    'Volti sichert jede Woche automatisch alles in eine Datei. Unter ⚙ → Sicherung kannst du sie einspielen. Dabei wird nichts gelöscht.',
-    'Neue Versionen installierst du unter ⚙ → Über Volti.',
+  _HelpPage(Icons.cloud_sync_outlined, tr('Abgleichen und sichern', 'Sync and backup'), [
+    tr(
+      'Unter ⚙ → Sync gleicht Volti alles über einen Ordner ab, z. B. in Proton Drive. So sind alle Geräte auf dem gleichen Stand.',
+      'Under ⚙ → Sync, Volti syncs everything through a folder, e.g. in Proton Drive. That keeps all your devices up to date.',
+    ),
+    tr(
+      'Volti sichert jede Woche automatisch alles in eine Datei. Unter ⚙ → Sicherung kannst du sie einspielen. Dabei wird nichts gelöscht.',
+      'Volti automatically backs up everything into one file every week. Under ⚙ → Backup you can restore it. Nothing is deleted.',
+    ),
+    tr('Neue Versionen installierst du unter ⚙ → Über Volti.', 'You install new versions under ⚙ → About Volti.'),
   ]),
 ];
 
@@ -92,7 +151,7 @@ class _HelpDialogState extends State<_HelpDialog> {
             Align(
               alignment: Alignment.topRight,
               child: IconButton(
-                tooltip: 'Schliessen',
+                tooltip: tr('Schliessen', 'Close'),
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close),
               ),
@@ -135,7 +194,9 @@ class _HelpDialogState extends State<_HelpDialog> {
                 children: [
                   SizedBox(
                     width: 110,
-                    child: _page == 0 ? null : TextButton(onPressed: () => _go(_page - 1), child: const Text('Zurück')),
+                    child: _page == 0
+                        ? null
+                        : TextButton(onPressed: () => _go(_page - 1), child: Text(tr('Zurück', 'Back'))),
                   ),
                   Expanded(
                     child: Row(
@@ -161,7 +222,7 @@ class _HelpDialogState extends State<_HelpDialog> {
                     width: 110,
                     child: FilledButton(
                       onPressed: last ? () => Navigator.pop(context) : () => _go(_page + 1),
-                      child: Text(last ? 'Los geht’s' : 'Weiter'),
+                      child: Text(last ? tr('Los geht’s', 'Let’s go') : tr('Weiter', 'Next')),
                     ),
                   ),
                 ],

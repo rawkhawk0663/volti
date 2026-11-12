@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/library/library_scanner.dart';
 import '../../core/pdf/thumbnail_cache.dart';
 import 'setlists_view.dart' show KeyBadge;
+import '../../app/l10n.dart';
 
 /// Vorschaubild der ersten Seite (wird im Hintergrund erzeugt).
 class ScoreThumbnail extends StatefulWidget {
@@ -148,7 +149,7 @@ class ScoreCard extends StatelessWidget {
                       right: 6,
                       top: 6,
                       child: Tooltip(
-                        message: 'Mit Anmerkungen',
+                        message: tr('Mit Anmerkungen', 'With notes'),
                         child: CircleAvatar(
                           radius: 12,
                           backgroundColor: theme.colorScheme.primary,
@@ -183,7 +184,7 @@ class ScoreCard extends StatelessWidget {
                     ),
                   ),
                   PopupMenuButton<VoidCallback>(
-                    tooltip: 'Mehr',
+                    tooltip: tr('Mehr', 'More'),
                     icon: const Icon(Icons.more_vert, size: 20),
                     itemBuilder: menuBuilder,
                     onSelected: (action) => action(),

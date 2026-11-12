@@ -7,6 +7,7 @@ import '../../core/ink/text_marks.dart';
 import 'ink_controller.dart';
 import 'rich_text.dart';
 import 'tool_controller.dart';
+import '../../app/l10n.dart';
 
 /// Schriftfamilie zu einer Schriftart (Schriften liegen in der App).
 String fontFamilyOf(TextFont f) => switch (f) {
@@ -380,7 +381,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
                 isDense: true,
                 filled: true,
                 fillColor: st.background == TextNote.noBackground ? const Color(0xE6FFFFFF) : Color(st.background),
-                hintText: 'Notiz …',
+                hintText: tr('Notiz …', 'Note …'),
                 hintStyle: style.copyWith(color: const Color(0x66000000)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 border: OutlineInputBorder(

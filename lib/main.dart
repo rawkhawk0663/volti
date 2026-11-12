@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import 'app/error_log.dart';
+import 'app/l10n.dart';
 import 'app/theme.dart';
 import 'app/touch_keyboard.dart';
 import 'app/updater.dart';
@@ -38,6 +39,8 @@ Future<void> main() async {
   final library = LibraryController(settings, root: p.join(support, 'Bibliothek'));
   final sync = SyncController(library: library, settings: settings, deviceDataDir: support);
   final tools = ToolController(settings: settings, store: ToolStore(library.root));
+  // Sprache der App (⚙ → Darstellung).
+  L10n.language.value = tools.language;
   // Geänderte Stift-Vorlagen abgleichen; neue vom anderen Gerät übernehmen.
   tools.onSettingsChanged = sync.scheduleSoon;
   // Eigene Stempel (Bilder in Bibliothek/.volti/stamps), ebenfalls abgeglichen.
@@ -70,17 +73,18 @@ class VoltiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToolScope(
       tools: tools,
-      child: ValueListenableBuilder<ThemeMode>(
-        valueListenable: tools.themeMode,
-        builder: (context, mode, home) => MaterialApp(
+      child: ListenableBuilder(
+        listenable: Listenable.merge([tools.themeMode, L10n.language]),
+        builder: (context, home) => MaterialApp(
           title: 'Volti',
           debugShowCheckedModeBanner: false,
           theme: buildVoltiTheme(Brightness.light),
           darkTheme: buildVoltiTheme(Brightness.dark),
-          themeMode: mode,
-          // Eingebaute Texte (Kopieren/Einfügen, Lizenzen …) auf Deutsch, Schweizer Schreibweise.
-          locale: const Locale('de', 'CH'),
-          supportedLocales: const [Locale('de', 'CH'), Locale('de')],
+          themeMode: tools.themeMode.value,
+          // Eingebaute Texte (Kopieren/Einfügen, Lizenzen …) in der Sprache der App,
+          // Deutsch in Schweizer Schreibweise.
+          locale: L10n.language.value.locale,
+          supportedLocales: const [Locale('de', 'CH'), Locale('de'), Locale('en')],
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
           home: home,
         ),

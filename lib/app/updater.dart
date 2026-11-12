@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'version.dart';
+import 'l10n.dart';
 
 /// Eine Version im öffentlichen Download-Projekt auf GitHub.
 class UpdateInfo {
@@ -69,7 +70,9 @@ class Updater {
         ..set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
       final res = await req.close().timeout(const Duration(seconds: 20));
       if (res.statusCode == 404) return null;
-      if (res.statusCode != 200) throw HttpException('GitHub antwortet mit ${res.statusCode}');
+      if (res.statusCode != 200) {
+        throw HttpException(tr('GitHub antwortet mit ${res.statusCode}', 'GitHub replies with ${res.statusCode}'));
+      }
       final j = jsonDecode(await res.transform(utf8.decoder).join()) as Map<String, dynamic>;
       final tag = j['tag_name'] as String? ?? '';
       final number = numberOf(tag);
@@ -118,7 +121,9 @@ class Updater {
   /// unberührt. [onProgress]: 0..1.
   static Future<void> installWindows(UpdateInfo u, {void Function(double)? onProgress}) async {
     final url = u.windowsZip;
-    if (url == null) throw const FileSystemException('In dieser Version fehlt die Windows-Datei.');
+    if (url == null) {
+      throw FileSystemException(tr('In dieser Version fehlt die Windows-Datei.', 'This version has no Windows file.'));
+    }
     final work = Directory(p.join((await getTemporaryDirectory()).path, 'volti-update-${u.number}'));
     if (await work.exists()) await work.delete(recursive: true);
     await work.create(recursive: true);
@@ -130,7 +135,9 @@ class Updater {
       final req = await client.getUrl(url);
       req.headers.set(HttpHeaders.userAgentHeader, 'Volti-App');
       final res = await req.close();
-      if (res.statusCode != 200) throw HttpException('Download fehlgeschlagen (${res.statusCode})');
+      if (res.statusCode != 200) {
+        throw HttpException(tr('Download fehlgeschlagen (${res.statusCode})', 'Download failed (${res.statusCode})'));
+      }
       final total = res.contentLength;
       var done = 0;
       final sink = zip.openWrite();
@@ -149,7 +156,9 @@ class Updater {
     final zipPath = zip.path, outPath = unpacked.path;
     await Isolate.run(() => extractFileToDisk(zipPath, outPath));
     if (!await File(p.join(unpacked.path, 'Volti.exe')).exists()) {
-      throw const FileSystemException('Das Update ist unvollständig (Volti.exe fehlt).');
+      throw FileSystemException(
+        tr('Das Update ist unvollständig (Volti.exe fehlt).', 'The update is incomplete (Volti.exe is missing).'),
+      );
     }
     onProgress?.call(0.95);
 
@@ -167,7 +176,12 @@ class Updater {
       try {
         await log.delete();
       } catch (_) {}
-      throw FileSystemException('Die neuen Dateien liessen sich nicht in den Volti-Ordner legen. ${swap.log.last}');
+      throw FileSystemException(
+        tr(
+          'Die neuen Dateien liessen sich nicht in den Volti-Ordner legen. ${swap.log.last}',
+          'The new files could not be put into the Volti folder. ${swap.log.last}',
+        ),
+      );
     }
     lines.add('FERTIG');
     await writeLog();
@@ -306,12 +320,27 @@ class Updater {
       await f.delete();
       final goal = int.tryParse(RegExp(r'Ziel (\d+)').firstMatch(text)?.group(1) ?? '');
       if (text.contains('FERTIG') && (goal == null || currentNumber >= goal)) {
-        return (ok: true, message: 'Update installiert – jetzt läuft Volti $voltiVersion.');
+        return (
+          ok: true,
+          message: tr(
+            'Update installiert – jetzt läuft Volti $voltiVersion.',
+            'Update installed – Volti $voltiVersion is now running.',
+          ),
+        );
       }
       final reason = text.contains('FERTIG')
-          ? 'Die neuen Dateien sind da, aber es läuft noch die alte Version.'
-          : 'Das Ersetzen wurde nicht abgeschlossen.';
-      return (ok: false, message: 'Das Update ging nicht: $reason Bitte lade es von Hand herunter.');
+          ? tr(
+              'Die neuen Dateien sind da, aber es läuft noch die alte Version.',
+              'The new files are there, but the old version is still running.',
+            )
+          : tr('Das Ersetzen wurde nicht abgeschlossen.', 'Replacing the files was not completed.');
+      return (
+        ok: false,
+        message: tr(
+          'Das Update ging nicht: $reason Bitte lade es von Hand herunter.',
+          'The update didn’t work: $reason Please download it by hand.',
+        ),
+      );
     } catch (_) {
       return null;
     }

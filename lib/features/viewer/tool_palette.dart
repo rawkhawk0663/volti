@@ -6,6 +6,7 @@ import 'layers_panel.dart';
 import 'tool_controller.dart';
 import 'freeze.dart';
 import 'tool_popover.dart';
+import '../../app/l10n.dart';
 
 /// Werkzeuge beim Bearbeiten: eine feste, schmale Leiste am Seitenrand und
 /// daneben das Einstellungsfenster des aktiven Werkzeugs.
@@ -68,11 +69,16 @@ class _ToolOverlayState extends State<ToolOverlay> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Seite leeren?'),
-        content: Text('Alle Anmerkungen auf Seite $page werden entfernt. Mit „Rückgängig“ holst du sie zurück.'),
+        title: Text(tr('Seite leeren?', 'Clear page?')),
+        content: Text(
+          tr(
+            'Alle Anmerkungen auf Seite $page werden entfernt. Mit „Rückgängig“ holst du sie zurück.',
+            'All notes on page $page will be removed. You can bring them back with “Undo”.',
+          ),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Leeren')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Leeren', 'Clear'))),
         ],
       ),
     );
@@ -165,48 +171,58 @@ class _ToolOverlayState extends State<ToolOverlay> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Tooltip(
-                message: 'Fertig (Esc)',
+                message: tr('Fertig (Esc)', 'Done (Esc)'),
                 child: IconButton.filled(onPressed: tools.finishEditing, icon: const Icon(Icons.check)),
               ),
               const _Sep(),
-              tool(ToolMode.pen, Icons.edit, 'Stift (P)', dot: Color(tools.pen.color | 0xFF000000)),
+              tool(ToolMode.pen, Icons.edit, tr('Stift (P)', 'Pen (P)'), dot: Color(tools.pen.color | 0xFF000000)),
               tool(
                 ToolMode.highlighter,
                 Icons.border_color,
-                'Textmarker (H)',
+                tr('Textmarker (H)', 'Highlighter (H)'),
                 dot: Color(tools.highlighter.color | 0xFF000000),
               ),
-              tool(ToolMode.eraser, Icons.auto_fix_normal, 'Radierer (E)'),
-              tool(ToolMode.lasso, Icons.highlight_alt, 'Auswählen (A)'),
-              tool(ToolMode.move, Icons.open_with, 'Verschieben (V)'),
-              tool(ToolMode.text, Icons.text_fields, 'Text (T)'),
-              tool(ToolMode.stamp, Icons.music_note, 'Stempel (S)'),
-              tool(ToolMode.shape, Icons.category_outlined, 'Formen (F)'),
-              tool(ToolMode.link, Icons.turn_right, 'Sprungmarke (J)'),
+              tool(ToolMode.eraser, Icons.auto_fix_normal, tr('Radierer (E)', 'Eraser (E)')),
+              tool(ToolMode.lasso, Icons.highlight_alt, tr('Auswählen (A)', 'Select (A)')),
+              tool(ToolMode.move, Icons.open_with, tr('Verschieben (V)', 'Move (V)')),
+              tool(ToolMode.text, Icons.text_fields, tr('Text (T)', 'Text (T)')),
+              tool(ToolMode.stamp, Icons.music_note, tr('Stempel (S)', 'Stamps (S)')),
+              tool(ToolMode.shape, Icons.category_outlined, tr('Formen (F)', 'Shapes (F)')),
+              tool(ToolMode.link, Icons.turn_right, tr('Sprungmarke (J)', 'Jump link (J)')),
               _BarButton(
                 icon: Icons.layers_outlined,
-                tooltip: activeLayerLabel(ink) == null ? 'Ebenen' : 'Ebenen (aktiv: ${activeLayerLabel(ink)})',
+                tooltip: activeLayerLabel(ink) == null
+                    ? tr('Ebenen', 'Layers')
+                    : tr('Ebenen (aktiv: ${activeLayerLabel(ink)})', 'Layers (active: ${activeLayerLabel(ink)})'),
                 selected: tools.layersOpen,
                 onTap: tools.toggleLayers,
               ),
               _BarButton(
                 icon: Icons.straighten,
-                tooltip: 'Lineal (L)',
+                tooltip: tr('Lineal (L)', 'Ruler (L)'),
                 selected: tools.rulerVisible,
                 onTap: tools.toggleRuler,
               ),
               const _Sep(),
-              _BarButton(icon: Icons.undo, tooltip: 'Rückgängig (Strg+Z)', onTap: ink.canUndo ? ink.undo : null),
-              _BarButton(icon: Icons.redo, tooltip: 'Wiederholen (Strg+Y)', onTap: ink.canRedo ? ink.redo : null),
+              _BarButton(
+                icon: Icons.undo,
+                tooltip: tr('Rückgängig (Strg+Z)', 'Undo (Ctrl+Z)'),
+                onTap: ink.canUndo ? ink.undo : null,
+              ),
+              _BarButton(
+                icon: Icons.redo,
+                tooltip: tr('Wiederholen (Strg+Y)', 'Redo (Ctrl+Y)'),
+                onTap: ink.canRedo ? ink.redo : null,
+              ),
               _BarButton(
                 icon: Icons.delete_sweep_outlined,
-                tooltip: 'Seite leeren',
+                tooltip: tr('Seite leeren', 'Clear page'),
                 onTap: ink.pageHasAnnotations(widget.page) ? _confirmClear : null,
               ),
               const _Sep(),
               _BarButton(
                 icon: tools.paletteLeft ? Icons.keyboard_double_arrow_right : Icons.keyboard_double_arrow_left,
-                tooltip: 'Leiste auf die andere Seite',
+                tooltip: tr('Leiste auf die andere Seite', 'Move toolbar to the other side'),
                 onTap: tools.togglePaletteSide,
               ),
             ],

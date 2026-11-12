@@ -141,8 +141,22 @@ jobs:
           fi
           TAG="v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
           MSG=$(printf '%s' "$COMMIT_MSG" | head -1)
+          cat > notes.md <<EOT
+          **Neu / New:** ${MSG:-Verbesserungen}
+
+          ### Installieren (Windows 10/11)
+          **\`Volti-Setup.exe\`** herunterladen und starten. Meldet Windows „Der Computer wurde durch Windows geschützt“: *Weitere Informationen → Trotzdem ausführen*. Ohne Installation: \`Volti-Windows.zip\` entpacken und \`Volti.exe\` starten.
+          Ist Volti schon installiert, kommt das Update direkt in der App: ⚙ → *Über Volti* → *Nach Updates suchen*.
+
+          ### Install (Windows 10/11)
+          Download and run **\`Volti-Setup.exe\`**. If Windows says "Windows protected your PC": *More info → Run anyway*. Without installing: unzip \`Volti-Windows.zip\` and run \`Volti.exe\`.
+          If Volti is already installed, update right in the app: ⚙ → *About Volti* → *Check for updates*.
+
+          \`Volti-Android.apk\`: Android-Testversion / Android test version.
+          EOT
+          sed -i 's/^          //' notes.md
           gh release create "$TAG" dist/* \
             --repo "rawkhawk0663/volti-releases" \
             --title "Volti $TAG" \
-            --notes "${MSG:-Neue Version}" \
+            --notes-file notes.md \
             --latest

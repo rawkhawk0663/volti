@@ -8,6 +8,7 @@ import '../../app/window_buttons.dart';
 import '../../core/library/page_setup.dart';
 import '../../core/pdf/systems.dart';
 import 'page_export.dart';
+import '../../app/l10n.dart';
 
 /// Endlosband: die Notenzeilen eines Stücks untereinander, so breit wie der
 /// Bildschirm – grösser als auf der Seite und zum Durchscrollen. Mit den
@@ -129,12 +130,12 @@ class _ReflowScreenState extends State<_ReflowScreen> {
         appBar: AppBar(
           backgroundColor: VoltiColors.anthracite,
           foregroundColor: Colors.white,
-          title: Text('${widget.title} · Endlosband'),
+          title: Text(tr('${widget.title} · Endlosband', '${widget.title} · continuous scroll')),
           actions: [
             if (_done < total)
               Padding(
                 padding: const EdgeInsets.only(right: 16),
-                child: Center(child: Text('Seite $_done von $total …')),
+                child: Center(child: Text(tr('Seite $_done von $total …', 'Page $_done of $total …'))),
               ),
             const WindowButtons(),
             const SizedBox(width: 4),

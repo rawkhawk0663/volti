@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../../app/l10n.dart';
+
 /// Eine Setlist: eine geordnete Liste von Stücken, z. B. für ein Konzert.
 ///
 /// Stücke werden über ihren Pfad *relativ zum Bibliotheksordner* gespeichert.
@@ -37,7 +39,7 @@ class Setlist {
 
   static Setlist fromJson(Map<String, dynamic> json) => Setlist(
     id: json['id'] as String,
-    name: json['name'] as String? ?? 'Setlist',
+    name: json['name'] as String? ?? tr('Setlist', 'Setlist'),
     modified: DateTime.parse(json['modified'] as String),
     folder: json['folder'] as String?,
     items: [for (final i in json['items'] as List? ?? const []) SetlistItem.fromJson(i as Map<String, dynamic>)],

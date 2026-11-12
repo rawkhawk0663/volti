@@ -34,6 +34,7 @@ import 'metronome.dart';
 import 'metronome_panel.dart';
 import '../../core/library/score_meta.dart';
 import '../library/settings_dialog.dart';
+import '../../app/l10n.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
 class ViewerItem {
@@ -152,7 +153,10 @@ class _Piece {
       doc = d;
       cache = PageImageCache(d);
     } catch (e) {
-      error = 'Die Datei konnte nicht geöffnet werden.\n${item.path}\n\n$e';
+      error = tr(
+        'Die Datei konnte nicht geöffnet werden.\n${item.path}\n\n$e',
+        'The file could not be opened.\n${item.path}\n\n$e',
+      );
     }
   }
 
@@ -220,13 +224,21 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final half = _half && _halfMode ? _flow.after(_left) : null;
     if (half != null) {
       return half.piece == _left.piece
-          ? 'Seite ${_left.page} → ${half.page} von $_pageCount'
-          : 'Seite ${_left.page} → ${widget.items[half.piece].title}';
+          ? tr('Seite ${_left.page} → ${half.page} von $_pageCount', 'Page ${_left.page} → ${half.page} of $_pageCount')
+          : tr(
+              'Seite ${_left.page} → ${widget.items[half.piece].title}',
+              'Page ${_left.page} → ${widget.items[half.piece].title}',
+            );
     }
     final r = _right;
-    if (r == null) return 'Seite ${_left.page} von $_pageCount';
-    if (r.piece == _left.piece) return 'Seiten ${_left.page}–${r.page} von $_pageCount';
-    return 'Seite ${_left.page} von $_pageCount · rechts: ${widget.items[r.piece].title}';
+    if (r == null) return tr('Seite ${_left.page} von $_pageCount', 'Page ${_left.page} of $_pageCount');
+    if (r.piece == _left.piece) {
+      return tr('Seiten ${_left.page}–${r.page} von $_pageCount', 'Pages ${_left.page}–${r.page} of $_pageCount');
+    }
+    return tr(
+      'Seite ${_left.page} von $_pageCount · rechts: ${widget.items[r.piece].title}',
+      'Page ${_left.page} of $_pageCount · right: ${widget.items[r.piece].title}',
+    );
   }
 
   _Piece get _activePiece => _pieces[(_activeSlot ?? _left).piece] ?? _leftPiece!;
@@ -331,7 +343,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
       await const SidecarStore().save(piece.item.path, pages: result);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(tr('Speichern fehlgeschlagen: $e', 'Saving failed: $e'))));
       }
     }
   }
@@ -360,9 +373,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
       SnackBar(
         persist: false,
         duration: const Duration(seconds: 6),
-        content: const Text('Leere Seite eingefügt'),
+        content: Text(tr('Leere Seite eingefügt', 'Blank page inserted')),
         action: SnackBarAction(
-          label: 'Rückgängig',
+          label: tr('Rückgängig', 'Undo'),
           // Den Zähler behalten: eine spätere leere Seite bekommt nie dieselbe Nummer.
           onPressed: () => _applySetup(slot.piece, before.withOrder(before.order, blanks: next.blanks)),
         ),
@@ -386,9 +399,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
       SnackBar(
         persist: false,
         duration: const Duration(seconds: 6),
-        content: const Text('Leere Seite entfernt'),
+        content: Text(tr('Leere Seite entfernt', 'Blank page removed')),
         action: SnackBarAction(
-          label: 'Rückgängig',
+          label: tr('Rückgängig', 'Undo'),
           onPressed: () => _applySetup(slot.piece, before.withOrder(before.order)),
         ),
       ),
@@ -523,8 +536,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
       }
     }
     if (display == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Die Zielseite ist ausgeblendet (Seiten anordnen).')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr('Die Zielseite ist ausgeblendet (Seiten anordnen).', 'The target page is hidden (Arrange pages).'),
+          ),
+        ),
+      );
       return;
     }
     final target = PageSlot(pieceIndex, display);
@@ -660,12 +678,21 @@ class _ViewerScreenState extends State<ViewerScreen> {
       p.meta = saved.meta;
       if (mounted) {
         setState(() {});
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('${_metronome.bpm} BPM bei „${p.item.title}“ gespeichert')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tr(
+                '${_metronome.bpm} BPM bei „${p.item.title}“ gespeichert',
+                '${_metronome.bpm} BPM saved for “${p.item.title}”',
+              ),
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(tr('Speichern fehlgeschlagen: $e', 'Saving failed: $e'))));
       }
     }
   }
@@ -810,7 +837,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                           child: ActionChip(
                             avatar: const Icon(Icons.fit_screen_outlined, size: 18),
                             label: Text('${(_zoom.scale * 100).round()} %'),
-                            tooltip: 'Ganze Seite zeigen (Esc)',
+                            tooltip: tr('Ganze Seite zeigen (Esc)', 'Show whole page (Esc)'),
                             onPressed: _zoom.reset,
                           ),
                         ),
@@ -879,7 +906,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                   child: FilledButton.tonalIcon(
                     onPressed: _jumpBack,
                     icon: const Icon(Icons.undo),
-                    label: const Text('Zurück'),
+                    label: Text(tr('Zurück', 'Back')),
                   ),
                 ),
               ),
@@ -1286,7 +1313,7 @@ class _TopBar extends StatelessWidget {
                 child: Row(
                   children: [
                     IconButton(
-                      tooltip: 'Zurück zur Bibliothek',
+                      tooltip: tr('Zurück zur Bibliothek', 'Back to the library'),
                       icon: const Icon(Icons.arrow_back),
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
@@ -1302,12 +1329,12 @@ class _TopBar extends StatelessWidget {
                     FilledButton.tonalIcon(
                       onPressed: tools.startEditing,
                       icon: const Icon(Icons.edit),
-                      label: const Text('Bearbeiten'),
+                      label: Text(tr('Bearbeiten', 'Edit')),
                     ),
                     ListenableBuilder(
                       listenable: state._metronome,
                       builder: (context, _) => IconButton(
-                        tooltip: 'Metronom (M)',
+                        tooltip: tr('Metronom (M)', 'Metronome (M)'),
                         isSelected: state._metronomeOpen || state._metronome.running,
                         icon: MetronomeIcon(
                           color: state._metronome.running ? Theme.of(context).colorScheme.primary : null,
@@ -1316,79 +1343,86 @@ class _TopBar extends StatelessWidget {
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Als PDF teilen oder drucken',
+                      tooltip: tr('Als PDF teilen oder drucken', 'Share or print as PDF'),
                       icon: const Icon(Icons.ios_share),
                       onPressed: state._export,
                     ),
                     IconButton(
-                      tooltip: 'Lesezeichen',
+                      tooltip: tr('Lesezeichen', 'Bookmarks'),
                       icon: const Icon(Icons.bookmarks_outlined),
                       onPressed: state._openBookmarks,
                     ),
                     IconButton(
-                      tooltip: state._fullscreen ? 'Vollbild beenden (F11)' : 'Vollbild (F11)',
+                      tooltip: state._fullscreen
+                          ? tr('Vollbild beenden (F11)', 'Exit full screen (F11)')
+                          : tr('Vollbild (F11)', 'Full screen (F11)'),
                       icon: Icon(state._fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
                       onPressed: state._toggleFullscreen,
                     ),
                     PopupMenuButton<VoidCallback>(
-                      tooltip: 'Mehr',
+                      tooltip: tr('Mehr', 'More'),
                       icon: const Icon(Icons.more_vert),
                       onSelected: (a) => a(),
                       itemBuilder: (_) => [
                         PopupMenuItem(
                           value: () => showSettingsDialog(context),
-                          child: const ListTile(
+                          child: ListTile(
                             leading: Icon(Icons.settings_outlined),
-                            title: Text('Einstellungen …'),
+                            title: Text(tr('Einstellungen …', 'Settings …')),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
                         const PopupMenuDivider(),
                         PopupMenuItem(
                           value: state._reflow,
-                          child: const ListTile(
+                          child: ListTile(
                             leading: Icon(Icons.view_day_outlined),
-                            title: Text('Endlosband (Notenzeilen untereinander)'),
+                            title: Text(
+                              tr(
+                                'Endlosband (Notenzeilen untereinander)',
+                                'Continuous scroll (staves one below the other)',
+                              ),
+                            ),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
                         PopupMenuItem(
                           value: state._insertBlank,
-                          child: const ListTile(
+                          child: ListTile(
                             leading: Icon(Icons.note_add_outlined),
-                            title: Text('Leere Seite einfügen (für Notizen)'),
+                            title: Text(tr('Leere Seite einfügen (für Notizen)', 'Insert blank page (for notes)')),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
                         if (state._onBlankPage)
                           PopupMenuItem(
                             value: state._removeBlank,
-                            child: const ListTile(
+                            child: ListTile(
                               leading: Icon(Icons.delete_outline),
-                              title: Text('Diese leere Seite entfernen'),
+                              title: Text(tr('Diese leere Seite entfernen', 'Remove this blank page')),
                               contentPadding: EdgeInsets.zero,
                             ),
                           ),
                         PopupMenuItem(
                           value: state._editPages,
-                          child: const ListTile(
+                          child: ListTile(
                             leading: Icon(Icons.auto_stories_outlined),
-                            title: Text('Seiten anordnen und zuschneiden …'),
+                            title: Text(tr('Seiten anordnen und zuschneiden …', 'Arrange and crop pages …')),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
                         PopupMenuItem(
                           value: tools.openLayers,
-                          child: const ListTile(
+                          child: ListTile(
                             leading: Icon(Icons.layers_outlined),
-                            title: Text('Ebenen …'),
+                            title: Text(tr('Ebenen …', 'Layers …')),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
                         CheckedPopupMenuItem(
                           value: state._toggleDiagnostics,
                           checked: state._showDiagnostics,
-                          child: const Text('Stift-Test anzeigen'),
+                          child: Text(tr('Stift-Test anzeigen', 'Show pen test')),
                         ),
                       ],
                     ),
@@ -1433,7 +1467,7 @@ class _PageBar extends StatelessWidget {
                 child: Row(
                   children: [
                     IconButton(
-                      tooltip: 'Vorherige Seite',
+                      tooltip: tr('Vorherige Seite', 'Previous page'),
                       icon: const Icon(Icons.chevron_left),
                       onPressed: state._prev,
                     ),
@@ -1443,11 +1477,15 @@ class _PageBar extends StatelessWidget {
                         max: count.toDouble(),
                         divisions: count - 1,
                         value: state._page.toDouble().clamp(1, count.toDouble()),
-                        label: 'Seite ${state._page}',
+                        label: tr('Seite ${state._page}', 'Page ${state._page}'),
                         onChanged: (v) => state._goTo(v.round()),
                       ),
                     ),
-                    IconButton(tooltip: 'Nächste Seite', icon: const Icon(Icons.chevron_right), onPressed: state._next),
+                    IconButton(
+                      tooltip: tr('Nächste Seite', 'Next page'),
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: state._next,
+                    ),
                   ],
                 ),
               ),
@@ -1472,7 +1510,7 @@ class _TitleArea extends StatelessWidget {
     if (!state._isSetlist) return title;
     final items = state.widget.items;
     return PopupMenuButton<int>(
-      tooltip: 'Stück wählen',
+      tooltip: tr('Stück wählen', 'Choose piece'),
       onSelected: state._openPiece,
       itemBuilder: (_) => [
         for (var i = 0; i < items.length; i++)
@@ -1484,7 +1522,10 @@ class _TitleArea extends StatelessWidget {
         children: [
           title,
           Text(
-            '${state.widget.setlistName ?? 'Setlist'} · Stück ${state._index + 1}/${items.length}  ▾',
+            tr(
+              '${state.widget.setlistName ?? 'Setlist'} · Stück ${state._index + 1}/${items.length}  ▾',
+              '${state.widget.setlistName ?? 'Setlist'} · piece ${state._index + 1}/${items.length}  ▾',
+            ),
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
           ),

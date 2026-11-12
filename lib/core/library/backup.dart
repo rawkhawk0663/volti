@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../sync/sync_engine.dart';
 import '../sync/sync_store.dart';
+import '../../app/l10n.dart';
 
 /// Sicherung der ganzen Bibliothek in einer einzigen ZIP-Datei: Noten (PDFs),
 /// Infos und Anmerkungen, Setlists, Ordner, eigene Stempel und Stift-Vorlagen.
@@ -77,7 +78,7 @@ class LibraryBackup {
       final unpacked = p.join(work.path, 'inhalt');
       await extractFileToDisk(zipPath, unpacked);
       if (!await File(p.join(unpacked, markerFile)).exists()) {
-        throw const FormatException('Diese Datei ist keine Volti-Sicherung.');
+        throw FormatException(tr('Diese Datei ist keine Volti-Sicherung.', 'This file is not a Volti backup.'));
       }
       final folder = FolderSyncStore(unpacked);
       await SyncEngine.initializeRemote(folder);

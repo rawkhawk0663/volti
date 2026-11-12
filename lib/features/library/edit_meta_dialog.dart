@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/library/library_scanner.dart';
 import '../../core/library/score_meta.dart';
+import '../../app/l10n.dart';
 
 /// Dialog zum Bearbeiten von Titel, Komponist, Genre, Tonart, Tags und Notizen.
 /// Gibt die geänderten Felder zurück (oder null bei "Abbrechen").
@@ -87,7 +88,7 @@ class _EditMetaDialogState extends State<_EditMetaDialog> {
   Widget build(BuildContext context) {
     final suggestions = widget.knownTags.where((t) => !_tags.contains(t)).take(12).toList();
     return AlertDialog(
-      title: const Text('Infos bearbeiten'),
+      title: Text(tr('Infos bearbeiten', 'Edit details')),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -97,22 +98,22 @@ class _EditMetaDialogState extends State<_EditMetaDialog> {
               TextField(
                 controller: _title,
                 autofocus: true,
-                decoration: const InputDecoration(labelText: 'Titel'),
+                decoration: InputDecoration(labelText: tr('Titel', 'Title')),
               ),
               const SizedBox(height: 12),
-              _Suggest(controller: _composer, label: 'Komponist', options: widget.knownComposers),
+              _Suggest(controller: _composer, label: tr('Komponist', 'Composer'), options: widget.knownComposers),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
-                    child: _Suggest(controller: _genre, label: 'Genre', options: widget.knownGenres),
+                    child: _Suggest(controller: _genre, label: tr('Genre', 'Genre'), options: widget.knownGenres),
                   ),
                   const SizedBox(width: 12),
                   SizedBox(
                     width: 130,
                     child: TextField(
                       controller: _key,
-                      decoration: const InputDecoration(labelText: 'Tonart'),
+                      decoration: InputDecoration(labelText: tr('Tonart', 'Key')),
                     ),
                   ),
                 ],
@@ -126,14 +127,14 @@ class _EditMetaDialogState extends State<_EditMetaDialog> {
                     child: TextField(
                       controller: _tempo,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Tempo', suffixText: 'BPM'),
+                      decoration: InputDecoration(labelText: tr('Tempo', 'Tempo'), suffixText: 'BPM'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<int?>(
                       initialValue: _meters.containsKey(_beats) ? _beats : null,
-                      decoration: const InputDecoration(labelText: 'Taktart'),
+                      decoration: InputDecoration(labelText: tr('Taktart', 'Time signature')),
                       items: [
                         const DropdownMenuItem(value: null, child: Text('–')),
                         for (final e in _meters.entries) DropdownMenuItem(value: e.key, child: Text(e.value)),
@@ -156,7 +157,10 @@ class _EditMetaDialogState extends State<_EditMetaDialog> {
               ),
               TextField(
                 controller: _tagInput,
-                decoration: const InputDecoration(labelText: 'Tag hinzufügen', helperText: 'Mit Enter bestätigen'),
+                decoration: InputDecoration(
+                  labelText: tr('Tag hinzufügen', 'Add tag'),
+                  helperText: tr('Mit Enter bestätigen', 'Confirm with Enter'),
+                ),
                 onSubmitted: _addTag,
               ),
               if (suggestions.isNotEmpty) ...[
@@ -182,15 +186,15 @@ class _EditMetaDialogState extends State<_EditMetaDialog> {
                 controller: _notes,
                 minLines: 2,
                 maxLines: 5,
-                decoration: const InputDecoration(labelText: 'Notizen'),
+                decoration: InputDecoration(labelText: tr('Notizen', 'Notes')),
               ),
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
-        FilledButton(onPressed: _save, child: const Text('Speichern')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(tr('Abbrechen', 'Cancel'))),
+        FilledButton(onPressed: _save, child: Text(tr('Speichern', 'Save'))),
       ],
     );
   }

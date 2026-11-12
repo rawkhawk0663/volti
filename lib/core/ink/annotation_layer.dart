@@ -1,3 +1,5 @@
+import '../../app/l10n.dart';
+
 /// ID der Grund-Ebene. Elemente ohne Ebene (auch alle aus früheren
 /// Versionen) liegen auf ihr.
 const kDefaultLayer = 'standard';
@@ -26,7 +28,7 @@ class AnnotationLayer {
 
   /// Die Grund-Ebene, solange sie nie verändert wurde.
   static AnnotationLayer standard() =>
-      AnnotationLayer(id: kDefaultLayer, name: 'Standard', order: 0, createdAt: DateTime.utc(2000));
+      AnnotationLayer(id: kDefaultLayer, name: tr('Standard', 'Default'), order: 0, createdAt: DateTime.utc(2000));
 
   final String id;
   final String name;
@@ -90,7 +92,7 @@ class AnnotationLayer {
 
   static AnnotationLayer fromJson(Map<String, dynamic> j) => AnnotationLayer(
     id: j['id'] as String,
-    name: j['name'] as String? ?? 'Ebene',
+    name: j['name'] as String? ?? tr('Ebene', 'Layer'),
     order: (j['order'] as num?)?.toDouble() ?? 0,
     visible: j['visible'] != false,
     createdAt: DateTime.parse(j['created'] as String),

@@ -4,6 +4,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'l10n.dart';
+
 /// Hat Volti ein eigenes Fenster mit eigenen Fensterknöpfen? (Am Computer.)
 /// Unter Windows ist die Titelleiste ausgeblendet ([hideNativeTitleBar]).
 bool get hasWindowButtons => Platform.isWindows || Platform.isLinux;
@@ -63,11 +65,23 @@ class _WindowButtonsState extends State<WindowButtons> {
                 color: _yellow,
                 glyph: _Glyph.minimize,
                 hover: _hover,
-                tooltip: 'Minimieren',
+                tooltip: tr('Minimieren', 'Minimise'),
                 onTap: windowManager.minimize,
               ),
-              _Dot(color: _green, glyph: _Glyph.maximize, hover: _hover, tooltip: 'Maximieren', onTap: _toggleMaximize),
-              _Dot(color: _red, glyph: _Glyph.close, hover: _hover, tooltip: 'Schliessen', onTap: windowManager.close),
+              _Dot(
+                color: _green,
+                glyph: _Glyph.maximize,
+                hover: _hover,
+                tooltip: tr('Maximieren', 'Maximise'),
+                onTap: _toggleMaximize,
+              ),
+              _Dot(
+                color: _red,
+                glyph: _Glyph.close,
+                hover: _hover,
+                tooltip: tr('Schliessen', 'Close'),
+                onTap: windowManager.close,
+              ),
             ],
           ),
         ),

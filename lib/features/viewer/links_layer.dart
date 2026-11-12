@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/ink/navigation_marks.dart';
 import 'ink_controller.dart';
 import 'tool_controller.dart';
+import '../../app/l10n.dart';
 
 /// Ziel, das nach einem Sprung kurz orange aufblinkt.
 class JumpFlash {
@@ -115,10 +116,10 @@ class LinksLayer extends StatelessWidget {
     final choice = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx, pos.dy),
-      items: const [
-        PopupMenuItem(value: 'jump', child: Text('Springen')),
-        PopupMenuItem(value: 'target', child: Text('Neues Ziel antippen …')),
-        PopupMenuItem(value: 'delete', child: Text('Sprungmarke löschen')),
+      items: [
+        PopupMenuItem(value: 'jump', child: Text(tr('Springen', 'Jump'))),
+        PopupMenuItem(value: 'target', child: Text(tr('Neues Ziel antippen …', 'Tap new target …'))),
+        PopupMenuItem(value: 'delete', child: Text(tr('Sprungmarke löschen', 'Delete jump link'))),
       ],
     );
     switch (choice) {

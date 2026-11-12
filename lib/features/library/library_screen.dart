@@ -28,6 +28,7 @@ import 'score_card.dart';
 import 'setlists_view.dart';
 import 'settings_dialog.dart';
 import 'sync_controller.dart';
+import '../../app/l10n.dart';
 
 /// Hauptbildschirm: Bibliothek mit Noten und Setlists.
 class LibraryScreen extends StatefulWidget {
@@ -95,9 +96,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
             SetlistsView(library: lib, sync: widget.sync, reset: _reset[1], active: _tab == 1),
           ],
         );
-        const destinations = [
-          (Icons.library_music_outlined, Icons.library_music, 'Bibliothek'),
-          (Icons.queue_music_outlined, Icons.queue_music, 'Setlists'),
+        final destinations = [
+          (Icons.library_music_outlined, Icons.library_music, tr('Bibliothek', 'Library')),
+          (Icons.queue_music_outlined, Icons.queue_music, tr('Setlists', 'Setlists')),
         ];
         if (wide) {
           return VoltiBackground(
@@ -176,11 +177,15 @@ class _EmptyLibrary extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 28),
-            Text('Willkommen!', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
+            Text(tr('Willkommen!', 'Welcome!'), style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
             const SizedBox(height: 12),
             Text(
-              'Importiere deine Noten (PDFs). Volti legt eine Kopie in seiner eigenen Bibliothek ab. '
-              'Deine Originaldateien bleiben unverändert.',
+              tr(
+                'Importiere deine Noten (PDFs). Volti legt eine Kopie in seiner eigenen Bibliothek ab. '
+                    'Deine Originaldateien bleiben unverändert.',
+                'Import your sheet music (PDFs). Volti keeps a copy in its own library. '
+                    'Your original files stay untouched.',
+              ),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium,
             ),
@@ -188,16 +193,19 @@ class _EmptyLibrary extends StatelessWidget {
             FilledButton.icon(
               onPressed: onImportFiles,
               icon: const Icon(Icons.file_open_outlined),
-              label: const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('PDFs importieren')),
+              label: Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(tr('PDFs importieren', 'Import PDFs')),
+              ),
             ),
             if (onImportFolder != null) ...[
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: onImportFolder,
                 icon: const Icon(Icons.drive_folder_upload_outlined),
-                label: const Padding(
+                label: Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Ganzen Ordner importieren'),
+                  child: Text(tr('Ganzen Ordner importieren', 'Import a whole folder')),
                 ),
               ),
             ],
@@ -296,11 +304,11 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     }
   }
 
-  static const _sortNames = {
-    ScoreSort.title: 'Titel',
-    ScoreSort.composer: 'Komponist',
-    ScoreSort.recentlyOpened: 'Zuletzt geöffnet',
-    ScoreSort.recentlyAdded: 'Zuletzt hinzugefügt',
+  static Map<ScoreSort, String> get _sortNames => {
+    ScoreSort.title: tr('Titel', 'Title'),
+    ScoreSort.composer: tr('Komponist', 'Composer'),
+    ScoreSort.recentlyOpened: tr('Zuletzt geöffnet', 'Recently opened'),
+    ScoreSort.recentlyAdded: tr('Zuletzt hinzugefügt', 'Recently added'),
   };
 
   /// Ordner-Import gibt es auf Android nicht (dort keine Ordnerauswahl).
@@ -308,13 +316,13 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
 
   Future<void> _importFiles() async {
     const pdf = XTypeGroup(label: 'PDF', extensions: ['pdf'], mimeTypes: ['application/pdf']);
-    final files = await openFiles(acceptedTypeGroups: const [pdf], confirmButtonText: 'Importieren');
+    final files = await openFiles(acceptedTypeGroups: const [pdf], confirmButtonText: tr('Importieren', 'Import'));
     if (files.isEmpty) return;
     _showResult(await lib.importPdfs(files.map((f) => f.path).toList(), folder: _current));
   }
 
   Future<void> _importFolder() async {
-    final dir = await getDirectoryPath(confirmButtonText: 'Diesen Ordner importieren');
+    final dir = await getDirectoryPath(confirmButtonText: tr('Diesen Ordner importieren', 'Import this folder'));
     if (dir == null) return;
     _showResult(await lib.importFolder(dir, folder: _current));
   }
@@ -323,9 +331,10 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     if (!mounted) return;
     final n = r.added.length;
     final parts = [
-      n == 1 ? '1 Stück importiert' : '$n Stücke importiert',
-      if (r.alreadyThere.isNotEmpty) '${r.alreadyThere.length} schon vorhanden',
-      if (r.failed.isNotEmpty) '${r.failed.length} fehlgeschlagen',
+      n == 1 ? tr('1 Stück importiert', '1 piece imported') : tr('$n Stücke importiert', '$n pieces imported'),
+      if (r.alreadyThere.isNotEmpty)
+        tr('${r.alreadyThere.length} schon vorhanden', '${r.alreadyThere.length} already there'),
+      if (r.failed.isNotEmpty) tr('${r.failed.length} fehlgeschlagen', '${r.failed.length} failed'),
     ];
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(parts.join(' · '))));
   }
@@ -338,18 +347,27 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(one ? 'Stück löschen?' : '${list.length} Stücke löschen?'),
+        title: Text(
+          one
+              ? tr('Stück löschen?', 'Delete piece?')
+              : tr('${list.length} Stücke löschen?', 'Delete ${list.length} pieces?'),
+        ),
         content: SizedBox(
           width: 460,
           child: Text(
-            '${one ? '„${list.first.title}“ wird' : 'Die ${list.length} Stücke werden'} mitsamt Infos und '
-            'Anmerkungen aus Volti gelöscht und aus allen Setlists entfernt. '
-            'Die Originaldateien, die du importiert hast, bleiben erhalten.',
+            tr(
+              '${one ? '„${list.first.title}“ wird' : 'Die ${list.length} Stücke werden'} mitsamt Infos und '
+                  'Anmerkungen aus Volti gelöscht und aus allen Setlists entfernt. '
+                  'Die Originaldateien, die du importiert hast, bleiben erhalten.',
+              '${one ? '“${list.first.title}” will be' : 'The ${list.length} pieces will be'} deleted from Volti together with their details and '
+                  'notes, and removed from all setlists. '
+                  'The original files you imported are kept.',
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Löschen')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Löschen', 'Delete'))),
         ],
       ),
     );
@@ -359,13 +377,16 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
   }
 
   // ------------------------------------------------------------ Ordner
-  String _folderName(String? id) => id == null ? 'Bibliothek' : (lib.folders.byId(id)?.name ?? 'Ordner');
+  String _folderName(String? id) =>
+      id == null ? tr('Bibliothek', 'Library') : (lib.folders.byId(id)?.name ?? tr('Ordner', 'Folders'));
 
   Future<void> _newFolder() async {
     final parent = _current;
     final name = await askForName(
       context,
-      title: parent == null ? 'Neuer Ordner' : 'Neuer Ordner in „${_folderName(parent)}“',
+      title: parent == null
+          ? tr('Neuer Ordner', 'New folder')
+          : tr('Neuer Ordner in „${_folderName(parent)}“', 'New folder in “${_folderName(parent)}”'),
       initial: '',
     );
     if (name == null) return;
@@ -373,7 +394,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
   }
 
   Future<void> _renameFolder(ScoreFolder f) async {
-    final name = await askForName(context, title: 'Ordner umbenennen', initial: f.name);
+    final name = await askForName(context, title: tr('Ordner umbenennen', 'Rename folder'), initial: f.name);
     if (name != null) await lib.renameFolder(f, name);
   }
 
@@ -381,7 +402,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     final to = await pickFolder(
       context,
       lib,
-      title: '„${f.name}“ verschieben nach …',
+      title: tr('„${f.name}“ verschieben nach …', 'Move “${f.name}” to …'),
       current: lib.folders.parentOf(f.id),
       exclude: f.id,
     );
@@ -395,21 +416,29 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('Ordner „${f.name}“ löschen?'),
+        title: Text(tr('Ordner „${f.name}“ löschen?', 'Delete folder “${f.name}”?')),
         content: SizedBox(
           width: 460,
           child: Text(
-            '${n == 0
-                ? 'Der Ordner ist leer.'
-                : n == 1
-                ? 'Das Stück darin wird nicht gelöscht.'
-                : 'Die $n Stücke darin werden nicht gelöscht.'} '
-            'Was im Ordner liegt (auch Unterordner), kommt nach „${_folderName(parent)}“.',
+            tr(
+              '${n == 0
+                      ? 'Der Ordner ist leer.'
+                      : n == 1
+                      ? 'Das Stück darin wird nicht gelöscht.'
+                      : 'Die $n Stücke darin werden nicht gelöscht.'} '
+                  'Was im Ordner liegt (auch Unterordner), kommt nach „${_folderName(parent)}“.',
+              '${n == 0
+                      ? 'The folder is empty.'
+                      : n == 1
+                      ? 'The piece inside will not be deleted.'
+                      : 'The $n pieces inside will not be deleted.'} '
+                  'Everything in the folder (including subfolders) moves to “${_folderName(parent)}”.',
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Ordner löschen')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Ordner löschen', 'Delete folder'))),
         ],
       ),
     );
@@ -420,8 +449,8 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
       SnackBar(
         persist: false,
         duration: const Duration(seconds: 6),
-        content: Text('Ordner „${f.name}“ gelöscht'),
-        action: SnackBarAction(label: 'Rückgängig', onPressed: () => lib.restoreFolder(f)),
+        content: Text(tr('Ordner „${f.name}“ gelöscht', 'Folder “${f.name}” deleted')),
+        action: SnackBarAction(label: tr('Rückgängig', 'Undo'), onPressed: () => lib.restoreFolder(f)),
       ),
     );
   }
@@ -429,20 +458,23 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
   List<PopupMenuEntry<VoidCallback>> _folderMenu(ScoreFolder f) => [
     PopupMenuItem(
       value: () => _openFolder(f.id),
-      child: const ListTile(leading: Icon(Icons.folder_open_outlined), title: Text('Öffnen')),
+      child: ListTile(leading: Icon(Icons.folder_open_outlined), title: Text(tr('Öffnen', 'Open'))),
     ),
     PopupMenuItem(
       value: () => _renameFolder(f),
-      child: const ListTile(leading: Icon(Icons.drive_file_rename_outline), title: Text('Umbenennen …')),
+      child: ListTile(leading: Icon(Icons.drive_file_rename_outline), title: Text(tr('Umbenennen …', 'Rename …'))),
     ),
     PopupMenuItem(
       value: () => _moveFolder(f),
-      child: const ListTile(leading: Icon(Icons.drive_file_move_outline), title: Text('Verschieben …')),
+      child: ListTile(leading: Icon(Icons.drive_file_move_outline), title: Text(tr('Verschieben …', 'Move …'))),
     ),
     const PopupMenuDivider(),
     PopupMenuItem(
       value: () => _deleteFolder(f),
-      child: const ListTile(leading: Icon(Icons.folder_delete_outlined), title: Text('Ordner löschen …')),
+      child: ListTile(
+        leading: Icon(Icons.folder_delete_outlined),
+        title: Text(tr('Ordner löschen …', 'Delete folder …')),
+      ),
     ),
   ];
 
@@ -452,7 +484,9 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     final to = await pickFolder(
       context,
       lib,
-      title: list.length == 1 ? '„${list.first.title}“ verschieben nach …' : '${list.length} Stücke verschieben nach …',
+      title: list.length == 1
+          ? tr('„${list.first.title}“ verschieben nach …', 'Move “${list.first.title}” to …')
+          : tr('${list.length} Stücke verschieben nach …', 'Move ${list.length} pieces to …'),
       current: folders.length == 1 ? folders.first : '__keiner__',
     );
     if (to == null) return;
@@ -462,7 +496,10 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${list.length == 1 ? '„${list.first.title}“ liegt' : '${list.length} Stücke liegen'} jetzt in „${_folderName(to.folder)}“',
+          tr(
+            '${list.length == 1 ? '„${list.first.title}“ liegt' : '${list.length} Stücke liegen'} jetzt in „${_folderName(to.folder)}“',
+            '${list.length == 1 ? '“${list.first.title}” is' : '${list.length} pieces are'} now in “${_folderName(to.folder)}”',
+          ),
         ),
       ),
     );
@@ -495,7 +532,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     List<ExportPiece>? opened;
     await showExportDialog(
       context,
-      title: '${list.length} Stücke',
+      title: tr('${list.length} Stücke', '${list.length} pieces'),
       load: () async =>
           opened ??= await openExportPieces([for (final e in list) (path: e.path, bookmark: null, scope: null)]),
       release: () async {
@@ -544,7 +581,8 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
       lib.onLocalChange?.call();
     } catch (err) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Das ging nicht: $err')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(tr('Das ging nicht: $err', 'That didn’t work: $err'))));
       }
     } finally {
       await doc?.dispose();
@@ -554,37 +592,43 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
   List<PopupMenuEntry<VoidCallback>> _menu(ScoreEntry e) => [
     PopupMenuItem(
       value: () => _open(e),
-      child: const ListTile(leading: Icon(Icons.open_in_new), title: Text('Öffnen')),
+      child: ListTile(leading: Icon(Icons.open_in_new), title: Text(tr('Öffnen', 'Open'))),
     ),
     PopupMenuItem(
       value: () => _edit(e),
-      child: const ListTile(leading: Icon(Icons.edit_note), title: Text('Infos bearbeiten')),
+      child: ListTile(leading: Icon(Icons.edit_note), title: Text(tr('Infos bearbeiten', 'Edit details'))),
     ),
     PopupMenuItem(
       value: () => _export(e),
-      child: const ListTile(leading: Icon(Icons.ios_share), title: Text('Als PDF teilen …')),
+      child: ListTile(leading: Icon(Icons.ios_share), title: Text(tr('Als PDF teilen …', 'Share as PDF …'))),
     ),
     PopupMenuItem(
       value: () => _editPages(e),
-      child: const ListTile(leading: Icon(Icons.auto_stories_outlined), title: Text('Seiten anordnen …')),
+      child: ListTile(
+        leading: Icon(Icons.auto_stories_outlined),
+        title: Text(tr('Seiten anordnen …', 'Arrange pages …')),
+      ),
     ),
     PopupMenuItem(
       value: () => addToSetlistDialog(context, lib, e),
-      child: const ListTile(leading: Icon(Icons.playlist_add), title: Text('Zu Setlist hinzufügen')),
+      child: ListTile(leading: Icon(Icons.playlist_add), title: Text(tr('Zu Setlist hinzufügen', 'Add to setlist'))),
     ),
     PopupMenuItem(
       value: () => _moveScores([e]),
-      child: const ListTile(leading: Icon(Icons.drive_file_move_outline), title: Text('In Ordner verschieben …')),
+      child: ListTile(
+        leading: Icon(Icons.drive_file_move_outline),
+        title: Text(tr('In Ordner verschieben …', 'Move to folder …')),
+      ),
     ),
     if (!_selecting)
       PopupMenuItem(
         value: () => _startSelecting(e),
-        child: const ListTile(leading: Icon(Icons.checklist), title: Text('Mehrere auswählen')),
+        child: ListTile(leading: Icon(Icons.checklist), title: Text(tr('Mehrere auswählen', 'Select several'))),
       ),
     const PopupMenuDivider(),
     PopupMenuItem(
       value: () => _delete(e),
-      child: const ListTile(leading: Icon(Icons.delete_outline), title: Text('Löschen …')),
+      child: ListTile(leading: Icon(Icons.delete_outline), title: Text(tr('Löschen …', 'Delete …'))),
     ),
   ];
 
@@ -643,11 +687,15 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                   Expanded(
                     child: SearchBar(
                       controller: _search,
-                      hintText: 'Titel, Komponist, Tonart … suchen',
+                      hintText: tr('Titel, Komponist, Tonart … suchen', 'Search title, composer, key …'),
                       leading: const Icon(Icons.search),
                       trailing: [
                         if (_query.isNotEmpty)
-                          IconButton(tooltip: 'Suche leeren', icon: const Icon(Icons.close), onPressed: _clearSearch),
+                          IconButton(
+                            tooltip: tr('Suche leeren', 'Clear search'),
+                            icon: const Icon(Icons.close),
+                            onPressed: _clearSearch,
+                          ),
                       ],
                       elevation: const WidgetStatePropertyAll(0),
                       onChanged: (v) => setState(() => _query = v),
@@ -655,12 +703,14 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    tooltip: current == null ? 'Neuer Ordner' : 'Neuer Ordner in „${_folderName(current)}“',
+                    tooltip: current == null
+                        ? tr('Neuer Ordner', 'New folder')
+                        : tr('Neuer Ordner in „${_folderName(current)}“', 'New folder in “${_folderName(current)}”'),
                     onPressed: _all ? null : _newFolder,
                     icon: const Icon(Icons.create_new_folder_outlined),
                   ),
                   IconButton(
-                    tooltip: 'Mehrere auswählen',
+                    tooltip: tr('Mehrere auswählen', 'Select several'),
                     onPressed: lib.scores.isEmpty ? null : () => _startSelecting(),
                     icon: const Icon(Icons.checklist),
                   ),
@@ -669,13 +719,13 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                       MenuItemButton(
                         leadingIcon: const Icon(Icons.file_open_outlined),
                         onPressed: _importFiles,
-                        child: const Text('PDFs importieren …'),
+                        child: Text(tr('PDFs importieren …', 'Import PDFs …')),
                       ),
                       if (_canImportFolder)
                         MenuItemButton(
                           leadingIcon: const Icon(Icons.drive_folder_upload_outlined),
                           onPressed: _importFolder,
-                          child: const Text('Ganzen Ordner importieren …'),
+                          child: Text(tr('Ganzen Ordner importieren …', 'Import a whole folder …')),
                         ),
                     ],
                     builder: (context, controller, _) => FilledButton.tonalIcon(
@@ -683,11 +733,11 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                           ? null
                           : () => controller.isOpen ? controller.close() : controller.open(),
                       icon: const Icon(Icons.add),
-                      label: const Text('Importieren'),
+                      label: Text(tr('Importieren', 'Import')),
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Bibliothek neu einlesen',
+                    tooltip: tr('Bibliothek neu einlesen', 'Reload library'),
                     onPressed: lib.loading ? null : lib.rescan,
                     icon: const Icon(Icons.refresh),
                   ),
@@ -705,31 +755,33 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
               children: [
                 _MenuChip<ScoreSort>(
                   icon: Icons.sort,
-                  label: 'Sortieren: ${_sortNames[_sort]}',
+                  label: tr('Sortieren: ${_sortNames[_sort]}', 'Sort: ${_sortNames[_sort]}'),
                   options: {for (final e in _sortNames.entries) e.key: e.value},
                   onSelected: (v) => setState(() => _sort = v ?? ScoreSort.title),
                 ),
                 if (genres.isNotEmpty)
                   _MenuChip<String>(
                     icon: Icons.category_outlined,
-                    label: _genre ?? 'Alle Genres',
+                    label: _genre ?? tr('Alle Genres', 'All genres'),
                     active: _genre != null,
-                    options: {null: 'Alle Genres', for (final g in genres) g: g},
+                    options: {null: tr('Alle Genres', 'All genres'), for (final g in genres) g: g},
                     onSelected: (v) => setState(() => _genre = v),
                   ),
                 if (tags.isNotEmpty)
                   _MenuChip<String>(
                     icon: Icons.sell_outlined,
-                    label: _tag ?? 'Alle Tags',
+                    label: _tag ?? tr('Alle Tags', 'All tags'),
                     active: _tag != null,
-                    options: {null: 'Alle Tags', for (final t in tags) t: t},
+                    options: {null: tr('Alle Tags', 'All tags'), for (final t in tags) t: t},
                     onSelected: (v) => setState(() => _tag = v),
                   ),
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: Text(
-                      list.length == 1 ? '1 Stück' : '${list.length} Stücke',
+                      list.length == 1
+                          ? tr('1 Stück', '1 piece')
+                          : tr('${list.length} Stücke', '${list.length} pieces'),
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                   ),
@@ -762,14 +814,18 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
           height: 56,
           child: Row(
             children: [
-              IconButton(tooltip: 'Auswahl beenden', onPressed: _endSelecting, icon: const Icon(Icons.close)),
+              IconButton(
+                tooltip: tr('Auswahl beenden', 'Done selecting'),
+                onPressed: _endSelecting,
+                icon: const Icon(Icons.close),
+              ),
               Expanded(
                 child: Text(
                   none
-                      ? 'Stücke antippen zum Auswählen'
+                      ? tr('Stücke antippen zum Auswählen', 'Tap pieces to select them')
                       : chosen.length == 1
-                      ? '1 Stück ausgewählt'
-                      : '${chosen.length} Stücke ausgewählt',
+                      ? tr('1 Stück ausgewählt', '1 piece selected')
+                      : tr('${chosen.length} Stücke ausgewählt', '${chosen.length} pieces selected'),
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall,
                 ),
@@ -786,15 +842,15 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                           _selected.addAll(visible.map((e) => e.path));
                         }
                       }),
-                child: Text(allChosen ? 'Keine' : 'Alle'),
+                child: Text(allChosen ? tr('Keine', 'None') : tr('Alle', 'All')),
               ),
               IconButton(
-                tooltip: 'In Ordner verschieben',
+                tooltip: tr('In Ordner verschieben', 'Move to folder'),
                 onPressed: none ? null : () => _moveScores(chosen),
                 icon: const Icon(Icons.drive_file_move_outline),
               ),
               IconButton(
-                tooltip: 'Zu Setlist hinzufügen',
+                tooltip: tr('Zu Setlist hinzufügen', 'Add to setlist'),
                 onPressed: none
                     ? null
                     : () async {
@@ -804,12 +860,12 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                 icon: const Icon(Icons.playlist_add),
               ),
               IconButton(
-                tooltip: 'Als PDF teilen',
+                tooltip: tr('Als PDF teilen', 'Share as PDF'),
                 onPressed: none ? null : () => _exportMany(chosen),
                 icon: const Icon(Icons.ios_share),
               ),
               IconButton(
-                tooltip: 'Löschen',
+                tooltip: tr('Löschen', 'Delete'),
                 onPressed: none ? null : () => _deleteMany(chosen),
                 icon: const Icon(Icons.delete_outline),
               ),
@@ -856,7 +912,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
       padding: const EdgeInsets.fromLTRB(8, 0, 16, 0),
       child: Row(
         children: [
-          IconButton(tooltip: 'Zurück', onPressed: _up, icon: const Icon(Icons.arrow_back)),
+          IconButton(tooltip: tr('Zurück', 'Back'), onPressed: _up, icon: const Icon(Icons.arrow_back)),
           Expanded(
             child: Align(
               alignment: Alignment.centerLeft,
@@ -865,8 +921,8 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                 reverse: true,
                 child: Row(
                   children: [
-                    crumb(null, 'Bibliothek', last: false),
-                    if (_all) ...[sep, crumb('__alle__', 'Alle Noten', last: true)],
+                    crumb(null, tr('Bibliothek', 'Library'), last: false),
+                    if (_all) ...[sep, crumb('__alle__', tr('Alle Noten', 'All music'), last: true)],
                     for (final (i, f) in path.indexed) ...[sep, crumb(f.id, f.name, last: i == path.length - 1)],
                   ],
                 ),
@@ -875,7 +931,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
           ),
           if (current != null)
             PopupMenuButton<VoidCallback>(
-              tooltip: 'Ordner',
+              tooltip: tr('Ordner', 'Folders'),
               icon: const Icon(Icons.more_vert),
               onSelected: (a) => a(),
               itemBuilder: (_) => _folderMenu(lib.folders.byId(current)!).skip(1).toList(),
@@ -902,7 +958,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
             children: [
               Text(lib.error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              FilledButton(onPressed: lib.rescan, child: const Text('Nochmals versuchen')),
+              FilledButton(onPressed: lib.rescan, child: Text(tr('Nochmals versuchen', 'Try again'))),
             ],
           ),
         ),
@@ -914,7 +970,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     }
     final nothing = list.isEmpty && folders.isEmpty && !showAll && !lib.loading;
     if (nothing && (searching || _genre != null || _tag != null)) {
-      return Center(child: Text('Keine Treffer.', style: theme.textTheme.bodyMedium));
+      return Center(child: Text(tr('Keine Treffer.', 'No matches.'), style: theme.textTheme.bodyMedium));
     }
     // Im Ordner, bei der Suche und in "Alle Noten" steht, wo ein Stück liegt.
     final showFolder = searching || _all;
@@ -924,12 +980,12 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
       return f == null ? null : _folderName(f);
     }
 
-    String count(int n) => n == 1 ? '1 Stück' : '$n Stücke';
+    String count(int n) => n == 1 ? tr('1 Stück', '1 piece') : tr('$n Stücke', '$n pieces');
     final subs = <String, int>{};
     String folderSubtitle(ScoreFolder f) {
       final n = lib.countIn(f.id);
       final k = subs[f.id] ??= lib.folders.children(f.id).length;
-      return [count(n), if (k > 0) k == 1 ? '1 Ordner' : '$k Ordner'].join(' · ');
+      return [count(n), if (k > 0) k == 1 ? tr('1 Ordner', '1 folder') : tr('$k Ordner', '$k folders')].join(' · ');
     }
 
     return CustomScrollView(
@@ -949,7 +1005,7 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                   FolderTile(
                     library: lib,
                     icon: Icons.library_books_outlined,
-                    name: 'Alle Noten',
+                    name: tr('Alle Noten', 'All music'),
                     subtitle: count(lib.scores.length),
                     onOpen: () => _openFolder(null, all: true),
                   ),
@@ -977,10 +1033,16 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  'Dieser Ordner ist noch leer.\n\n'
-                  'Lege Stücke hinein: im Menü eines Stücks „In Ordner verschieben“, '
-                  'mit „Mehrere auswählen“ oder mit Maus und Stift hierher ziehen. '
-                  'Was du importierst, solange der Ordner offen ist, landet direkt hier.',
+                  tr(
+                    'Dieser Ordner ist noch leer.\n\n'
+                        'Lege Stücke hinein: im Menü eines Stücks „In Ordner verschieben“, '
+                        'mit „Mehrere auswählen“ oder mit Maus und Stift hierher ziehen. '
+                        'Was du importierst, solange der Ordner offen ist, landet direkt hier.',
+                    'This folder is still empty.\n\n'
+                        'Put pieces in it: in a piece’s menu choose “Move to folder”, '
+                        'use “Select several”, or drag them here with mouse or pen. '
+                        'Whatever you import while the folder is open lands right here.',
+                  ),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
@@ -1012,7 +1074,10 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
               return PointerDraggable<LibraryDrag>(
                 key: ValueKey(e.path),
                 data: LibraryDrag(scores: dragged),
-                feedback: dragFeedback(context, dragged.length == 1 ? e.title : '${dragged.length} Stücke'),
+                feedback: dragFeedback(
+                  context,
+                  dragged.length == 1 ? e.title : tr('${dragged.length} Stücke', '${dragged.length} pieces'),
+                ),
                 childWhenDragging: Opacity(opacity: 0.4, child: card),
                 child: card,
               );

@@ -13,6 +13,7 @@ import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
 import '../../core/ink/text_marks.dart';
 import '../../core/library/sidecar_store.dart';
+import '../../app/l10n.dart';
 
 /// Eine rückgängig machbare Aktion: was dazukam, was entfernt und was
 /// geändert wurde.
@@ -127,7 +128,7 @@ class InkController extends ChangeNotifier {
     _annotations.putLayer(
       AnnotationLayer(
         id: id,
-        name: old?.name ?? 'Setlist „${scopeName ?? 'Setlist'}“',
+        name: old?.name ?? tr('Setlist „${scopeName ?? 'Setlist'}“', 'Setlist “${scopeName ?? 'Setlist'}”'),
         order: _topOrder() + 1,
         createdAt: old?.createdAt ?? DateTime.now().toUtc(),
         modifiedAt: old == null ? null : DateTime.now().toUtc(),
@@ -455,7 +456,9 @@ class InkController extends ChangeNotifier {
   String addLayer(String name, {String? group}) {
     final l = AnnotationLayer(
       id: _uuid.v4(),
-      name: name.trim().isEmpty ? 'Ebene ${drawableLayers.length + 1}' : name.trim(),
+      name: name.trim().isEmpty
+          ? tr('Ebene ${drawableLayers.length + 1}', 'Layer ${drawableLayers.length + 1}')
+          : name.trim(),
       order: _topOrder(group) + 1,
       createdAt: DateTime.now().toUtc(),
       parent: group,
@@ -471,7 +474,7 @@ class InkController extends ChangeNotifier {
   String addGroup(String name) {
     final g = AnnotationLayer(
       id: _uuid.v4(),
-      name: name.trim().isEmpty ? 'Gruppe' : name.trim(),
+      name: name.trim().isEmpty ? tr('Gruppe', 'Group') : name.trim(),
       order: _topOrder() + 1,
       createdAt: DateTime.now().toUtc(),
       isGroup: true,
@@ -665,7 +668,7 @@ class InkController extends ChangeNotifier {
     final src = _annotations.layer(id);
     if (src == null || src.isGroup) return id;
     beginBatch();
-    final copyId = addLayer('${src.name} (Kopie)', group: _annotations.groupOf(src)?.id);
+    final copyId = addLayer(tr('${src.name} (Kopie)', '${src.name} (copy)'), group: _annotations.groupOf(src)?.id);
     if (!src.visible) _setLayer(_annotations.layer(copyId)!.copyWith(visible: false));
     final clip = copySelection(_idsOnLayer(id));
     for (final page in {
@@ -737,7 +740,7 @@ class InkController extends ChangeNotifier {
   String addBookmark({required String name, required int page, int? endPage}) {
     final b = Bookmark(
       id: _uuid.v4(),
-      name: name.trim().isEmpty ? 'Lesezeichen' : name.trim(),
+      name: name.trim().isEmpty ? tr('Lesezeichen', 'Bookmark') : name.trim(),
       page: page,
       endPage: endPage,
       createdAt: DateTime.now().toUtc(),
@@ -1094,7 +1097,7 @@ class InkController extends ChangeNotifier {
       saveError = null;
     } catch (e) {
       _dirty = true;
-      saveError = 'Speichern fehlgeschlagen: $e';
+      saveError = tr('Speichern fehlgeschlagen: $e', 'Saving failed: $e');
     }
     if (!_disposed) notifyListeners();
   }

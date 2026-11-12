@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../../app/l10n.dart';
+
 /// Ein Ordner in der Bibliothek (z. B. ein Projekt).
 ///
 /// Ordner sind nur eine Liste, die Volti sich merkt – die PDFs bleiben in
@@ -46,7 +48,7 @@ class ScoreFolder {
 
   static ScoreFolder fromJson(Map<String, dynamic> j) => ScoreFolder(
     id: j['id'] as String,
-    name: j['name'] as String? ?? 'Ordner',
+    name: j['name'] as String? ?? tr('Ordner', 'Folder'),
     parent: j['parent'] as String?,
     modified: DateTime.tryParse(j['modified'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
     deleted: j['deleted'] == true,

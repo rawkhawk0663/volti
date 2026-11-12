@@ -17,6 +17,7 @@ import 'library_actions.dart';
 import 'library_controller.dart';
 import 'sync_controller.dart';
 import 'open_scores.dart';
+import '../../app/l10n.dart';
 
 /// Übersicht aller Setlists – mit Suche, Ordnern und Mehrfachauswahl
 /// (wie die Bibliothek).
@@ -96,7 +97,8 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
 
   void _up() => _all ? _open(null) : _open(_current == null ? null : _book.tree.parentOf(_current!));
 
-  String _folderName(String? id) => id == null ? 'Setlists' : (_book.tree.byId(id)?.name ?? 'Ordner');
+  String _folderName(String? id) =>
+      id == null ? tr('Setlists', 'Setlists') : (_book.tree.byId(id)?.name ?? tr('Ordner', 'Folders'));
 
   List<Setlist> get _selectedLists => [
     for (final s in library.setlists)
@@ -110,7 +112,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
 
   // ------------------------------------------------------------ Aktionen
   Future<void> _newSetlist() async {
-    final name = await askForName(context, title: 'Neue Setlist', initial: '');
+    final name = await askForName(context, title: tr('Neue Setlist', 'New setlist'), initial: '');
     if (name == null || !mounted) return;
     final s = await library.createSetlist(name);
     final folder = _current;
@@ -122,14 +124,16 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
     final parent = _current;
     final name = await askForName(
       context,
-      title: parent == null ? 'Neuer Ordner' : 'Neuer Ordner in „${_folderName(parent)}“',
+      title: parent == null
+          ? tr('Neuer Ordner', 'New folder')
+          : tr('Neuer Ordner in „${_folderName(parent)}“', 'New folder in “${_folderName(parent)}”'),
       initial: '',
     );
     if (name != null) await _book.create(name, parent: parent);
   }
 
   Future<void> _rename(Setlist s) async {
-    final name = await askForName(context, title: 'Setlist umbenennen', initial: s.name);
+    final name = await askForName(context, title: tr('Setlist umbenennen', 'Rename setlist'), initial: s.name);
     if (name == null) return;
     s.name = name;
     await library.saveSetlist(s);
@@ -143,8 +147,8 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
       library,
       setlists: true,
       title: lists.length == 1
-          ? '„${lists.first.name}“ verschieben nach …'
-          : '${lists.length} Setlists verschieben nach …',
+          ? tr('„${lists.first.name}“ verschieben nach …', 'Move “${lists.first.name}” to …')
+          : tr('${lists.length} Setlists verschieben nach …', 'Move ${lists.length} setlists to …'),
       current: folders.length == 1 ? folders.first : '__keiner__',
     );
     if (to == null) return;
@@ -158,14 +162,22 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(one ? 'Setlist löschen?' : '${lists.length} Setlists löschen?'),
+        title: Text(
+          one
+              ? tr('Setlist löschen?', 'Delete setlist?')
+              : tr('${lists.length} Setlists löschen?', 'Delete ${lists.length} setlists?'),
+        ),
         content: Text(
-          '${one ? '„${lists.first.name}“ wird' : 'Die ${lists.length} Setlists werden'} gelöscht. '
-          'Die Noten selbst bleiben erhalten.',
+          tr(
+            '${one ? '„${lists.first.name}“ wird' : 'Die ${lists.length} Setlists werden'} gelöscht. '
+                'Die Noten selbst bleiben erhalten.',
+            '${one ? '“${lists.first.name}” will be' : 'The ${lists.length} setlists will be'} deleted. '
+                'The music itself is kept.',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Löschen')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Löschen', 'Delete'))),
         ],
       ),
     );
@@ -175,7 +187,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
   }
 
   Future<void> _renameFolder(ScoreFolder f) async {
-    final name = await askForName(context, title: 'Ordner umbenennen', initial: f.name);
+    final name = await askForName(context, title: tr('Ordner umbenennen', 'Rename folder'), initial: f.name);
     if (name != null) await _book.rename(f, name);
   }
 
@@ -184,7 +196,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
       context,
       library,
       setlists: true,
-      title: '„${f.name}“ verschieben nach …',
+      title: tr('„${f.name}“ verschieben nach …', 'Move “${f.name}” to …'),
       current: _book.tree.parentOf(f.id),
       exclude: f.id,
     );
@@ -197,18 +209,26 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('Ordner „${f.name}“ löschen?'),
+        title: Text(tr('Ordner „${f.name}“ löschen?', 'Delete folder “${f.name}”?')),
         content: Text(
-          '${n == 0
-              ? 'Der Ordner ist leer.'
-              : n == 1
-              ? 'Die Setlist darin wird nicht gelöscht.'
-              : 'Die $n Setlists darin werden nicht gelöscht.'} '
-          'Was im Ordner liegt, kommt nach „${_folderName(parent)}“.',
+          tr(
+            '${n == 0
+                    ? 'Der Ordner ist leer.'
+                    : n == 1
+                    ? 'Die Setlist darin wird nicht gelöscht.'
+                    : 'Die $n Setlists darin werden nicht gelöscht.'} '
+                'Was im Ordner liegt, kommt nach „${_folderName(parent)}“.',
+            '${n == 0
+                    ? 'The folder is empty.'
+                    : n == 1
+                    ? 'The setlist inside will not be deleted.'
+                    : 'The $n setlists inside will not be deleted.'} '
+                'Everything in the folder moves to “${_folderName(parent)}”.',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Ordner löschen')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Ordner löschen', 'Delete folder'))),
         ],
       ),
     );
@@ -219,8 +239,8 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
       SnackBar(
         persist: false,
         duration: const Duration(seconds: 6),
-        content: Text('Ordner „${f.name}“ gelöscht'),
-        action: SnackBarAction(label: 'Rückgängig', onPressed: () => _book.restore(f)),
+        content: Text(tr('Ordner „${f.name}“ gelöscht', 'Folder “${f.name}” deleted')),
+        action: SnackBarAction(label: tr('Rückgängig', 'Undo'), onPressed: () => _book.restore(f)),
       ),
     );
   }
@@ -228,45 +248,51 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
   List<PopupMenuEntry<VoidCallback>> _folderMenu(ScoreFolder f) => [
     PopupMenuItem(
       value: () => _open(f.id),
-      child: const ListTile(leading: Icon(Icons.folder_open_outlined), title: Text('Öffnen')),
+      child: ListTile(leading: Icon(Icons.folder_open_outlined), title: Text(tr('Öffnen', 'Open'))),
     ),
     PopupMenuItem(
       value: () => _renameFolder(f),
-      child: const ListTile(leading: Icon(Icons.drive_file_rename_outline), title: Text('Umbenennen …')),
+      child: ListTile(leading: Icon(Icons.drive_file_rename_outline), title: Text(tr('Umbenennen …', 'Rename …'))),
     ),
     PopupMenuItem(
       value: () => _moveFolder(f),
-      child: const ListTile(leading: Icon(Icons.drive_file_move_outline), title: Text('Verschieben …')),
+      child: ListTile(leading: Icon(Icons.drive_file_move_outline), title: Text(tr('Verschieben …', 'Move …'))),
     ),
     const PopupMenuDivider(),
     PopupMenuItem(
       value: () => _deleteFolder(f),
-      child: const ListTile(leading: Icon(Icons.folder_delete_outlined), title: Text('Ordner löschen …')),
+      child: ListTile(
+        leading: Icon(Icons.folder_delete_outlined),
+        title: Text(tr('Ordner löschen …', 'Delete folder …')),
+      ),
     ),
   ];
 
   List<PopupMenuEntry<VoidCallback>> _menu(Setlist s) => [
     PopupMenuItem(
       value: () => _openDetail(s),
-      child: const ListTile(leading: Icon(Icons.open_in_new), title: Text('Öffnen')),
+      child: ListTile(leading: Icon(Icons.open_in_new), title: Text(tr('Öffnen', 'Open'))),
     ),
     if (s.items.isNotEmpty)
       PopupMenuItem(
         value: () => playSetlist(context, library, s),
-        child: const ListTile(leading: Icon(Icons.play_arrow), title: Text('Spielen')),
+        child: ListTile(leading: Icon(Icons.play_arrow), title: Text(tr('Spielen', 'Play'))),
       ),
     PopupMenuItem(
       value: () => _rename(s),
-      child: const ListTile(leading: Icon(Icons.edit_outlined), title: Text('Umbenennen …')),
+      child: ListTile(leading: Icon(Icons.edit_outlined), title: Text(tr('Umbenennen …', 'Rename …'))),
     ),
     PopupMenuItem(
       value: () => _move([s]),
-      child: const ListTile(leading: Icon(Icons.drive_file_move_outline), title: Text('In Ordner verschieben …')),
+      child: ListTile(
+        leading: Icon(Icons.drive_file_move_outline),
+        title: Text(tr('In Ordner verschieben …', 'Move to folder …')),
+      ),
     ),
     if (s.items.isNotEmpty)
       PopupMenuItem(
         value: () => _exportSetlist(context, library, s),
-        child: const ListTile(leading: Icon(Icons.ios_share), title: Text('Als PDF teilen …')),
+        child: ListTile(leading: Icon(Icons.ios_share), title: Text(tr('Als PDF teilen …', 'Share as PDF …'))),
       ),
     if (!_selecting)
       PopupMenuItem(
@@ -276,12 +302,12 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
             ..clear()
             ..add(s.id);
         }),
-        child: const ListTile(leading: Icon(Icons.checklist), title: Text('Mehrere auswählen')),
+        child: ListTile(leading: Icon(Icons.checklist), title: Text(tr('Mehrere auswählen', 'Select several'))),
       ),
     const PopupMenuDivider(),
     PopupMenuItem(
       value: () => _delete([s]),
-      child: const ListTile(leading: Icon(Icons.delete_outline), title: Text('Löschen …')),
+      child: ListTile(leading: Icon(Icons.delete_outline), title: Text(tr('Löschen …', 'Delete …'))),
     ),
   ];
 
@@ -353,14 +379,18 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
             height: 56,
             child: Row(
               children: [
-                IconButton(tooltip: 'Auswahl beenden', onPressed: _endSelecting, icon: const Icon(Icons.close)),
+                IconButton(
+                  tooltip: tr('Auswahl beenden', 'Done selecting'),
+                  onPressed: _endSelecting,
+                  icon: const Icon(Icons.close),
+                ),
                 Expanded(
                   child: Text(
                     chosen.isEmpty
-                        ? 'Setlists antippen zum Auswählen'
+                        ? tr('Setlists antippen zum Auswählen', 'Tap setlists to select them')
                         : chosen.length == 1
-                        ? '1 Setlist ausgewählt'
-                        : '${chosen.length} Setlists ausgewählt',
+                        ? tr('1 Setlist ausgewählt', '1 setlist selected')
+                        : tr('${chosen.length} Setlists ausgewählt', '${chosen.length} setlists selected'),
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleSmall,
                   ),
@@ -375,15 +405,15 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
                             _selected.addAll(lists.map((s) => s.id));
                           }
                         }),
-                  child: Text(allChosen ? 'Keine' : 'Alle'),
+                  child: Text(allChosen ? tr('Keine', 'None') : tr('Alle', 'All')),
                 ),
                 IconButton(
-                  tooltip: 'In Ordner verschieben',
+                  tooltip: tr('In Ordner verschieben', 'Move to folder'),
                   onPressed: chosen.isEmpty ? null : () => _move(chosen),
                   icon: const Icon(Icons.drive_file_move_outline),
                 ),
                 IconButton(
-                  tooltip: 'Löschen',
+                  tooltip: tr('Löschen', 'Delete'),
                   onPressed: chosen.isEmpty ? null : () => _delete(chosen),
                   icon: const Icon(Icons.delete_outline),
                 ),
@@ -401,11 +431,15 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
             Expanded(
               child: SearchBar(
                 controller: _search,
-                hintText: 'Setlist oder Song suchen',
+                hintText: tr('Setlist oder Song suchen', 'Search setlists or songs'),
                 leading: const Icon(Icons.search),
                 trailing: [
                   if (_query.isNotEmpty)
-                    IconButton(tooltip: 'Suche leeren', icon: const Icon(Icons.close), onPressed: _clearSearch),
+                    IconButton(
+                      tooltip: tr('Suche leeren', 'Clear search'),
+                      icon: const Icon(Icons.close),
+                      onPressed: _clearSearch,
+                    ),
                 ],
                 elevation: const WidgetStatePropertyAll(0),
                 onChanged: (v) => setState(() => _query = v),
@@ -413,12 +447,14 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
             ),
             const SizedBox(width: 8),
             IconButton(
-              tooltip: current == null ? 'Neuer Ordner' : 'Neuer Ordner in „${_folderName(current)}“',
+              tooltip: current == null
+                  ? tr('Neuer Ordner', 'New folder')
+                  : tr('Neuer Ordner in „${_folderName(current)}“', 'New folder in “${_folderName(current)}”'),
               onPressed: _all ? null : _newFolder,
               icon: const Icon(Icons.create_new_folder_outlined),
             ),
             IconButton(
-              tooltip: 'Mehrere auswählen',
+              tooltip: tr('Mehrere auswählen', 'Select several'),
               onPressed: library.setlists.isEmpty ? null : () => setState(() => _selecting = true),
               icon: const Icon(Icons.checklist),
             ),
@@ -459,7 +495,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
         padding: const EdgeInsets.fromLTRB(8, 0, 16, 0),
         child: Row(
           children: [
-            IconButton(tooltip: 'Zurück', onPressed: _up, icon: const Icon(Icons.arrow_back)),
+            IconButton(tooltip: tr('Zurück', 'Back'), onPressed: _up, icon: const Icon(Icons.arrow_back)),
             Expanded(
               child: Align(
                 alignment: Alignment.centerLeft,
@@ -468,12 +504,12 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
                   reverse: true,
                   child: Row(
                     children: [
-                      crumb(null, 'Setlists', last: false),
+                      crumb(null, tr('Setlists', 'Setlists'), last: false),
                       if (_all) ...[
                         sep,
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('Alle Setlists', style: theme.textTheme.titleMedium),
+                          child: Text(tr('Alle Setlists', 'All setlists'), style: theme.textTheme.titleMedium),
                         ),
                       ],
                       for (final (i, f) in path.indexed) ...[sep, crumb(f.id, f.name, last: i == path.length - 1)],
@@ -484,7 +520,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
             ),
             if (current != null)
               PopupMenuButton<VoidCallback>(
-                tooltip: 'Ordner',
+                tooltip: tr('Ordner', 'Folders'),
                 icon: const Icon(Icons.more_vert),
                 onSelected: (a) => a(),
                 itemBuilder: (_) => _folderMenu(tree.byId(current)!).skip(1).toList(),
@@ -494,7 +530,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
       );
     }
 
-    String count(int n) => n == 1 ? '1 Setlist' : '$n Setlists';
+    String count(int n) => n == 1 ? tr('1 Setlist', '1 setlist') : tr('$n Setlists', '$n setlists');
     final empty = library.setlists.isEmpty && tree.live.isEmpty;
 
     return PopScope(
@@ -510,7 +546,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
             : FloatingActionButton.extended(
                 onPressed: _newSetlist,
                 icon: const Icon(Icons.add),
-                label: const Text('Neue Setlist'),
+                label: Text(tr('Neue Setlist', 'New setlist')),
               ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -523,8 +559,12 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
                       child: Padding(
                         padding: const EdgeInsets.all(32),
                         child: Text(
-                          'Noch keine Setlists.\nEine Setlist ist eine Reihenfolge von Stücken, z. B. für ein Konzert. '
-                          'Beim Spielen geht es nach der letzten Seite direkt zum nächsten Stück.',
+                          tr(
+                            'Noch keine Setlists.\nEine Setlist ist eine Reihenfolge von Stücken, z. B. für ein Konzert. '
+                                'Beim Spielen geht es nach der letzten Seite direkt zum nächsten Stück.',
+                            'No setlists yet.\nA setlist is a sequence of pieces, e.g. for a concert. '
+                                'While playing, the last page of a piece leads straight to the next one.',
+                          ),
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium,
                         ),
@@ -548,7 +588,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
                                     library: library,
                                     setlists: true,
                                     icon: Icons.queue_music_outlined,
-                                    name: 'Alle Setlists',
+                                    name: tr('Alle Setlists', 'All setlists'),
                                     subtitle: count(library.setlists.length),
                                     onOpen: () => _open(null, all: true),
                                   ),
@@ -575,7 +615,9 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
                             hasScrollBody: false,
                             child: Center(
                               child: Text(
-                                searching ? 'Keine Treffer.' : 'Dieser Ordner ist noch leer.',
+                                searching
+                                    ? tr('Keine Treffer.', 'No matches.')
+                                    : tr('Dieser Ordner ist noch leer.', 'This folder is still empty.'),
                                 style: theme.textTheme.bodyMedium,
                               ),
                             ),
@@ -601,7 +643,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
     final selected = _selecting ? _selected.contains(s.id) : null;
     final folder = showFolder ? library.setlistFolderOf(s) : null;
     final sub = [
-      s.items.length == 1 ? '1 Stück' : '${s.items.length} Stücke',
+      s.items.length == 1 ? tr('1 Stück', '1 piece') : tr('${s.items.length} Stücke', '${s.items.length} pieces'),
       if (folder != null) '📁 ${_folderName(folder)}',
     ].join(' · ');
     Future<void> menuAt(Offset at) async {
@@ -627,7 +669,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
           trailing: _selecting
               ? null
               : IconButton(
-                  tooltip: 'Spielen',
+                  tooltip: tr('Spielen', 'Play'),
                   icon: const Icon(Icons.play_arrow),
                   onPressed: s.items.isEmpty ? null : () => playSetlist(context, library, s),
                 ),
@@ -649,7 +691,7 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
         data: LibraryDrag(setlists: dragged),
         feedback: dragFeedback(
           context,
-          dragged.length == 1 ? s.name : '${dragged.length} Setlists',
+          dragged.length == 1 ? s.name : tr('${dragged.length} Setlists', '${dragged.length} setlists'),
           icon: Icons.queue_music,
         ),
         childWhenDragging: Opacity(opacity: 0.4, child: card),
@@ -719,7 +761,7 @@ class SetlistDetailScreen extends StatelessWidget {
               leading: onBack == null
                   ? null
                   : IconButton(
-                      tooltip: 'Zurück zu den Setlists',
+                      tooltip: tr('Zurück zu den Setlists', 'Back to the setlists'),
                       icon: const Icon(Icons.arrow_back),
                       onPressed: onBack,
                     ),
@@ -727,32 +769,41 @@ class SetlistDetailScreen extends StatelessWidget {
               title: Text(s.name),
               actions: [
                 IconButton(
-                  tooltip: 'Ganze Setlist als PDF (z. B. für die Band)',
+                  tooltip: tr('Ganze Setlist als PDF (z. B. für die Band)', 'Whole setlist as PDF (e.g. for the band)'),
                   icon: const Icon(Icons.ios_share),
                   onPressed: s.items.isEmpty ? null : () => _exportSetlist(context, library, s),
                 ),
                 IconButton(
-                  tooltip: 'Umbenennen',
+                  tooltip: tr('Umbenennen', 'Rename'),
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: () async {
-                    final name = await askForName(context, title: 'Setlist umbenennen', initial: s.name);
+                    final name = await askForName(
+                      context,
+                      title: tr('Setlist umbenennen', 'Rename setlist'),
+                      initial: s.name,
+                    );
                     if (name == null) return;
                     s.name = name;
                     await library.saveSetlist(s);
                   },
                 ),
                 IconButton(
-                  tooltip: 'Setlist löschen',
+                  tooltip: tr('Setlist löschen', 'Delete setlist'),
                   icon: const Icon(Icons.delete_outline),
                   onPressed: () async {
                     final ok = await showDialog<bool>(
                       context: context,
                       builder: (c) => AlertDialog(
-                        title: const Text('Setlist löschen?'),
-                        content: Text('„${s.name}“ wird gelöscht. Die Noten selbst bleiben erhalten.'),
+                        title: Text(tr('Setlist löschen?', 'Delete setlist?')),
+                        content: Text(
+                          tr(
+                            '„${s.name}“ wird gelöscht. Die Noten selbst bleiben erhalten.',
+                            '“${s.name}” will be deleted. The music itself is kept.',
+                          ),
+                        ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-                          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Löschen')),
+                          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+                          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Löschen', 'Delete'))),
                         ],
                       ),
                     );
@@ -770,7 +821,7 @@ class SetlistDetailScreen extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: s.items.isEmpty ? null : () => playSetlist(context, library, s),
                   icon: const Icon(Icons.play_arrow),
-                  label: const Text('Spielen'),
+                  label: Text(tr('Spielen', 'Play')),
                 ),
                 const SizedBox(width: 8),
                 const WindowButtons(),
@@ -782,15 +833,22 @@ class SetlistDetailScreen extends StatelessWidget {
               children: [
                 FloatingActionButton.extended(
                   heroTag: 'sheet',
-                  tooltip: 'Leeres Blatt für Notizen (z. B. als Music Director)',
+                  tooltip: tr(
+                    'Leeres Blatt für Notizen (z. B. als Music Director)',
+                    'Blank sheet for notes (e.g. as music director)',
+                  ),
                   onPressed: () async {
-                    final name = await askForName(context, title: 'Neues Notizblatt', initial: 'Notizen');
+                    final name = await askForName(
+                      context,
+                      title: tr('Neues Notizblatt', 'New note sheet'),
+                      initial: tr('Notizen', 'Notes'),
+                    );
                     if (name == null) return;
                     final sheet = await library.createSheet(name);
                     if (sheet != null) await library.addToSetlist(s, [sheet]);
                   },
                   icon: const Icon(Icons.sticky_note_2_outlined),
-                  label: const Text('Notizblatt'),
+                  label: Text(tr('Notizblatt', 'Note sheet')),
                 ),
                 const SizedBox(width: 12),
                 FloatingActionButton.extended(
@@ -800,12 +858,12 @@ class SetlistDetailScreen extends StatelessWidget {
                     if (picked != null && picked.isNotEmpty) await library.addToSetlist(s, picked);
                   },
                   icon: const Icon(Icons.add),
-                  label: const Text('Stücke hinzufügen'),
+                  label: Text(tr('Stücke hinzufügen', 'Add pieces')),
                 ),
               ],
             ),
             body: s.items.isEmpty
-                ? const Center(child: Text('Noch leer. Füge Stücke hinzu.'))
+                ? Center(child: Text(tr('Noch leer. Füge Stücke hinzu.', 'Still empty. Add some pieces.')))
                 : ReorderableListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
                     itemCount: s.items.length,
@@ -842,36 +900,51 @@ class SetlistDetailScreen extends StatelessWidget {
                             ],
                           ),
                           subtitle: entry?.isSheet == true
-                              ? const Text('Notizblatt – zum Beschreiben; mehr Seiten über ⋮ → Leere Seite einfügen')
+                              ? Text(
+                                  tr(
+                                    'Notizblatt – zum Beschreiben; mehr Seiten über ⋮ → Leere Seite einfügen',
+                                    'Note sheet – for writing on; more pages via ⋮ → Insert blank page',
+                                  ),
+                                )
                               : entry == null
                               ? Text(
-                                  'Nicht gefunden – umbenannt oder gelöscht?',
+                                  tr('Nicht gefunden – umbenannt oder gelöscht?', 'Not found – renamed or deleted?'),
                                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                                 )
                               : item.bookmark != null
-                              ? Text('Lesezeichen in «${entry.title}»')
+                              ? Text(tr('Lesezeichen in «${entry.title}»', 'Bookmark in «${entry.title}»'))
                               : (entry.composer == null ? null : Text(entry.composer!)),
                           onTap: entry == null ? null : () => playSetlist(context, library, s, start: i),
                           trailing: Padding(
                             padding: const EdgeInsets.only(right: 24), // Platz für den Zieh-Griff
                             child: IconButton(
-                              tooltip: 'Aus Setlist entfernen',
+                              tooltip: tr('Aus Setlist entfernen', 'Remove from setlist'),
                               icon: const Icon(Icons.remove_circle_outline),
                               onPressed: () async {
                                 if (entry?.isSheet == true && entry!.hasAnnotations) {
                                   final ok = await showDialog<bool>(
                                     context: context,
                                     builder: (c) => AlertDialog(
-                                      title: Text('Notizblatt „${entry.title}“ entfernen?'),
-                                      content: const Text('Deine Notizen darauf werden gelöscht.'),
+                                      title: Text(
+                                        tr(
+                                          'Notizblatt „${entry.title}“ entfernen?',
+                                          'Remove note sheet “${entry.title}”?',
+                                        ),
+                                      ),
+                                      content: Text(
+                                        tr(
+                                          'Deine Notizen darauf werden gelöscht.',
+                                          'Your notes on it will be deleted.',
+                                        ),
+                                      ),
                                       actions: [
                                         TextButton(
                                           onPressed: () => Navigator.pop(c, false),
-                                          child: const Text('Abbrechen'),
+                                          child: Text(tr('Abbrechen', 'Cancel')),
                                         ),
                                         FilledButton(
                                           onPressed: () => Navigator.pop(c, true),
-                                          child: const Text('Entfernen'),
+                                          child: Text(tr('Entfernen', 'Remove')),
                                         ),
                                       ],
                                     ),
@@ -908,11 +981,11 @@ Future<String?> askForName(BuildContext context, {required String title, require
         content: TextField(
           controller: c,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Name'),
+          decoration: InputDecoration(labelText: tr('Name', 'Name')),
           onSubmitted: (_) => submit(),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Abbrechen', 'Cancel'))),
           FilledButton(onPressed: submit, child: const Text('OK')),
         ],
       );
@@ -996,10 +1069,10 @@ class _ScorePickerState extends State<_ScorePicker> {
       onTap: onTap,
     );
 
-    String count(int n) => n == 1 ? '1 Stück' : '$n Stücke';
+    String count(int n) => n == 1 ? tr('1 Stück', '1 piece') : tr('$n Stücke', '$n pieces');
 
     return AlertDialog(
-      title: const Text('Stücke hinzufügen'),
+      title: Text(tr('Stücke hinzufügen', 'Add pieces')),
       contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       content: SizedBox(
         width: math.min(640, size.width - 48),
@@ -1011,10 +1084,14 @@ class _ScorePickerState extends State<_ScorePicker> {
               controller: _search,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search),
-                hintText: 'Titel, Komponist, Tonart … suchen',
+                hintText: tr('Titel, Komponist, Tonart … suchen', 'Search title, composer, key …'),
                 suffixIcon: _query.isEmpty
                     ? null
-                    : IconButton(tooltip: 'Suche leeren', icon: const Icon(Icons.close), onPressed: _clearSearch),
+                    : IconButton(
+                        tooltip: tr('Suche leeren', 'Clear search'),
+                        icon: const Icon(Icons.close),
+                        onPressed: _clearSearch,
+                      ),
               ),
               onChanged: (v) => setState(() => _query = v),
             ),
@@ -1024,13 +1101,17 @@ class _ScorePickerState extends State<_ScorePicker> {
                 child: Row(
                   children: [
                     IconButton(
-                      tooltip: 'Zurück',
+                      tooltip: tr('Zurück', 'Back'),
                       icon: const Icon(Icons.arrow_back),
                       onPressed: () => _all ? _open(null) : _open(tree.parentOf(current!)),
                     ),
                     Expanded(
                       child: Text(
-                        ['Bibliothek', if (_all) 'Alle Noten', for (final f in path) f.name].join(' › '),
+                        [
+                          tr('Bibliothek', 'Library'),
+                          if (_all) tr('Alle Noten', 'All music'),
+                          for (final f in path) f.name,
+                        ].join(' › '),
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleSmall,
                       ),
@@ -1045,7 +1126,7 @@ class _ScorePickerState extends State<_ScorePicker> {
                   if (showAll)
                     folderRow(
                       Icons.library_books_outlined,
-                      'Alle Noten',
+                      tr('Alle Noten', 'All music'),
                       count(lib.scores.length),
                       () => _open(null, all: true),
                     ),
@@ -1060,7 +1141,9 @@ class _ScorePickerState extends State<_ScorePicker> {
                     Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        searching ? 'Keine Treffer.' : 'Hier liegen keine Stücke.',
+                        searching
+                            ? tr('Keine Treffer.', 'No matches.')
+                            : tr('Hier liegen keine Stücke.', 'There are no pieces here.'),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -1071,10 +1154,14 @@ class _ScorePickerState extends State<_ScorePicker> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Abbrechen', 'Cancel'))),
         FilledButton(
           onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, _selected),
-          child: Text(_selected.isEmpty ? 'Hinzufügen' : '${_selected.length} hinzufügen'),
+          child: Text(
+            _selected.isEmpty
+                ? tr('Hinzufügen', 'Add')
+                : tr('${_selected.length} hinzufügen', 'Add ${_selected.length}'),
+          ),
         ),
       ],
     );
@@ -1140,17 +1227,21 @@ Future<void> addManyToSetlistDialog(
 }) async {
   if (entries.isEmpty) return;
   const newOne = '__neu__';
-  final what = entries.length == 1 ? '„${label ?? entries.first.title}“' : '${entries.length} Stücke';
+  final what = entries.length == 1
+      ? '„${label ?? entries.first.title}“'
+      : tr('${entries.length} Stücke', '${entries.length} pieces');
   final choice = await showDialog<String>(
     context: context,
     builder: (c) => SimpleDialog(
-      title: Text('$what hinzufügen zu …'),
+      title: Text(tr('$what hinzufügen zu …', 'Add $what to …')),
       children: [
         for (final s in library.setlists)
           SimpleDialogOption(onPressed: () => Navigator.pop(c, s.id), child: Text(s.name)),
         SimpleDialogOption(
           onPressed: () => Navigator.pop(c, newOne),
-          child: const Row(children: [Icon(Icons.add, size: 18), SizedBox(width: 8), Text('Neue Setlist …')]),
+          child: Row(
+            children: [Icon(Icons.add, size: 18), SizedBox(width: 8), Text(tr('Neue Setlist …', 'New setlist …'))],
+          ),
         ),
       ],
     ),
@@ -1158,7 +1249,7 @@ Future<void> addManyToSetlistDialog(
   if (choice == null || !context.mounted) return;
   Setlist? target;
   if (choice == newOne) {
-    final name = await askForName(context, title: 'Neue Setlist', initial: '');
+    final name = await askForName(context, title: tr('Neue Setlist', 'New setlist'), initial: '');
     if (name == null) return;
     target = await library.createSetlist(name);
   } else {
@@ -1170,6 +1261,7 @@ Future<void> addManyToSetlistDialog(
     await library.addToSetlist(target, entries);
   }
   if (context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Zu „${target.name}“ hinzugefügt')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(tr('Zu „${target.name}“ hinzugefügt', 'Added to “${target.name}”'))));
   }
 }

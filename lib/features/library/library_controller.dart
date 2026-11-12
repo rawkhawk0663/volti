@@ -14,6 +14,7 @@ import '../../core/library/score_meta.dart';
 import '../../core/library/setlist.dart';
 import '../../core/library/sidecar_store.dart';
 import 'auto_backup_controller.dart';
+import '../../app/l10n.dart';
 
 /// Hält den Zustand der Bibliothek: Stücke und Setlists.
 ///
@@ -95,7 +96,7 @@ class LibraryController extends ChangeNotifier {
       await scoreFolders.load();
       await setlistFolders.load();
     } catch (e) {
-      error = 'Die Bibliothek konnte nicht gelesen werden: $e';
+      error = tr('Die Bibliothek konnte nicht gelesen werden: $e', 'The library could not be read: $e');
     }
     _loading = false;
     notifyListeners();

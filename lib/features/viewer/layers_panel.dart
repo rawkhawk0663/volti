@@ -5,6 +5,7 @@ import '../../core/ink/annotation_layer.dart';
 import '../../core/ink/layer_drop.dart';
 import 'ink_controller.dart';
 import 'tool_controller.dart';
+import '../../app/l10n.dart';
 
 /// Ebenen eines Stücks – im Werkzeug-Fenster, am selben Ort wie die
 /// Werkzeug-Einstellungen. Anlegen, Gruppen, ein-/ausblenden, ordnen,
@@ -79,8 +80,12 @@ class _LayersPanelState extends State<LayersPanel> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
-                  'Neue Ebenen gelten nur in dieser Setlist. Ebenen mit dem Bibliotheks-Zeichen gehören zum Song '
-                  'und sind überall sichtbar.',
+                  tr(
+                    'Neue Ebenen gelten nur in dieser Setlist. Ebenen mit dem Bibliotheks-Zeichen gehören zum Song '
+                        'und sind überall sichtbar.',
+                    'New layers apply only to this setlist. Layers with the library sign belong to the song '
+                        'and are visible everywhere.',
+                  ),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
@@ -89,19 +94,23 @@ class _LayersPanelState extends State<LayersPanel> {
               children: [
                 TextButton.icon(
                   onPressed: () async {
-                    final name = await askName(context, 'Neue Ebene', 'Ebene ${ink.drawableLayers.length + 1}');
+                    final name = await askName(
+                      context,
+                      tr('Neue Ebene', 'New layer'),
+                      tr('Ebene ${ink.drawableLayers.length + 1}', 'Layer ${ink.drawableLayers.length + 1}'),
+                    );
                     if (name != null) ink.addLayer(name);
                   },
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Ebene'),
+                  label: Text(tr('Ebene', 'Layer')),
                 ),
                 TextButton.icon(
                   onPressed: () async {
-                    final name = await askName(context, 'Neue Gruppe', 'Gruppe');
+                    final name = await askName(context, tr('Neue Gruppe', 'New group'), tr('Gruppe', 'Group'));
                     if (name != null) ink.addGroup(name);
                   },
                   icon: const Icon(Icons.create_new_folder_outlined, size: 18),
-                  label: const Text('Gruppe'),
+                  label: Text(tr('Gruppe', 'Group')),
                 ),
               ],
             ),
@@ -142,8 +151,12 @@ class _LayersPanelState extends State<LayersPanel> {
               ),
             const SizedBox(height: 6),
             Text(
-              'Antippen: darauf zeichnen. Am Griff ziehen: Reihenfolge ändern, auch in eine Gruppe hinein. '
-              'Ebenen gelten für das ganze Stück.',
+              tr(
+                'Antippen: darauf zeichnen. Am Griff ziehen: Reihenfolge ändern, auch in eine Gruppe hinein. '
+                    'Ebenen gelten für das ganze Stück.',
+                'Tap: draw on it. Drag the handle: change the order, also into a group. '
+                    'Layers apply to the whole piece.',
+              ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
@@ -281,8 +294,11 @@ class _Row extends StatelessWidget {
                 if (ink.scope != null)
                   Tooltip(
                     message: layer.scope != null
-                        ? 'Nur in dieser Setlist'
-                        : 'Gehört zum Song – in der Bibliothek und allen Setlists',
+                        ? tr('Nur in dieser Setlist', 'Only in this setlist')
+                        : tr(
+                            'Gehört zum Song – in der Bibliothek und allen Setlists',
+                            'Belongs to the song – in the library and all setlists',
+                          ),
                     child: Icon(
                       layer.scope != null ? Icons.queue_music : Icons.library_music_outlined,
                       size: 16,
@@ -291,12 +307,12 @@ class _Row extends StatelessWidget {
                   ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  tooltip: layer.visible ? 'Ausblenden' : 'Einblenden',
+                  tooltip: layer.visible ? tr('Ausblenden', 'Hide') : tr('Einblenden', 'Show'),
                   icon: Icon(layer.visible ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
                   onPressed: () => ink.setLayerVisible(layer.id, !layer.visible),
                 ),
                 PopupMenuButton<VoidCallback>(
-                  tooltip: 'Mehr',
+                  tooltip: tr('Mehr', 'More'),
                   padding: EdgeInsets.zero,
                   iconSize: 20,
                   onSelected: (a) => a(),
@@ -305,42 +321,50 @@ class _Row extends StatelessWidget {
                       value: () async {
                         final name = await askName(
                           context,
-                          layer.isGroup ? 'Gruppe umbenennen' : 'Ebene umbenennen',
+                          layer.isGroup
+                              ? tr('Gruppe umbenennen', 'Rename group')
+                              : tr('Ebene umbenennen', 'Rename layer'),
                           layer.name,
                         );
                         if (name != null) ink.renameLayer(layer.id, name);
                       },
-                      child: const Text('Umbenennen …'),
+                      child: Text(tr('Umbenennen …', 'Rename …')),
                     ),
                     if (layer.isGroup) ...[
                       PopupMenuItem(
                         value: () async {
                           final name = await askName(
                             context,
-                            'Neue Ebene in «${layer.name}»',
-                            'Ebene ${ink.drawableLayers.length + 1}',
+                            tr('Neue Ebene in «${layer.name}»', 'New layer in «${layer.name}»'),
+                            tr('Ebene ${ink.drawableLayers.length + 1}', 'Layer ${ink.drawableLayers.length + 1}'),
                           );
                           if (name != null) ink.addLayer(name, group: layer.id);
                         },
-                        child: const Text('Neue Ebene darin …'),
+                        child: Text(tr('Neue Ebene darin …', 'New layer inside …')),
                       ),
-                      PopupMenuItem(value: () => ink.dissolveGroup(layer.id), child: const Text('Gruppe auflösen')),
+                      PopupMenuItem(
+                        value: () => ink.dissolveGroup(layer.id),
+                        child: Text(tr('Gruppe auflösen', 'Ungroup')),
+                      ),
                     ] else ...[
-                      PopupMenuItem(value: () => ink.duplicateLayer(layer.id), child: const Text('Duplizieren')),
+                      PopupMenuItem(
+                        value: () => ink.duplicateLayer(layer.id),
+                        child: Text(tr('Duplizieren', 'Duplicate')),
+                      ),
                       for (final g in groups)
                         if (g.id != layer.parent)
                           PopupMenuItem(
                             value: () => ink.moveLayerToGroup(layer.id, g.id),
-                            child: Text('In Gruppe «${g.name}»'),
+                            child: Text(tr('In Gruppe «${g.name}»', 'Into group «${g.name}»')),
                           ),
                       if (layer.parent != null && ink.annotations.groupOf(layer) != null)
                         PopupMenuItem(
                           value: () => ink.moveLayerToGroup(layer.id, null),
-                          child: const Text('Aus der Gruppe nehmen'),
+                          child: Text(tr('Aus der Gruppe nehmen', 'Take out of the group')),
                         ),
                     ],
                     if (!layer.isDefault)
-                      PopupMenuItem(value: () => _confirmDelete(context), child: const Text('Löschen …')),
+                      PopupMenuItem(value: () => _confirmDelete(context), child: Text(tr('Löschen …', 'Delete …'))),
                   ],
                 ),
               ],
@@ -353,20 +377,29 @@ class _Row extends StatelessWidget {
 
   Future<void> _confirmDelete(BuildContext context) async {
     final count = ink.countOnLayer(layer.id);
-    final what = layer.isGroup ? 'Die Gruppe und alle Ebenen darin' : 'Die Ebene';
+    final what = layer.isGroup
+        ? tr('Die Gruppe und alle Ebenen darin', 'The group and all layers in it')
+        : tr('Die Ebene', 'The layer');
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('«${layer.name}» löschen?'),
+        title: Text(tr('«${layer.name}» löschen?', 'Delete «${layer.name}»?')),
         content: Text(
           count == 0
-              ? '$what werden gelöscht. Mit «Rückgängig» lässt sich das zurückholen.'
-              : '$what werden gelöscht, mitsamt ${count == 1 ? 'dem Element' : 'den $count Elementen'} darauf '
-                    '(auf allen Seiten). Mit «Rückgängig» lässt sich alles zurückholen.',
+              ? tr(
+                  '$what werden gelöscht. Mit «Rückgängig» lässt sich das zurückholen.',
+                  '$what will be deleted. You can bring it back with «Undo».',
+                )
+              : tr(
+                  '$what werden gelöscht, mitsamt ${count == 1 ? 'dem Element' : 'den $count Elementen'} darauf '
+                      '(auf allen Seiten). Mit «Rückgängig» lässt sich alles zurückholen.',
+                  '$what will be deleted, together with ${count == 1 ? 'the element' : 'the $count elements'} on it '
+                      '(on all pages). You can bring everything back with «Undo».',
+                ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Löschen')),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: Text(tr('Löschen', 'Delete'))),
         ],
       ),
     );
@@ -384,11 +417,13 @@ Future<String?> askName(BuildContext context, String title, String initial) {
       content: TextField(
         controller: text,
         autofocus: true,
-        decoration: const InputDecoration(hintText: 'z. B. Fingersätze, Dynamik, Probe'),
+        decoration: InputDecoration(
+          hintText: tr('z. B. Fingersätze, Dynamik, Probe', 'e.g. fingerings, dynamics, rehearsal'),
+        ),
         onSubmitted: (v) => Navigator.of(context).pop(v),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(tr('Abbrechen', 'Cancel'))),
         FilledButton(onPressed: () => Navigator.of(context).pop(text.text), child: const Text('OK')),
       ],
     ),
@@ -431,7 +466,7 @@ class ActiveLayerChip extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Ebene: $name',
+                    tr('Ebene: $name', 'Layer: $name'),
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.primary),
                   ),
