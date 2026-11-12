@@ -945,6 +945,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
             zoom: _zoom,
             tools: tools,
             onTap: _cleanTap,
+            onFingerSwipe: reading ? null : _onEditSwipe,
             child: LayoutBuilder(builder: (context, box) => _buildPages(box)),
           ),
         ),
@@ -998,6 +999,14 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final v = d.primaryVelocity ?? 0;
     if (v < -300) _next();
     if (v > 300) _prev();
+  }
+
+  /// Beim Bearbeiten: zügig mit einem Finger wischen blättert (die Regeln
+  /// stehen in [FingerSwipe]). Nicht beim Tippen einer Notiz und nicht am Lineal.
+  void _onEditSwipe(int direction) {
+    if (!tools.swipeWhileEditing || _editingText || tools.rulerRecentlyUsed) return;
+    if (tools.mode == ToolMode.read) return;
+    direction < 0 ? _next() : _prev();
   }
 
   /// Eine oder zwei Seiten, so gross wie möglich.

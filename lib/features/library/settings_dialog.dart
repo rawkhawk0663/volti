@@ -154,6 +154,16 @@ class _SettingsDialog extends StatelessWidget {
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
+                      title: const Text('Beim Bearbeiten mit dem Finger blättern'),
+                      subtitle: const Text(
+                        'Mit einem Finger zügig nach links oder rechts wischen. '
+                        'Eine aufliegende Hand blättert nicht, ebenso wenig, solange der Stift in der Nähe ist.',
+                      ),
+                      value: tools.swipeWhileEditing,
+                      onChanged: tools.setSwipeWhileEditing,
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
                       title: const Text('Werkzeugleiste links'),
                       subtitle: const Text('Aus: am rechten Rand (z. B. für Linkshänder).'),
                       value: tools.paletteLeft,

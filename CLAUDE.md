@@ -154,6 +154,8 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 
 39. **Automatische Sicherung** (`core/library/auto_backup.dart`, `AutoBackupController` in `LibraryController.autoBackup`): Standard an, einmal pro Woche (Prüfung 1 min nach dem Start und alle 6 h), im Hintergrund (`Isolate.run`) als `Volti-Auto-Sicherung-<datum>.zip` nach `Dokumente\Volti-Sicherungen` oder in einen gewählten Ordner. Die jüngsten 3 bleiben, von Hand erstellte Sicherungen werden nie gelöscht.
 
+40. **Blättern beim Bearbeiten nur mit dem Finger** (Wunsch des Besitzers, Einstellung `swipeWhileEditing`, Standard an): `ZoomArea.onFingerSwipe` meldet nur ein zügiges Wischen mit genau **einem** Finger (`FingerSwipe.isSwipe`: höchstens 0,7 s, mindestens 90 Punkte bzw. 12 % der Breite, mindestens 0,35 Punkte/ms, deutlich waagrecht). Kein Wischen, wenn ein zweiter Finger oder Handballen dazukommt, der Stift in der Nähe ist (bis 0,7 s danach), vergrössert ist, eine grosse Auflagefläche gemeldet wird, am Lineal oder während eine Notiz getippt wird (`_onEditSwipe`). Antippen blättert beim Bearbeiten weiterhin nicht. In der Spielansicht bleibt das bisherige Wischen.
+
 ## Prüfen
 ```bash
 flutter analyze

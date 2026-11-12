@@ -14,9 +14,11 @@ void main() {
   late PageZoom zoom;
 
   final taps = <Offset>[];
+  final swipes = <int>[];
 
   Future<void> pump(WidgetTester t) async {
     taps.clear();
+    swipes.clear();
     dir = Directory.systemTemp.createTempSync('volti_zoom');
     tools = await t.runAsync(() => makeTools(dir)) as ToolController;
     zoom = PageZoom();
@@ -29,6 +31,7 @@ void main() {
             zoom: zoom,
             tools: tools,
             onTap: (p, _) => taps.add(p),
+            onFingerSwipe: swipes.add,
             child: const ColoredBox(color: Colors.white),
           ),
         ),
@@ -102,5 +105,55 @@ void main() {
     await f.moveBy(const Offset(3, 2));
     await f.up();
     expect(taps, [const Offset(403, 302)]);
+  });
+
+  group('Blättern mit dem Finger beim Bearbeiten', () {
+    Future<void> swipe(WidgetTester t, Offset from, Offset to, {int pointer = 1}) async {
+      final g = await t.createGesture(kind: PointerDeviceKind.touch, pointer: pointer);
+      await g.down(from);
+      for (var i = 1; i <= 4; i++) {
+        await g.moveTo(Offset.lerp(from, to, i / 4)!);
+      }
+      await g.up();
+    }
+
+    testWidgets('ein Finger, zügig nach links: weiter; nach rechts: zurück', (t) async {
+      await pump(t);
+      await swipe(t, const Offset(600, 300), const Offset(300, 310));
+      await swipe(t, const Offset(200, 300), const Offset(500, 290), pointer: 2);
+      expect(swipes, [-1, 1]);
+    });
+
+    testWidgets('zu kurz oder zu schräg: nichts', (t) async {
+      await pump(t);
+      await swipe(t, const Offset(400, 300), const Offset(340, 300));
+      await swipe(t, const Offset(600, 100), const Offset(350, 400), pointer: 2);
+      expect(swipes, isEmpty);
+    });
+
+    testWidgets('zweiter Finger (Handballen) dabei: nichts', (t) async {
+      await pump(t);
+      final palm = await t.createGesture(kind: PointerDeviceKind.touch, pointer: 9);
+      await palm.down(const Offset(100, 500));
+      await swipe(t, const Offset(600, 300), const Offset(300, 300));
+      await palm.up();
+      expect(swipes, isEmpty);
+    });
+
+    testWidgets('Stift in der Nähe: nichts', (t) async {
+      await pump(t);
+      final pen = await t.createGesture(kind: PointerDeviceKind.stylus, pointer: 7);
+      await pen.addPointer(location: const Offset(700, 100));
+      await pen.moveTo(const Offset(710, 110));
+      await swipe(t, const Offset(600, 300), const Offset(300, 300));
+      expect(swipes, isEmpty);
+    });
+
+    testWidgets('langsames Verrutschen ist kein Wischen', (t) async {
+      await pump(t);
+      expect(FingerSwipe.isSwipe(const Offset(-300, 0), 200, 800), isTrue);
+      expect(FingerSwipe.isSwipe(const Offset(-300, 0), 1200, 800), isFalse);
+      expect(FingerSwipe.isSwipe(const Offset(-120, 0), 600, 800), isFalse);
+    });
   });
 }

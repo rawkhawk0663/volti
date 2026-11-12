@@ -126,6 +126,10 @@ class ToolController extends ChangeNotifier {
   Future<void> setHalfTurns(bool v) => _setFlag('halfTurns', v);
 
   Future<void> setInstantPen(bool v) => _setFlag('instantPen', v);
+
+  /// Beim Bearbeiten mit einem Finger wischen = blättern.
+  bool get swipeWhileEditing => settings.flag('swipeWhileEditing', orElse: true);
+  Future<void> setSwipeWhileEditing(bool v) => _setFlag('swipeWhileEditing', v);
   Future<void> togglePaletteSide() async {
     popoverOffset = null; // Fenster wieder neben die Palette
     await _setFlag('paletteLeft', !paletteLeft);

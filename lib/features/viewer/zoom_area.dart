@@ -112,7 +112,14 @@ class PageZoom {
 /// oder schreibt), werden Finger ignoriert – sonst würde der Handballen beim
 /// Schreiben die Seite verschieben.
 class ZoomArea extends StatefulWidget {
-  const ZoomArea({super.key, required this.zoom, required this.tools, required this.child, this.onTap});
+  const ZoomArea({
+    super.key,
+    required this.zoom,
+    required this.tools,
+    required this.child,
+    this.onTap,
+    this.onFingerSwipe,
+  });
   final PageZoom zoom;
   final ToolController tools;
   final Widget child;
@@ -120,6 +127,12 @@ class ZoomArea extends StatefulWidget {
   /// Ein sauberes Antippen mit Finger oder Stift (ein Zeiger, kaum bewegt,
   /// kurz). Wird unabhängig von den übrigen Gesten gemeldet.
   final void Function(Offset global, PointerDeviceKind kind)? onTap;
+
+  /// Ein zügiges Wischen mit genau einem Finger ([FingerSwipe.isSwipe]),
+  /// nicht während der Stift in der Nähe ist und nicht vergrössert. -1 =
+  /// nach links gewischt (weiter), +1 = nach rechts (zurück). Für das
+  /// Blättern beim Bearbeiten, wo der Handballen nicht blättern darf.
+  final void Function(int direction)? onFingerSwipe;
 
   @override
   State<ZoomArea> createState() => _ZoomAreaState();
@@ -144,6 +157,46 @@ class _ZoomAreaState extends State<ZoomArea> {
 
   // Touchpad
   double _padStartScale = 1;
+
+  // Wischen mit einem Finger
+  int? _swipePointer;
+  Offset _swipeStart = Offset.zero;
+  DateTime _swipeTime = DateTime(2000);
+  bool _swipeValid = false;
+
+  void _swipeDown(PointerDownEvent e) {
+    if (_swipePointer != null || _touches.length > 1 || _isPen(e)) {
+      _swipeValid = false; // zweiter Finger, Handballen oder Stift: kein Wischen
+      return;
+    }
+    if (e.kind != PointerDeviceKind.touch) return;
+    _swipePointer = e.pointer;
+    _swipeStart = e.position;
+    _swipeTime = DateTime.now();
+    _swipeValid =
+        _touches.length == 1 &&
+        _touches.containsKey(e.pointer) &&
+        !zoom.isZoomed &&
+        !FingerSwipe.isLargeContact(e.radiusMajor);
+  }
+
+  void _swipeMove(PointerMoveEvent e) {
+    if (e.pointer == _swipePointer && FingerSwipe.isLargeContact(e.radiusMajor)) _swipeValid = false;
+  }
+
+  void _swipeUp(PointerEvent e) {
+    if (e.pointer != _swipePointer) return;
+    final valid = _swipeValid && e is PointerUpEvent && !_penNear && !zoom.isZoomed;
+    final d = e.position - _swipeStart;
+    final ms = DateTime.now().difference(_swipeTime).inMilliseconds;
+    _swipePointer = null;
+    _swipeValid = false;
+    if (!valid || widget.onFingerSwipe == null) return;
+    if (!widget.tools.rulerPointers.contains(e.pointer) &&
+        FingerSwipe.isSwipe(d, ms, (context.size ?? Size.zero).width)) {
+      widget.onFingerSwipe!(d.dx < 0 ? -1 : 1);
+    }
+  }
 
   // Antippen
   int? _tapPointer;
@@ -188,6 +241,7 @@ class _ZoomAreaState extends State<ZoomArea> {
     if (_isPen(e)) {
       _pensDown++;
       _penSeen = DateTime.now();
+      _swipeValid = false;
       _cancelFingers();
       return;
     }
@@ -293,17 +347,21 @@ class _ZoomAreaState extends State<ZoomArea> {
           onPointerDown: (e) {
             _tapDown(e);
             _down(e);
+            _swipeDown(e);
           },
           onPointerMove: (e) {
             _tapMove(e);
             _move(e);
+            _swipeMove(e);
           },
           onPointerUp: (e) {
             _tapUp(e);
+            _swipeUp(e);
             _up(e);
           },
           onPointerCancel: (e) {
             _tapUp(e);
+            _swipeUp(e);
             _up(e);
           },
           onPointerHover: _hover,
@@ -326,4 +384,25 @@ class _ZoomAreaState extends State<ZoomArea> {
       },
     );
   }
+}
+
+/// Regeln für das Blättern mit dem Finger beim Bearbeiten. Streng, damit
+/// eine aufliegende oder verrutschende Hand nie blättert.
+class FingerSwipe {
+  FingerSwipe._();
+
+  /// Mindeststrecke: 90 Punkte bzw. 12 % der Breite.
+  static double minDistance(double width) => math.max(90, width * 0.12);
+
+  /// Ein Wischen ist zügig (mind. 0,35 Punkte pro ms), kurz (höchstens
+  /// 0,7 s), weit genug und deutlich waagrecht.
+  static bool isSwipe(Offset d, int ms, double width) {
+    if (ms > 700) return false;
+    if (d.dx.abs() < minDistance(width)) return false;
+    if (d.dy.abs() > d.dx.abs() * 0.5) return false;
+    return d.dx.abs() / math.max(ms, 1) >= 0.35;
+  }
+
+  /// Grosse Auflagefläche (Handballen), falls das Gerät sie meldet.
+  static bool isLargeContact(double radiusMajor) => radiusMajor > 30;
 }
