@@ -254,6 +254,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     super.initState();
     tools.setMode(ToolMode.read);
     tools.addListener(_onToolsChanged);
+    appFullscreen.addListener(_onAppFullscreen);
     _zoom.settled.addListener(_onRenderScale);
     _zoom.matrix.addListener(_onZoom);
     _ensureAround(_left.piece);
@@ -456,6 +457,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void dispose() {
     _hideTimer?.cancel();
     tools.removeListener(_onToolsChanged);
+    appFullscreen.removeListener(_onAppFullscreen);
     _zoom.settled.removeListener(_onRenderScale);
     _zoom.matrix.removeListener(_onZoom);
     _zoom.dispose();
@@ -641,6 +643,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
   Future<void> _setFullscreen(bool on) async {
     setState(() => _fullscreen = on);
     await setAppFullscreen(on);
+  }
+
+  /// Das Vollbild wurde von aussen beendet (z. B. beim Wechsel zu einer
+  /// anderen App): Symbol und Zustand anpassen.
+  void _onAppFullscreen() {
+    if (mounted && _fullscreen != appFullscreen.value) setState(() => _fullscreen = appFullscreen.value);
   }
 
   /// Vollbild von Hand: F11, Esc oder das Symbol in der Leiste.

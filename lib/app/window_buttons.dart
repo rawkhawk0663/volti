@@ -4,6 +4,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../features/viewer/fullscreen.dart';
+
 import 'l10n.dart';
 
 /// Hat Volti ein eigenes Fenster mit eigenen Fensterknöpfen? (Am Computer.)
@@ -39,7 +41,8 @@ class _WindowButtonsState extends State<WindowButtons> {
   Future<void> _toggleMaximize() async {
     try {
       if (await windowManager.isFullScreen()) {
-        await windowManager.setFullScreen(false);
+        // Gleicher Weg wie F11: stellt ein vorher maximiertes Fenster wieder her.
+        await setAppFullscreen(false);
       } else if (await windowManager.isMaximized()) {
         await windowManager.unmaximize();
       } else {
