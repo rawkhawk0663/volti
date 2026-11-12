@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/app_settings.dart';
@@ -175,10 +177,7 @@ class _HelpDialogState extends State<_HelpDialog> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 7, right: 10),
-                                  child: Icon(Icons.circle, size: 6, color: theme.colorScheme.primary),
-                                ),
+                                _Bullet(style: theme.textTheme.bodyLarge!, color: theme.colorScheme.primary),
                                 Expanded(child: Text(point, style: theme.textTheme.bodyLarge)),
                               ],
                             ),
@@ -230,6 +229,39 @@ class _HelpDialogState extends State<_HelpDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Aufzählungspunkt, genau auf die Mitte der Kleinbuchstaben der ersten
+/// Zeile ausgerichtet (aus der Schrift berechnet, passt bei jeder Grösse).
+class _Bullet extends StatelessWidget {
+  const _Bullet({required this.style, required this.color});
+  final TextStyle style;
+  final Color color;
+
+  static const _size = 6.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final tp = TextPainter(
+      text: TextSpan(text: 'x', style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+    )..layout();
+    final baseline = tp.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    tp.dispose();
+    // Höhe der Kleinbuchstaben (bei Roboto gut die Hälfte der Schriftgrösse).
+    final xHeight = scaler.scale(style.fontSize ?? 16) * 0.53;
+    final middle = baseline - xHeight / 2;
+    return Padding(
+      padding: EdgeInsets.only(top: math.max(0, middle - _size / 2), right: 12),
+      child: Container(
+        width: _size,
+        height: _size,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }
