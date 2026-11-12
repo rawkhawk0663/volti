@@ -90,7 +90,8 @@ class Updater {
         page: Uri.parse(j['html_url'] as String? ?? 'https://github.com/$repo/releases/latest'),
         windowsZip: asset('Volti-Windows.zip'),
         androidApk: asset('Volti-Android.apk'),
-        notes: (j['body'] as String? ?? '').trim(),
+        // Erste Zeile ist „**Neu / New:** …“ – ohne Formatierung und Vorsatz zeigen.
+        notes: (j['body'] as String? ?? '').replaceAll('**', '').replaceFirst(RegExp(r'^\s*Neu / New:\s*'), '').trim(),
       );
     } finally {
       client.close(force: true);
