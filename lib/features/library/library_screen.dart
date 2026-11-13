@@ -738,6 +738,12 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    // Ganz links, damit Bibliothek und Setlists sonst gleich aufgebaut sind.
+                    IconButton(
+                      tooltip: tr('Bibliothek neu einlesen', 'Reload library'),
+                      onPressed: lib.loading ? null : lib.rescan,
+                      icon: const Icon(Icons.refresh),
+                    ),
                     IconButton(
                       tooltip: current == null
                           ? tr('Neuer Ordner', 'New folder')
@@ -749,11 +755,6 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
                       tooltip: tr('Mehrere auswählen', 'Select several'),
                       onPressed: lib.scores.isEmpty ? null : () => _startSelecting(),
                       icon: const Icon(Icons.checklist),
-                    ),
-                    IconButton(
-                      tooltip: tr('Bibliothek neu einlesen', 'Reload library'),
-                      onPressed: lib.loading ? null : lib.rescan,
-                      icon: const Icon(Icons.refresh),
                     ),
                     ...headerActions(),
                   ],
