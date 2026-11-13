@@ -36,21 +36,9 @@ word = extract((590, 255, 1300, 540), (27, 38, 36))
 mark.save("assets/brand/volti_mark.png")
 word.save("assets/brand/volti_wordmark.png")
 
-# Quadratisches App-Icon: Bildmarke zentriert auf hellem Grund.
-def icon(size, scale=0.72):
-    # Ganz heller, sanfter Mint-Verlauf als Hintergrund.
-    yy = np.linspace(0, 1, size)[:, None, None]
-    top, bottom = np.array((246, 252, 250), np.float32), np.array((221, 241, 236), np.float32)
-    bg = np.repeat(top * (1 - yy) + bottom * yy, size, axis=1)
-    canvas = Image.fromarray(np.dstack([bg.round().astype(np.uint8), np.full((size, size), 255, np.uint8)]), "RGBA")
-    f = size * scale / max(mark.size)  # auch vergrössern, nicht nur verkleinern
-    m = mark.resize((max(1, round(mark.width * f)), max(1, round(mark.height * f))), Image.LANCZOS)
-    canvas.alpha_composite(m, ((size - m.width) // 2, (size - m.height) // 2))
-    return canvas
-
-icon(1024).save("assets/brand/volti_icon_1024.png")
-icon(256).save("windows/runner/resources/app_icon.ico",
-               sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-for name, px in {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}.items():
-    icon(px).convert("RGB").save(f"android/app/src/main/res/mipmap-{name}/ic_launcher.png")
+# App-Symbole (runde Ecken) aus der eben erzeugten Bildmarke.
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+import make_icons  # noqa: E402  (liest assets/brand/volti_mark.png)
+make_icons.main()
 print("mark", mark.size, "word", word.size)
