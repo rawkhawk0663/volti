@@ -632,6 +632,34 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     ),
   ];
 
+  /// Importieren (unten rechts): einzelne PDFs oder einen ganzen Ordner.
+  Widget _importButton() {
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 8),
+      menuChildren: [
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.file_open_outlined),
+          onPressed: _importFiles,
+          child: Text(tr('PDFs importieren …', 'Import PDFs …')),
+        ),
+        if (_canImportFolder)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.drive_folder_upload_outlined),
+            onPressed: _importFolder,
+            child: Text(tr('Ganzen Ordner importieren …', 'Import a whole folder …')),
+          ),
+      ],
+      builder: (context, controller, _) => FloatingActionButton.extended(
+        heroTag: 'import',
+        onPressed: lib.importing ? null : () => controller.isOpen ? controller.close() : controller.open(),
+        icon: lib.importing
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.add),
+        label: Text(lib.importing ? tr('Wird importiert …', 'Importing …') : tr('Importieren', 'Import')),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -673,128 +701,115 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
           _up();
         }
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ---------------------------------------------------------- Kopfzeile
-          if (_selecting)
-            _selectionBar(list)
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SearchBar(
-                      controller: _search,
-                      hintText: tr('Titel, Komponist, Tonart … suchen', 'Search title, composer, key …'),
-                      leading: const Icon(Icons.search),
-                      trailing: [
-                        if (_query.isNotEmpty)
-                          IconButton(
-                            tooltip: tr('Suche leeren', 'Clear search'),
-                            icon: const Icon(Icons.close),
-                            onPressed: _clearSearch,
-                          ),
-                      ],
-                      elevation: const WidgetStatePropertyAll(0),
-                      onChanged: (v) => setState(() => _query = v),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: current == null
-                        ? tr('Neuer Ordner', 'New folder')
-                        : tr('Neuer Ordner in „${_folderName(current)}“', 'New folder in “${_folderName(current)}”'),
-                    onPressed: _all ? null : _newFolder,
-                    icon: const Icon(Icons.create_new_folder_outlined),
-                  ),
-                  IconButton(
-                    tooltip: tr('Mehrere auswählen', 'Select several'),
-                    onPressed: lib.scores.isEmpty ? null : () => _startSelecting(),
-                    icon: const Icon(Icons.checklist),
-                  ),
-                  MenuAnchor(
-                    menuChildren: [
-                      MenuItemButton(
-                        leadingIcon: const Icon(Icons.file_open_outlined),
-                        onPressed: _importFiles,
-                        child: Text(tr('PDFs importieren …', 'Import PDFs …')),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        // Importieren unten rechts, wie „Neue Setlist“ bei den Setlists. Nicht
+        // beim Auswählen und nicht in der leeren Bibliothek (dort stehen die
+        // grossen Import-Knöpfe in der Mitte).
+        floatingActionButton: _selecting || (lib.scores.isEmpty && lib.folders.live.isEmpty && !lib.loading)
+            ? null
+            : _importButton(),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ---------------------------------------------------------- Kopfzeile
+            if (_selecting)
+              _selectionBar(list)
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SearchBar(
+                        controller: _search,
+                        hintText: tr('Titel, Komponist, Tonart … suchen', 'Search title, composer, key …'),
+                        leading: const Icon(Icons.search),
+                        trailing: [
+                          if (_query.isNotEmpty)
+                            IconButton(
+                              tooltip: tr('Suche leeren', 'Clear search'),
+                              icon: const Icon(Icons.close),
+                              onPressed: _clearSearch,
+                            ),
+                        ],
+                        elevation: const WidgetStatePropertyAll(0),
+                        onChanged: (v) => setState(() => _query = v),
                       ),
-                      if (_canImportFolder)
-                        MenuItemButton(
-                          leadingIcon: const Icon(Icons.drive_folder_upload_outlined),
-                          onPressed: _importFolder,
-                          child: Text(tr('Ganzen Ordner importieren …', 'Import a whole folder …')),
-                        ),
-                    ],
-                    builder: (context, controller, _) => FilledButton.tonalIcon(
-                      onPressed: lib.importing
-                          ? null
-                          : () => controller.isOpen ? controller.close() : controller.open(),
-                      icon: const Icon(Icons.add),
-                      label: Text(tr('Importieren', 'Import')),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: current == null
+                          ? tr('Neuer Ordner', 'New folder')
+                          : tr('Neuer Ordner in „${_folderName(current)}“', 'New folder in “${_folderName(current)}”'),
+                      onPressed: _all ? null : _newFolder,
+                      icon: const Icon(Icons.create_new_folder_outlined),
+                    ),
+                    IconButton(
+                      tooltip: tr('Mehrere auswählen', 'Select several'),
+                      onPressed: lib.scores.isEmpty ? null : () => _startSelecting(),
+                      icon: const Icon(Icons.checklist),
+                    ),
+                    IconButton(
+                      tooltip: tr('Bibliothek neu einlesen', 'Reload library'),
+                      onPressed: lib.loading ? null : lib.rescan,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                    ...headerActions(),
+                  ],
+                ),
+              ),
+            if ((current != null || _all) && !searching) _breadcrumbs(current),
+            // ------------------------------------------------- Sortieren / Filter
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _MenuChip<ScoreSort>(
+                    icon: Icons.sort,
+                    label: tr('Sortieren: ${_sortNames[_sort]}', 'Sort: ${_sortNames[_sort]}'),
+                    options: {for (final e in _sortNames.entries) e.key: e.value},
+                    onSelected: (v) => setState(() => _sort = v ?? ScoreSort.title),
+                  ),
+                  if (genres.isNotEmpty)
+                    _MenuChip<String>(
+                      icon: Icons.category_outlined,
+                      label: _genre ?? tr('Alle Genres', 'All genres'),
+                      active: _genre != null,
+                      options: {null: tr('Alle Genres', 'All genres'), for (final g in genres) g: g},
+                      onSelected: (v) => setState(() => _genre = v),
+                    ),
+                  if (tags.isNotEmpty)
+                    _MenuChip<String>(
+                      icon: Icons.sell_outlined,
+                      label: _tag ?? tr('Alle Tags', 'All tags'),
+                      active: _tag != null,
+                      options: {null: tr('Alle Tags', 'All tags'), for (final t in tags) t: t},
+                      onSelected: (v) => setState(() => _tag = v),
+                    ),
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(
+                        list.length == 1
+                            ? tr('1 Stück', '1 piece')
+                            : tr('${list.length} Stücke', '${list.length} pieces'),
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: tr('Bibliothek neu einlesen', 'Reload library'),
-                    onPressed: lib.loading ? null : lib.rescan,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                  ...headerActions(),
                 ],
               ),
             ),
-          if ((current != null || _all) && !searching) _breadcrumbs(current),
-          // ------------------------------------------------- Sortieren / Filter
-          SizedBox(
-            height: 48,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _MenuChip<ScoreSort>(
-                  icon: Icons.sort,
-                  label: tr('Sortieren: ${_sortNames[_sort]}', 'Sort: ${_sortNames[_sort]}'),
-                  options: {for (final e in _sortNames.entries) e.key: e.value},
-                  onSelected: (v) => setState(() => _sort = v ?? ScoreSort.title),
-                ),
-                if (genres.isNotEmpty)
-                  _MenuChip<String>(
-                    icon: Icons.category_outlined,
-                    label: _genre ?? tr('Alle Genres', 'All genres'),
-                    active: _genre != null,
-                    options: {null: tr('Alle Genres', 'All genres'), for (final g in genres) g: g},
-                    onSelected: (v) => setState(() => _genre = v),
-                  ),
-                if (tags.isNotEmpty)
-                  _MenuChip<String>(
-                    icon: Icons.sell_outlined,
-                    label: _tag ?? tr('Alle Tags', 'All tags'),
-                    active: _tag != null,
-                    options: {null: tr('Alle Tags', 'All tags'), for (final t in tags) t: t},
-                    onSelected: (v) => setState(() => _tag = v),
-                  ),
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      list.length == 1
-                          ? tr('1 Stück', '1 piece')
-                          : tr('${list.length} Stücke', '${list.length} pieces'),
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                  ),
-                ),
-              ],
+            if (lib.loading || lib.importing) const LinearProgressIndicator(minHeight: 2),
+            // --------------------------------------------------------------- Raster
+            Expanded(
+              child: _buildGrid(context, list, folders, showAll: showAll, searching: searching),
             ),
-          ),
-          if (lib.loading || lib.importing) const LinearProgressIndicator(minHeight: 2),
-          // --------------------------------------------------------------- Raster
-          Expanded(
-            child: _buildGrid(context, list, folders, showAll: showAll, searching: searching),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1050,7 +1065,8 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
             ),
           ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          // Unten Platz für den Importieren-Knopf, damit er keine Kachel verdeckt.
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: 200,
