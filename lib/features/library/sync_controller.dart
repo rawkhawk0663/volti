@@ -6,12 +6,35 @@ import 'package:path/path.dart' as p;
 
 import '../../app/error_log.dart';
 import '../../core/app_settings.dart';
+import '../../core/sync/cloud_auth.dart';
+import '../../core/sync/cloud_store.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_store.dart';
 import 'library_controller.dart';
 import '../../app/l10n.dart';
 
 enum SyncStatus { off, idle, syncing, error }
+
+/// Womit abgeglichen wird.
+enum SyncKind {
+  /// Ein Ordner, den ein Cloud-Programm abgleicht (z. B. Proton Drive).
+  folder,
+  dropbox,
+  gdrive;
+
+  String get label => switch (this) {
+    SyncKind.folder => tr('Ordner', 'Folder'),
+    SyncKind.dropbox => 'Dropbox',
+    SyncKind.gdrive => 'Google Drive',
+  };
+
+  /// Sind die Schlüssel für diesen Dienst in dieser Version eingebaut?
+  bool get available => switch (this) {
+    SyncKind.folder => true,
+    SyncKind.dropbox => dropboxAppKey.isNotEmpty,
+    SyncKind.gdrive => googleClientId.isNotEmpty && googleClientSecret.isNotEmpty,
+  };
+}
 
 /// Steuert den Abgleich: wann er läuft, welcher Zustand angezeigt wird.
 ///
@@ -31,7 +54,59 @@ class SyncController extends ChangeNotifier {
   DateTime? lastSync;
   String? error;
 
-  String? get folder => settings.syncFolder;
+  /// Womit abgeglichen wird (null = Sync aus).
+  SyncKind? get kind {
+    switch (settings.text('syncKind')) {
+      case 'dropbox' when settings.text('dropboxToken') != null:
+        return SyncKind.dropbox;
+      case 'gdrive' when settings.text('gdriveToken') != null:
+        return SyncKind.gdrive;
+    }
+    return settings.syncFolder != null ? SyncKind.folder : null;
+  }
+
+  bool get configured => kind != null;
+
+  /// Sync-Ordner (nur beim Abgleich über einen Ordner).
+  String? get folder => kind == SyncKind.folder ? settings.syncFolder : null;
+
+  /// Womit verbunden (für die Anzeige), z. B. „Dropbox · Anna (anna@…)“.
+  String? get targetLabel => switch (kind) {
+    null => null,
+    SyncKind.folder => settings.syncFolder,
+    final k => [k.label, ?settings.text('cloudAccount')].join(' · '),
+  };
+
+  /// Verbindung zum Cloud-Dienst, über mehrere Abgleiche behalten (der
+  /// Zwischenspeicher der Infos bleibt so warm).
+  SyncStore? _cloud;
+  SyncKind? _cloudKind;
+
+  SyncStore? _store() {
+    final k = kind;
+    switch (k) {
+      case null:
+        return null;
+      case SyncKind.folder:
+        return FolderSyncStore(settings.syncFolder!);
+      case SyncKind.dropbox || SyncKind.gdrive:
+        if (_cloud != null && _cloudKind == k) return _cloud;
+        _cloudKind = k;
+        return _cloud = CloudSyncStore(_api(k, _auth(k)), cacheDir: p.join(deviceDataDir, 'sync-cache', k.name));
+    }
+  }
+
+  OAuthClient _auth(SyncKind k) {
+    final key = '${k.name}Token';
+    Future<void> save(String t) => settings.setText(key, t);
+    return k == SyncKind.dropbox
+        ? OAuthClient.dropbox(refreshToken: settings.text(key), onRefreshToken: save)
+        : OAuthClient.google(refreshToken: settings.text(key), onRefreshToken: save);
+  }
+
+  CloudApi _api(SyncKind k, OAuthClient auth) => k == SyncKind.dropbox
+      ? DropboxApi(auth)
+      : GoogleDriveApi(auth, rootId: settings.text('gdriveRoot'), onRoot: (id) => settings.setText('gdriveRoot', id));
 
   /// Wird aufgerufen, wenn der Abgleich etwas auf dieses Gerät geholt hat.
   Future<void> Function()? afterDownload;
@@ -41,11 +116,14 @@ class SyncController extends ChangeNotifier {
   bool _running = false;
   bool _again = false;
 
-  File get _baseFile => File(p.join(deviceDataDir, 'sync_base.json'));
+  /// Stand des letzten Abgleichs – pro Ziel eine eigene Datei, damit ein
+  /// Wechsel des Ziels nie etwas als „gelöscht“ erscheinen lässt.
+  File _baseFor(SyncKind? k) =>
+      File(p.join(deviceDataDir, k == null || k == SyncKind.folder ? 'sync_base.json' : 'sync_base_${k.name}.json'));
 
   void start() {
     library.onLocalChange = scheduleSoon;
-    if (folder == null) return;
+    if (!configured) return;
     _status = SyncStatus.idle;
     _periodic = Timer.periodic(const Duration(minutes: 2), (_) => syncNow());
     syncNow();
@@ -57,17 +135,75 @@ class SyncController extends ChangeNotifier {
     var target = chosen;
     if (!await File(p.join(chosen, SyncEngine.markerPath)).exists()) target = p.join(chosen, 'Volti');
     await SyncEngine.initializeRemote(FolderSyncStore(target));
-    if (await _baseFile.exists()) await _baseFile.delete(); // neuer Ordner: nichts gilt als gelöscht
+    await _forgetTarget();
     await settings.setSyncFolder(target);
+    await settings.setText('syncKind', SyncKind.folder.name);
+    final base = _baseFor(SyncKind.folder);
+    if (await base.exists()) await base.delete(); // neuer Ordner: nichts gilt als gelöscht
     _periodic?.cancel();
     start();
+  }
+
+  /// Mit Dropbox oder Google Drive verbinden: Anmeldung im Browser
+  /// ([openBrowser]), danach wird Volti dort eingerichtet. [cancel] bricht ab.
+  Future<void> connectCloud(SyncKind k, {required Future<void> Function(Uri) openBrowser, Future<void>? cancel}) async {
+    if (!k.available) {
+      throw CloudAuthException(
+        tr(
+          'In dieser Version ist ${k.label} noch nicht eingerichtet.',
+          '${k.label} is not set up in this version yet.',
+        ),
+      );
+    }
+    final key = '${k.name}Token';
+    final auth = k == SyncKind.dropbox ? OAuthClient.dropbox() : OAuthClient.google();
+    await auth.signIn(openBrowser, cancel: cancel);
+    final api = _api(k, auth);
+    // Google: den Ordner „Volti“ neu suchen (anderes Konto möglich).
+    if (api is GoogleDriveApi) {
+      api.rootId = null;
+      await settings.removeText('gdriveRoot');
+    }
+    final store = CloudSyncStore(api, cacheDir: p.join(deviceDataDir, 'sync-cache', k.name));
+    await SyncEngine.initializeRemote(store);
+    String? account;
+    try {
+      account = api is DropboxApi ? await api.accountName() : await (api as GoogleDriveApi).accountName();
+    } catch (_) {}
+    await _forgetTarget();
+    await settings.setText(key, auth.refreshToken!);
+    await settings.setText('syncKind', k.name);
+    if (account != null && account.isNotEmpty) await settings.setText('cloudAccount', account);
+    final base = _baseFor(k);
+    if (await base.exists()) await base.delete(); // neues Ziel: nichts gilt als gelöscht
+    _cloud = store;
+    _cloudKind = k;
+    _periodic?.cancel();
+    start();
+  }
+
+  /// Bisheriges Ziel vergessen (Anmeldungen, Zwischenspeicher, Stand).
+  Future<void> _forgetTarget() async {
+    _cloud = null;
+    _cloudKind = null;
+    for (final t in ['syncKind', 'dropboxToken', 'gdriveToken', 'gdriveRoot', 'cloudAccount']) {
+      await settings.removeText(t);
+    }
+    await settings.setSyncFolder(null);
+    for (final k in SyncKind.values) {
+      final b = _baseFor(k);
+      if (await b.exists()) await b.delete();
+    }
+    try {
+      final cache = Directory(p.join(deviceDataDir, 'sync-cache'));
+      if (await cache.exists()) await cache.delete(recursive: true);
+    } catch (_) {}
   }
 
   Future<void> disconnect() async {
     _periodic?.cancel();
     _debounce?.cancel();
-    await settings.setSyncFolder(null);
-    if (await _baseFile.exists()) await _baseFile.delete();
+    await _forgetTarget();
     _status = SyncStatus.off;
     error = null;
     notifyListeners();
@@ -75,7 +211,7 @@ class SyncController extends ChangeNotifier {
 
   /// Nach einer Änderung kurz warten (weitere Änderungen bündeln), dann abgleichen.
   void scheduleSoon() {
-    if (folder == null) return;
+    if (!configured) return;
     _debounce?.cancel();
     _debounce = Timer(const Duration(seconds: 4), syncNow);
   }
@@ -108,8 +244,9 @@ class SyncController extends ChangeNotifier {
   }
 
   Future<void> syncNow() async {
-    final f = folder;
-    if (f == null) return;
+    final store = _store();
+    if (store == null) return;
+    final k = kind;
     if (_running) {
       _again = true;
       return;
@@ -118,7 +255,17 @@ class SyncController extends ChangeNotifier {
     _status = SyncStatus.syncing;
     notifyListeners();
     try {
-      final report = await SyncEngine(localRoot: library.root, remote: FolderSyncStore(f), baseFile: _baseFile).run();
+      final report = await SyncEngine(
+        localRoot: library.root,
+        remote: store,
+        baseFile: _baseFor(k),
+        unreachableMessage: k == SyncKind.folder
+            ? null
+            : tr(
+                'Volti findet seine Bibliothek bei ${k!.label} nicht mehr. Bitte Sync neu einrichten.',
+                'Volti can no longer find its library at ${k.label}. Please set up sync again.',
+              ),
+      ).run();
       lastSync = DateTime.now();
       error = null;
       partialFailure = false;

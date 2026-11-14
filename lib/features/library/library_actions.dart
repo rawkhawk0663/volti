@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
@@ -6,6 +7,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/library/backup.dart';
+import '../../app/error_log.dart';
+import '../../app/open_url.dart';
 import '../../app/window_buttons.dart';
 import 'library_controller.dart';
 import 'settings_dialog.dart';
@@ -42,45 +45,151 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
   /// Sync über einen Ordner gibt es vorerst nur am Computer.
   bool get canSync => !Platform.isAndroid && !Platform.isIOS;
 
+  /// Sync einrichten: Dropbox, Google Drive oder ein Ordner (z. B. Proton Drive).
   Future<void> setupSync() async {
-    final ok = await showDialog<bool>(
+    final choice = await showDialog<SyncKind>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(tr('Sync einrichten', 'Set up sync')),
-        content: SizedBox(
-          width: 460,
-          child: Text(
-            tr(
-              'Volti gleicht deine Noten, Infos, Anmerkungen und Setlists mit einem Ordner ab, '
-                  'zum Beispiel in Proton Drive. Wähle auf jedem Gerät denselben Ordner, dann sind alle '
-                  'Geräte auf dem gleichen Stand.\n\n'
-                  'Volti legt im gewählten Ordner einen Unterordner „Volti“ an. Wählst du einen Ordner, '
-                  'der schon eine Volti-Bibliothek enthält (vom anderen Gerät), wird diese verwendet.\n\n'
-                  'Beim ersten Abgleich wird nichts gelöscht: Die Noten beider Seiten werden zusammengelegt.',
-              'Volti syncs your music, details, notes and setlists with a folder, '
-                  'for example in Proton Drive. Choose the same folder on every device, and all '
-                  'devices stay up to date.\n\n'
-                  'Volti creates a subfolder “Volti” in the chosen folder. If you choose a folder '
-                  'that already contains a Volti library (from another device), that one is used.\n\n'
-                  'The first sync never deletes anything: the music from both sides is combined.',
+      builder: (c) {
+        final theme = Theme.of(c);
+        Widget option(SyncKind k, IconData icon, String title, String text) => ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          enabled: k.available,
+          leading: Icon(icon, color: k.available ? theme.colorScheme.primary : null),
+          title: Text(title),
+          subtitle: Text(
+            k.available ? text : tr('In dieser Version noch nicht eingerichtet.', 'Not set up in this version yet.'),
+          ),
+          onTap: () => Navigator.pop(c, k),
+        );
+        return AlertDialog(
+          title: Text(tr('Sync einrichten', 'Set up sync')),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  tr(
+                    'Volti gleicht Noten, Infos, Anmerkungen und Setlists zwischen deinen Geräten ab. '
+                        'Wähle auf jedem Gerät dasselbe. Beim ersten Abgleich wird nichts gelöscht: '
+                        'Die Noten beider Seiten werden zusammengelegt.',
+                    'Volti syncs your music, details, notes and setlists between your devices. '
+                        'Choose the same on every device. The first sync never deletes anything: '
+                        'the music from both sides is combined.',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                option(
+                  SyncKind.dropbox,
+                  Icons.cloud_outlined,
+                  tr('Dropbox (empfohlen)', 'Dropbox (recommended)'),
+                  tr(
+                    'Volti spricht direkt mit Dropbox, auch später auf Android. Die Daten liegen im Ordner „Apps“ von Dropbox.',
+                    'Volti talks to Dropbox directly, later on Android too. The data lives in Dropbox’s “Apps” folder.',
+                  ),
+                ),
+                option(
+                  SyncKind.gdrive,
+                  Icons.add_to_drive_outlined,
+                  'Google Drive',
+                  tr(
+                    'Volti spricht direkt mit Google Drive. Die Daten liegen im Ordner „Volti“.',
+                    'Volti talks to Google Drive directly. The data lives in the folder “Volti”.',
+                  ),
+                ),
+                option(
+                  SyncKind.folder,
+                  Icons.folder_outlined,
+                  tr('Ordner (z. B. Proton Drive)', 'Folder (e.g. Proton Drive)'),
+                  tr(
+                    'Ein Ordner, den ein Cloud-Programm auf diesem Computer abgleicht. Nur unter Windows.',
+                    'A folder that a cloud program keeps in sync on this computer. Windows only.',
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(c, true),
-            icon: const Icon(Icons.folder_open),
-            label: Text(tr('Ordner wählen …', 'Choose folder …')),
+          actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Abbrechen', 'Cancel')))],
+        );
+      },
+    );
+    if (choice == null || !mounted) return;
+    if (choice == SyncKind.folder) {
+      final dir = await getDirectoryPath(confirmButtonText: tr('Für Sync verwenden', 'Use for sync'));
+      if (dir == null) return;
+      await syncController.configure(dir);
+      if (mounted) setState(() {});
+      return;
+    }
+    await _connectCloud(choice);
+  }
+
+  /// Anmeldung im Browser, solange ein Hinweis mit „Abbrechen“ steht.
+  Future<void> _connectCloud(SyncKind kind) async {
+    final cancel = Completer<void>();
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Text(tr('Mit ${kind.label} verbinden', 'Connect to ${kind.label}')),
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Text(
+                  tr(
+                    'Im Browser hat sich ${kind.label} geöffnet. Melde dich dort an und erlaube Volti den Zugriff. '
+                        'Danach geht es hier von selbst weiter.',
+                    '${kind.label} has opened in your browser. Sign in there and allow Volti access. '
+                        'Volti continues here by itself afterwards.',
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (!cancel.isCompleted) cancel.complete();
+              },
+              child: Text(tr('Abbrechen', 'Cancel')),
+            ),
+          ],
+        ),
       ),
     );
-    if (ok != true) return;
-    final dir = await getDirectoryPath(confirmButtonText: tr('Für Sync verwenden', 'Use for sync'));
-    if (dir == null) return;
-    await syncController.configure(dir);
-    if (mounted) setState(() {});
+    String? failed;
+    try {
+      await syncController.connectCloud(kind, openBrowser: openUrl, cancel: cancel.future);
+    } catch (e, st) {
+      if (!cancel.isCompleted) {
+        failed = '$e';
+        ErrorLog.record(e, st, where: 'Sync verbinden');
+      }
+    }
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    await bringWindowToFront();
+    if (!mounted) return;
+    setState(() {});
+    if (cancel.isCompleted && failed == null && !syncController.configured) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 8),
+        content: Text(
+          failed != null
+              ? tr('Verbinden ging nicht: $failed', 'Connecting didn’t work: $failed')
+              : tr(
+                  'Verbunden: ${syncController.targetLabel}. Der erste Abgleich läuft.',
+                  'Connected: ${syncController.targetLabel}. The first sync is running.',
+                ),
+        ),
+      ),
+    );
   }
 
   // ---------------------------------------------------------- Sicherung
@@ -214,8 +323,8 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
       SnackBar(
         content: Text(
           tr(
-            'Sync beendet. Deine Noten bleiben auf diesem Gerät und im Sync-Ordner erhalten.',
-            'Sync stopped. Your music stays on this device and in the sync folder.',
+            'Sync beendet. Deine Noten bleiben auf diesem Gerät und beim Sync-Ziel erhalten.',
+            'Sync stopped. Your music stays on this device and at the sync target.',
           ),
         ),
       ),

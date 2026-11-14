@@ -24,7 +24,7 @@ lib/
     ink/          Anmerkungsmodell (Striche, Zusammenführen)
     library/      Infos (ScoreMeta), Zusatzdatei (SidecarStore), Import, Bibliothek einlesen, Filter, Setlists
     pdf/          Seiten-Cache, Vorschaubilder
-    sync/         Abgleich mit einem Sync-Ziel (SyncEngine, SyncStore; heute Ordner, später evtl. Dropbox)
+    sync/         Abgleich mit einem Sync-Ziel (SyncEngine, SyncStore: Ordner, Dropbox, Google Drive)
     app_settings.dart  Nur geräteeigene Einstellungen (zuletzt geöffnet)
   features/
     library/      Bibliothek mit Ordnern und Mehrfachauswahl, Infos-Dialog, Setlists (LibraryController hält den Zustand)
@@ -160,6 +160,13 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
 39. **Automatische Sicherung** (`core/library/auto_backup.dart`, `AutoBackupController` in `LibraryController.autoBackup`): Standard an, einmal pro Woche (Prüfung 1 min nach dem Start und alle 6 h), im Hintergrund (`Isolate.run`) als `Volti-Auto-Sicherung-<datum>.zip` nach `Dokumente\Volti-Sicherungen` oder in einen gewählten Ordner. Die jüngsten 3 bleiben, von Hand erstellte Sicherungen werden nie gelöscht.
 
 40. **Blättern beim Bearbeiten nur mit dem Finger** (Wunsch des Besitzers, Einstellung `swipeWhileEditing`, Standard an): `ZoomArea.onFingerSwipe` meldet nur ein zügiges Wischen mit genau **einem** Finger (`FingerSwipe.isSwipe`: höchstens 0,7 s, mindestens 90 Punkte bzw. 12 % der Breite, mindestens 0,35 Punkte/ms, deutlich waagrecht). Kein Wischen, wenn ein zweiter Finger oder Handballen dazukommt, der Stift in der Nähe ist (bis 0,7 s danach), vergrössert ist, eine grosse Auflagefläche gemeldet wird, am Lineal oder während eine Notiz getippt wird (`_onEditSwipe`). Antippen blättert beim Bearbeiten weiterhin nicht. In der Spielansicht bleibt das bisherige Wischen.
+
+41. **Sync über Dropbox oder Google Drive** (Wunsch des Besitzers, weil Proton Drive unzuverlässig abgleicht und unter Android keinen Ordner bietet): ⚙ → Sync einrichten → Dropbox (empfohlen), Google Drive oder Ordner. `SyncKind` in `SyncController` (Gerätevorliebe `syncKind`; ohne Eintrag, aber mit `syncFolder` = Ordner wie bisher). Der Abgleich selbst (`SyncEngine`) ist unverändert, nur das Ziel ist ein `CloudSyncStore` (`core/sync/cloud_store.dart`) mit `DropboxApi` oder `GoogleDriveApi`.
+   Anmeldung: OAuth mit PKCE im Browser (`core/sync/cloud_auth.dart`, `OAuthClient.signIn`), Rückmeldung über einen kleinen Empfänger auf `localhost:53682` (Dropbox: `http://localhost:53682/` muss in der Dropbox-App als Redirect-URI eingetragen sein; Google: Desktop-Client, `http://127.0.0.1:53682/`). Der dauerhafte Zugang (Refresh-Token) liegt in den Geräteeinstellungen (`dropboxToken`/`gdriveToken`), dazu `cloudAccount` für die Anzeige und `gdriveRoot`.
+   Schlüssel: `DROPBOX_APP_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` als Geheimnisse im GitHub-Projekt, beim Bauen per `--dart-define` eingesetzt. Fehlen sie, ist die Möglichkeit ausgegraut („In dieser Version noch nicht eingerichtet“).
+   Dropbox: App-Ordner (`Apps/<App-Name>`), Kennzeichen `rev`, Kopf-JSON nur ASCII (`DropboxApi.headerJson`). Google Drive: Bereich `drive.file` (Volti sieht nur selbst Angelegtes), Ordner „Volti“ im Drive, Hochladen in zwei Schritten (resumable), Löschen = Papierkorb, doppelte Namen: die jüngste Datei gilt.
+   Tempo: `.json`-Dateien werden mit ihrem Kennzeichen in `<ApplicationSupport>/sync-cache/<dienst>/` zwischengespeichert, unveränderte also nicht bei jedem Abgleich neu geladen. Pro Ziel ein eigener Stand (`sync_base.json` für Ordner, `sync_base_dropbox.json`, `sync_base_gdrive.json`); beim Wechsel des Ziels wird alles vergessen (`_forgetTarget`), der erste Abgleich löscht also nie etwas.
+   Android: noch nicht (der Empfänger auf localhost geht dort so nicht; dafür später eine Rückleitung in die App). `canSync` ist auf Android weiterhin aus.
 
 ## Prüfen
 ```bash

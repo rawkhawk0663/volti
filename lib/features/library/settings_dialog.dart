@@ -340,10 +340,12 @@ class _SettingsDialog extends StatelessWidget {
     return [
       _Section(tr('Sync', 'Sync')),
       Text(status, style: theme.textTheme.bodyMedium),
-      if (sync.folder != null) ...[
+      if (sync.configured) ...[
         const SizedBox(height: 4),
         SelectableText(
-          tr('Sync-Ordner: ${sync.folder}', 'Sync folder: ${sync.folder}'),
+          sync.kind == SyncKind.folder
+              ? tr('Sync-Ordner: ${sync.folder}', 'Sync folder: ${sync.folder}')
+              : tr('Verbunden mit ${sync.targetLabel}', 'Connected to ${sync.targetLabel}'),
           style: theme.textTheme.bodySmall,
         ),
       ],
@@ -352,7 +354,7 @@ class _SettingsDialog extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
-          if (sync.folder == null)
+          if (!sync.configured)
             FilledButton.icon(
               onPressed: () => close(onSetupSync),
               icon: const Icon(Icons.cloud_sync_outlined),
@@ -366,8 +368,8 @@ class _SettingsDialog extends StatelessWidget {
             ),
             OutlinedButton.icon(
               onPressed: () => close(onSetupSync),
-              icon: const Icon(Icons.drive_file_move_outline),
-              label: Text(tr('Anderer Ordner …', 'Other folder …')),
+              icon: const Icon(Icons.swap_horiz),
+              label: Text(tr('Anders abgleichen …', 'Change sync …')),
             ),
             OutlinedButton.icon(
               onPressed: () => close(onStopSync),

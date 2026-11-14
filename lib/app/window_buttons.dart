@@ -214,3 +214,12 @@ class WindowDragArea extends StatelessWidget {
     );
   }
 }
+
+/// Volti wieder nach vorne holen (z. B. nach der Anmeldung im Browser).
+Future<void> bringWindowToFront() async {
+  if (!hasWindowButtons) return;
+  try {
+    await windowManager.show();
+    await windowManager.focus();
+  } catch (_) {}
+}

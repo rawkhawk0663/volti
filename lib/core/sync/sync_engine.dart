@@ -63,7 +63,10 @@ class SyncException implements Exception {
 /// * **Sicherheitsbremse:** Fehlt der Sync-Ordner oder würde ein Abgleich
 ///   mehr als die Hälfte der Noten löschen, wird abgebrochen.
 class SyncEngine {
-  SyncEngine({required this.localRoot, required this.remote, required this.baseFile});
+  SyncEngine({required this.localRoot, required this.remote, required this.baseFile, this.unreachableMessage});
+
+  /// Meldung, wenn die Bibliothek beim Sync-Ziel fehlt (je nach Ziel).
+  final String? unreachableMessage;
 
   final String localRoot;
   final SyncStore remote;
@@ -86,10 +89,11 @@ class SyncEngine {
     final report = SyncReport();
     if (!await remote.exists(markerPath)) {
       throw SyncException(
-        tr(
-          'Der Sync-Ordner ist nicht erreichbar. Läuft Proton Drive, und ist der Ordner noch vorhanden?',
-          'The sync folder cannot be reached. Is Proton Drive running, and does the folder still exist?',
-        ),
+        unreachableMessage ??
+            tr(
+              'Der Sync-Ordner ist nicht erreichbar. Läuft Proton Drive, und ist der Ordner noch vorhanden?',
+              'The sync folder cannot be reached. Is Proton Drive running, and does the folder still exist?',
+            ),
       );
     }
 

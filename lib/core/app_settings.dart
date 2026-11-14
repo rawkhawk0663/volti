@@ -66,6 +66,11 @@ class AppSettings {
     await _write();
   }
 
+  Future<void> removeText(String name) async {
+    (_data['texts'] as Map?)?.remove(name);
+    await _write();
+  }
+
   Map<String, dynamic> get _usage => (_data['usage'] ??= <String, dynamic>{}) as Map<String, dynamic>;
 
   /// Wann das Stück zuletzt geöffnet wurde (null = nie).
