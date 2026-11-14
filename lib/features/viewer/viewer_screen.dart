@@ -8,6 +8,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../../app/theme.dart';
 import '../../core/pdf/page_image_cache.dart';
+import '../../core/pdf/paper.dart';
 import 'ink_controller.dart';
 import 'ink_layer.dart';
 import '../../core/ink/selection.dart';
@@ -31,6 +32,11 @@ import 'zoom_area.dart';
 import '../../app/window_buttons.dart';
 import 'metronome.dart';
 import 'metronome_panel.dart';
+import 'page_overview.dart';
+import 'page_strip.dart';
+import 'paper_picker.dart';
+import 'tuner.dart';
+import 'tuner_panel.dart';
 import '../../core/library/score_meta.dart';
 import '../library/settings_dialog.dart';
 import '../../app/keep_awake.dart';
@@ -89,7 +95,13 @@ class ViewerScreen extends StatefulWidget {
 
 /// Ein geöffnetes Stück: PDF, Seitenbilder und Anmerkungen.
 class _Piece {
-  _Piece(this.item) : ink = InkController(pdfPath: item.path, scope: item.setlistId, scopeName: item.setlistName);
+  _Piece(this.item) : ink = InkController(pdfPath: item.path, scope: item.setlistId, scopeName: item.setlistName) {
+    ink.addListener(_inkChanged);
+  }
+
+  /// Anmerkungen geändert seit dem letzten Aufbau der Bildleiste?
+  bool stripStale = false;
+  void _inkChanged() => stripStale = true;
 
   final ViewerItem item;
   final InkController ink;
@@ -150,7 +162,8 @@ class _Piece {
       setup = side.pages;
       meta = side.meta;
       doc = d;
-      cache = PageImageCache(d);
+      // Leere Seiten mit Vorlage (Notenlinien usw.).
+      cache = PageImageCache(d)..paperOf = (p) => setup.paperOf(p);
     } catch (e) {
       error = tr(
         'Die Datei konnte nicht geöffnet werden.\n${item.path}\n\n$e',
@@ -160,6 +173,7 @@ class _Piece {
   }
 
   void dispose() {
+    ink.removeListener(_inkChanged);
     ink.dispose(); // speichert offene Änderungen
     cache?.dispose();
     doc?.dispose();
@@ -187,6 +201,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
   bool _metronomeOpen = false;
   int? _metronomePiece;
 
+  /// Stimmgerät und Stimmton (Kammerton wird auf dem Gerät gemerkt).
+  late final _tuner = Tuner(a4: tools.tuningA4, onA4Changed: tools.setTuningA4);
+  bool _tunerOpen = false;
+
+  /// Kleine Seitenbilder für die Bildleiste unten.
+  final _stripThumbs = StripThumbs();
+
   final _diagnostics = PenDiagnostics();
   bool _showDiagnostics = false;
 
@@ -211,7 +232,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   // Für Leisten und Titel: das Stück der linken Seite.
   int get _index => _left.piece;
-  int get _page => _left.page;
   ViewerItem get _item => widget.items[_left.piece];
   _Piece? get _leftPiece => _pieces[_left.piece];
   int get _pageCount => _leftPiece?.pageCount ?? 0;
@@ -281,6 +301,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
         tools.pageLayout != _lastLayout ||
         tools.rulerVisible != _lastRuler) {
       _lastRuler = tools.rulerVisible;
+      // Nach dem Bearbeiten: Bildleiste mit den neuen Anmerkungen.
+      if (tools.mode == ToolMode.read && _lastMode != null && _lastMode != ToolMode.read) _stripThumbs.forget();
       _lastMode = tools.mode;
       _lastPaletteLeft = tools.paletteLeft;
       _lastLayout = tools.pageLayout;
@@ -312,7 +334,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final k in far) {
         if (k >= _left.piece - 1 && k <= _left.piece + 2) continue;
-        _pieces.remove(k)?.dispose();
+        final gone = _pieces.remove(k);
+        if (gone != null) _stripThumbs.forget(gone);
+        gone?.dispose();
       }
     });
   }
@@ -324,7 +348,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final doc = piece?.doc;
     if (piece == null || doc == null) return;
     tools.clearSelection();
-    final result = await showPageSetup(context, doc: doc, setup: piece.setup, title: piece.item.title);
+    final result = await showPageSetup(
+      context,
+      doc: doc,
+      setup: piece.setup,
+      title: piece.item.title,
+      defaultPaper: _defaultPaper(piece),
+    );
     if (result == null || !mounted) return;
     await _applySetup(index, result);
   }
@@ -333,6 +363,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   Future<void> _applySetup(int index, PageSetup result) async {
     final piece = _pieces[index];
     if (piece == null) return;
+    _stripThumbs.forget(piece); // Zuschnitt oder Reihenfolge geändert
     setState(() {
       piece.setup = result;
       _activeSlot = null;
@@ -364,8 +395,19 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final cache = piece?.cache;
     if (piece == null || cache == null) return;
     tools.clearSelection();
+    final choice = await showPaperPicker(
+      context,
+      title: tr('Leere Seite einfügen', 'Insert blank page'),
+      confirm: tr('Einfügen', 'Insert'),
+      initial: _defaultPaper(piece),
+    );
+    if (choice == null || !mounted) return;
     final before = piece.setup;
-    final (next, _) = before.withBlankAt(piece.fullIndex(slot.page) + 1, cache.pageCount);
+    final (next, _) = before.withBlankAt(
+      piece.fullIndex(slot.page) + 1,
+      cache.pageCount,
+      paper: choice.paper == Paper.blank ? null : choice.paper.name,
+    );
     await _applySetup(slot.piece, next);
     if (!mounted) return;
     _show(PageSlot(slot.piece, (slot.page + 1).clamp(1, piece.pageCount ?? 1)));
@@ -461,6 +503,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
     _zoom.matrix.removeListener(_onZoom);
     _zoom.dispose();
     _metronome.dispose();
+    _tuner.dispose();
+    _stripThumbs.dispose();
     tools.viewScale = 1;
     tools.setMode(ToolMode.read);
     for (final p in _pieces.values) {
@@ -655,7 +699,59 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   void _toggleMetronome() {
     _adoptTempo();
-    setState(() => _metronomeOpen = !_metronomeOpen);
+    setState(() {
+      _metronomeOpen = !_metronomeOpen;
+      if (_metronomeOpen) _tunerOpen = false; // beide stehen am selben Ort
+    });
+  }
+
+  void _toggleTuner() => setState(() {
+    _tunerOpen = !_tunerOpen;
+    if (_tunerOpen) _metronomeOpen = false;
+  });
+
+  /// Seitenübersicht: alle Seiten als kleine Bilder, antippen springt hin.
+  Future<void> _openOverview() async {
+    if (_leftPiece?.cache == null) return;
+    tools.clearSelection();
+    final current = {_left.page};
+    final r = _right;
+    if (r != null && r.piece == _left.piece) current.add(r.page);
+    final target = await showPageOverview(
+      context,
+      titles: [for (final it in widget.items) it.title],
+      currentPiece: _left.piece,
+      currentPages: current,
+      load: (i) async {
+        final open = _pieces[i];
+        if (open != null) await open.ready;
+        final doc = open?.doc;
+        if (open != null && doc != null) {
+          return (
+            piece: ExportPiece(doc: doc, annotations: open.ink.annotations, setup: open.setup, pages: open._shown),
+            owned: false,
+          );
+        }
+        try {
+          final it = widget.items[i];
+          final opened = await openExportPieces([(path: it.path, bookmark: it.bookmark, scope: it.setlistId)]);
+          return (piece: opened.first, owned: true);
+        } catch (_) {
+          return null;
+        }
+      },
+    );
+    if (target == null || !mounted) return;
+    await _ensure(target.piece);
+    if (!mounted) return;
+    final count = _pieces[target.piece]?.pageCount ?? 1;
+    _show(PageSlot(target.piece, target.page.clamp(1, math.max(1, count))));
+  }
+
+  /// Vorlage für neue leere Seiten eines Stücks (beim Notizblatt die gewählte).
+  Paper _defaultPaper(_Piece piece) {
+    final v = piece.meta.fields[ScoreMeta.paper]?.value;
+    return Paper.fromName(v is String ? v : null);
   }
 
   /// Eingestelltes Tempo und Taktart in den Infos des Stücks speichern.
@@ -773,6 +869,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
     } else if (down && key == LogicalKeyboardKey.keyM) {
       _adoptTempo();
       _metronome.toggle();
+    } else if (down && key == LogicalKeyboardKey.keyO) {
+      _openOverview();
     } else if (down && key == LogicalKeyboardKey.keyL) {
       tools.toggleRuler();
     } else if (down && _digits.contains(key)) {
@@ -815,7 +913,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: showBars && _pageCount > 1 ? 76 : 16,
+              bottom: showBars && _pageCount > 1 ? PageStrip.height + 12 : 16,
               child: Center(
                 child: ValueListenableBuilder<Matrix4>(
                   valueListenable: _zoom.matrix,
@@ -866,7 +964,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     child: _Slide(
                       visible: showBars,
                       fromTop: false,
-                      child: _PageBar(state: this),
+                      child: _buildStrip(visible: showBars),
                     ),
                   ),
                 ),
@@ -895,6 +993,16 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     onPressed: _jumpBack,
                     icon: const Icon(Icons.undo),
                     label: Text(tr('Zurück', 'Back')),
+                  ),
+                ),
+              ),
+            if (_tunerOpen)
+              Positioned(
+                right: 12,
+                top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
+                child: ExcludeFocus(
+                  child: RepaintBoundary(
+                    child: TunerPanel(tuner: _tuner, onClose: () => setState(() => _tunerOpen = false)),
                   ),
                 ),
               ),
@@ -933,6 +1041,38 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Bildleiste ganz unten: alle Seiten des aktuellen Stücks als kleine
+  /// Bilder. Antippen springt hin.
+  /// Ausgeblendet werden keine Bilder gerendert (das kostet beim Spielen
+  /// und Zeichnen nur Zeit), es werden nur schon vorhandene gezeigt.
+  Widget _buildStrip({required bool visible}) {
+    final piece = _leftPiece;
+    final doc = piece?.doc;
+    if (piece == null || doc == null) return const SizedBox.shrink();
+    // Inzwischen etwas gezeichnet (auch ohne „Bearbeiten“): Bilder neu machen.
+    if (visible && piece.stripStale) {
+      piece.stripStale = false;
+      _stripThumbs.forget(piece);
+    }
+    final current = {_left.page};
+    final r = _right;
+    if (r != null && r.piece == _left.piece) current.add(r.page);
+    return PageStrip(
+      key: ValueKey('strip/${_left.piece}'),
+      count: _pageCount,
+      current: current,
+      onTouch: _restartHideTimer,
+      onTap: _goTo,
+      thumb: (display) => visible
+          ? _stripThumbs.get(
+              piece,
+              piece.source(display),
+              () => ExportPiece(doc: doc, annotations: piece.ink.annotations, setup: piece.setup, pages: piece._shown),
+            )
+          : _stripThumbs.peek(piece, piece.source(display)),
     );
   }
 
@@ -1331,6 +1471,17 @@ class _TopBar extends StatelessWidget {
                       ),
                     ),
                     IconButton(
+                      tooltip: tr('Stimmgerät und Stimmton', 'Tuner and pitch pipe'),
+                      isSelected: state._tunerOpen,
+                      icon: const TuningForkIcon(),
+                      onPressed: state._toggleTuner,
+                    ),
+                    IconButton(
+                      tooltip: tr('Seitenübersicht (O)', 'Page overview (O)'),
+                      icon: const Icon(Icons.grid_view),
+                      onPressed: state._openOverview,
+                    ),
+                    IconButton(
                       tooltip: tr('Als PDF teilen oder drucken', 'Share or print as PDF'),
                       icon: const Icon(Icons.ios_share),
                       onPressed: state._export,
@@ -1371,7 +1522,7 @@ class _TopBar extends StatelessWidget {
                           value: state._insertBlank,
                           child: ListTile(
                             leading: Icon(Icons.note_add_outlined),
-                            title: Text(tr('Leere Seite einfügen (für Notizen)', 'Insert blank page (for notes)')),
+                            title: Text(tr('Leere Seite einfügen (für Notizen) …', 'Insert blank page (for notes) …')),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
@@ -1409,64 +1560,6 @@ class _TopBar extends StatelessWidget {
                     ),
                     const WindowButtons(),
                     const SizedBox(width: 4),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Unten: Seitenregler zum schnellen Springen.
-class _PageBar extends StatelessWidget {
-  const _PageBar({required this.state});
-  final _ViewerScreenState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final count = state._pageCount;
-    return Listener(
-      onPointerDown: (_) => state._restartHideTimer(),
-      child: SafeArea(
-        top: false,
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 620),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-            child: Material(
-              elevation: 2,
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(28),
-              clipBehavior: Clip.antiAlias,
-              child: Ink(
-                decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Row(
-                  children: [
-                    IconButton(
-                      tooltip: tr('Vorherige Seite', 'Previous page'),
-                      icon: const Icon(Icons.chevron_left),
-                      onPressed: state._prev,
-                    ),
-                    Expanded(
-                      child: Slider(
-                        min: 1,
-                        max: count.toDouble(),
-                        divisions: count - 1,
-                        value: state._page.toDouble().clamp(1, count.toDouble()),
-                        label: tr('Seite ${state._page}', 'Page ${state._page}'),
-                        onChanged: (v) => state._goTo(v.round()),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: tr('Nächste Seite', 'Next page'),
-                      icon: const Icon(Icons.chevron_right),
-                      onPressed: state._next,
-                    ),
                   ],
                 ),
               ),

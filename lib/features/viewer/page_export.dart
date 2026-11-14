@@ -12,6 +12,7 @@ import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/library/page_setup.dart';
 import '../../core/library/sidecar_store.dart';
+import '../../core/pdf/paper.dart';
 import 'ink_layer.dart';
 import 'stamp_paint.dart';
 import 'text_layer.dart';
@@ -108,6 +109,7 @@ Future<ui.Image?> renderPageAsShown(
   PageCrop crop,
   int page, {
   int width = 1800,
+  String? paper,
 }) async {
   final p = doc.pages[PageSetup.sizeSource(page) - 1];
   final aspect = p.width / p.height;
@@ -134,6 +136,7 @@ Future<ui.Image?> renderPageAsShown(
   final c1 = Canvas(r1);
   c1.drawRect(Offset.zero & full, Paint()..color = const Color(0xFFFFFFFF));
   if (pageImg != null) c1.drawImage(pageImg, Offset.zero, Paint());
+  if (blank) paintPaper(c1, full, Paper.fromName(paper));
   if (annotations != null) paintAnnotations(c1, full, annotations, page);
   final pic1 = r1.endRecording();
   final annotated = await pic1.toImage(fullW, fullH);
@@ -179,7 +182,13 @@ Future<Uint8List> buildExportPdf(
   for (final piece in pieces) {
     for (final page in piece.pages) {
       final crop = piece.setup.cropOf(page);
-      final img = await renderPageAsShown(piece.doc, withAnnotations ? piece.annotations : null, crop, page);
+      final img = await renderPageAsShown(
+        piece.doc,
+        withAnnotations ? piece.annotations : null,
+        crop,
+        page,
+        paper: piece.setup.paperOf(page),
+      );
       if (img != null) {
         final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
         // Seitengrösse in Punkten wie im Original (mit Zuschnitt und Drehung).

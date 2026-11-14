@@ -5,6 +5,8 @@ import '../../app/theme.dart';
 import '../../core/library/page_setup.dart';
 import '../../core/pdf/auto_crop.dart';
 import '../../core/pdf/page_image_cache.dart';
+import '../../core/pdf/paper.dart';
+import 'paper_picker.dart';
 import 'cropped_page.dart';
 import '../../app/window_buttons.dart';
 import '../../app/l10n.dart';
@@ -16,18 +18,22 @@ Future<PageSetup?> showPageSetup(
   required PdfDocument doc,
   required PageSetup setup,
   required String title,
+  Paper defaultPaper = Paper.blank,
 }) => Navigator.of(context).push<PageSetup>(
   MaterialPageRoute(
-    builder: (_) => _PageSetupScreen(doc: doc, setup: setup, title: title),
+    builder: (_) => _PageSetupScreen(doc: doc, setup: setup, title: title, defaultPaper: defaultPaper),
     fullscreenDialog: true,
   ),
 );
 
 class _PageSetupScreen extends StatefulWidget {
-  const _PageSetupScreen({required this.doc, required this.setup, required this.title});
+  const _PageSetupScreen({required this.doc, required this.setup, required this.title, required this.defaultPaper});
   final PdfDocument doc;
   final PageSetup setup;
   final String title;
+
+  /// Vorlage für neu eingefügte leere Seiten (z. B. Notenlinien beim Notizblatt).
+  final Paper defaultPaper;
 
   @override
   State<_PageSetupScreen> createState() => _PageSetupScreenState();
@@ -37,7 +43,8 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
   late final int _n = widget.doc.pages.length;
   late final List<int> _order = widget.setup.pages(_n);
   late final Map<int, PageCrop> _crops = {...widget.setup.crops};
-  late final PageImageCache _thumbs = PageImageCache(widget.doc, capacity: 64);
+  late final Map<int, String> _paper = {...widget.setup.paper};
+  late final PageImageCache _thumbs = PageImageCache(widget.doc, capacity: 64)..paperOf = (p) => _paper[p];
   late int _blanks = widget.setup.blanks;
   bool _busy = false;
 
@@ -60,7 +67,9 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
 
   PageSetup _result() {
     final natural = _order.length == _n && [for (var i = 0; i < _n; i++) _order[i] == i + 1].every((b) => b);
-    return widget.setup.withOrder(natural ? null : _order, blanks: _blanks).withCrops(_crops);
+    return widget.setup
+        .withOrder(natural ? null : _order, blanks: _blanks, paper: Map.unmodifiable(_paper))
+        .withCrops(_crops);
   }
 
   Future<void> _autoAll() async {
@@ -121,8 +130,23 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
   /// Leere Seite zum Beschriften nach Position [i] einfügen.
   void _insertBlank(int i) => setState(() {
     _blanks++;
-    _order.insert(i + 1, PageSetup.blankBase + _blanks);
+    final page = PageSetup.blankBase + _blanks;
+    _order.insert(i + 1, page);
+    if (widget.defaultPaper != Paper.blank) _paper[page] = widget.defaultPaper.name;
   });
+
+  /// Vorlage einer leeren Seite ändern.
+  Future<void> _choosePaper(int page) async {
+    final r = await showPaperPicker(
+      context,
+      title: tr('Vorlage der leeren Seite', 'Template of the blank page'),
+      confirm: tr('Übernehmen', 'Apply'),
+      initial: Paper.fromName(_paper[page]),
+    );
+    if (r == null || !mounted) return;
+    setState(() => r.paper == Paper.blank ? _paper.remove(page) : _paper[page] = r.paper.name);
+    _thumbs.invalidate(page);
+  }
 
   void _showAgain(int p) {
     setState(() {
@@ -169,11 +193,13 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                 'Das PDF bleibt unverändert – Volti merkt sich nur, wie die Seiten gezeigt werden. '
                     'Am Griff ☰ ziehen ändert die Reihenfolge. Eine Seite doppelt zeigen geht z. B. für Wiederholungen '
                     '(Anmerkungen erscheinen dann auf beiden). «Ränder entfernen» schneidet weisse Ränder bei allen Seiten weg. '
-                    'Das Blatt mit Plus fügt danach eine leere Seite für Notizen ein.',
+                    'Das Blatt mit Plus fügt danach eine leere Seite für Notizen ein. '
+                    'Eine leere Seite antippen wählt ihre Vorlage (z. B. Notenlinien oder Tabulatur).',
                 'The PDF stays unchanged – Volti only remembers how the pages are shown. '
                     'Drag the handle ☰ to change the order. Showing a page twice is useful e.g. for repeats '
                     '(notes then appear on both). «Remove margins» crops white margins on all pages. '
-                    'The sheet with the plus inserts a blank page for notes after it.',
+                    'The sheet with the plus inserts a blank page for notes after it. '
+                    'Tap a blank page to choose its template (e.g. staff paper or tablature).',
               ),
               style: hint,
             ),
@@ -227,7 +253,7 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                             ),
                           ),
                           InkWell(
-                            onTap: blank ? null : () => _editCrop(src),
+                            onTap: blank ? () => _choosePaper(src) : () => _editCrop(src),
                             child: Container(
                               color: VoltiColors.anthracite,
                               padding: const EdgeInsets.all(4),
@@ -248,7 +274,12 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                                 Text('${i + 1}', style: Theme.of(context).textTheme.titleLarge),
                                 Text(
                                   blank
-                                      ? tr('Leere Seite (für Notizen)', 'Blank page (for notes)')
+                                      ? (_paper[src] == null
+                                            ? tr('Leere Seite (für Notizen)', 'Blank page (for notes)')
+                                            : tr(
+                                                'Leere Seite · ${Paper.fromName(_paper[src]).label}',
+                                                'Blank page · ${Paper.fromName(_paper[src]).label}',
+                                              ))
                                       : src == i + 1 && duplicates == 1
                                       ? tr('PDF-Seite $src', 'PDF page $src')
                                       : tr(

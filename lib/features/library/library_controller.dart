@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:pdf/pdf.dart' show PdfPageFormat;
-import 'package:pdf/widgets.dart' as pw;
 import 'package:uuid/uuid.dart';
 
 import '../../core/app_settings.dart';
@@ -13,6 +11,8 @@ import '../../core/library/score_importer.dart';
 import '../../core/library/score_meta.dart';
 import '../../core/library/setlist.dart';
 import '../../core/library/sidecar_store.dart';
+import '../../core/pdf/paper.dart';
+import '../../core/pdf/paper_pdf.dart';
 import 'auto_backup_controller.dart';
 import '../../app/l10n.dart';
 
@@ -269,14 +269,13 @@ class LibraryController extends ChangeNotifier {
   }
 
   // ------------------------------------------------------- Notizblätter
-  /// Neues Notizblatt (ein leeres A4-Blatt, z. B. für Notizen als Music
-  /// Director). Es liegt wie ein Stück in `Noten/` (so wird es abgeglichen),
-  /// erscheint aber nur in Setlists. Weitere Seiten kommen über „Leere Seite
-  /// einfügen“ dazu.
-  Future<ScoreEntry?> createSheet(String name) async {
-    final doc = pw.Document(title: name, creator: 'Volti');
-    doc.addPage(pw.Page(pageFormat: PdfPageFormat.a4, build: (_) => pw.SizedBox()));
-    final bytes = await doc.save();
+  /// Neues Notizblatt (ein A4-Blatt, leer oder mit Vorlage wie Notenlinien,
+  /// z. B. für Notizen als Music Director). Es liegt wie ein Stück in
+  /// `Noten/` (so wird es abgeglichen), erscheint aber nur in Setlists.
+  /// Weitere Seiten kommen über „Leere Seite einfügen“ dazu (mit derselben
+  /// Vorlage, gemerkt im Info-Feld `paper`).
+  Future<ScoreEntry?> createSheet(String name, {Paper paper = Paper.blank}) async {
+    final bytes = await buildPaperPdf(paper, title: name);
     final file = 'Notizblatt-${const Uuid().v4().substring(0, 8)}.pdf';
     final path = p.join(_importer.notesDir, file);
     await Directory(_importer.notesDir).create(recursive: true);
@@ -284,6 +283,7 @@ class LibraryController extends ChangeNotifier {
     final meta = ScoreMeta()
       ..set(ScoreMeta.title, name)
       ..set(ScoreMeta.sheet, true);
+    if (paper != Paper.blank) meta.set(ScoreMeta.paper, paper.name);
     await _sidecars.save(path, meta: meta);
     await rescan();
     onLocalChange?.call();
@@ -327,8 +327,11 @@ class LibraryController extends ChangeNotifier {
   }
 
   Future<void> addToSetlist(Setlist s, Iterable<ScoreEntry> entries) async {
-    s.items.addAll(entries.map((e) => SetlistItem.create(e.relativePath)));
-    await saveSetlist(s);
+    // Nach einem Neu-Einlesen (z. B. beim Anlegen eines Notizblatts) kann [s]
+    // eine alte Fassung sein: die aktuelle nehmen, sonst ginge etwas verloren.
+    final target = _setlists.where((x) => x.id == s.id).firstOrNull ?? s;
+    target.items.addAll(entries.map((e) => SetlistItem.create(e.relativePath)));
+    await saveSetlist(target);
   }
 
   /// Ein Lesezeichen (Bereich eines Stücks) als eigenen Eintrag hinzufügen.

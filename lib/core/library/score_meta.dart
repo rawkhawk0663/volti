@@ -23,6 +23,10 @@ class ScoreMeta {
   /// Notizblatt einer Setlist (leeres Blatt zum Beschriften, true).
   static const sheet = 'sheet';
 
+  /// Vorlage für leere Seiten dieses Stücks (z. B. Notenlinien bei einem
+  /// Notizblatt, Name aus `Paper`).
+  static const paper = 'paper';
+
   /// Tempo in Schlägen pro Minute (für das Metronom).
   static const tempo = 'tempo';
 

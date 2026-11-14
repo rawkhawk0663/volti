@@ -8,6 +8,7 @@ import 'package:volti/core/library/library_filter.dart';
 import 'package:volti/core/library/library_scanner.dart';
 import 'package:volti/core/library/score_importer.dart';
 import 'package:volti/core/library/score_meta.dart';
+import 'package:volti/core/pdf/paper.dart';
 import 'package:volti/core/library/setlist.dart';
 import 'package:volti/core/library/sidecar_store.dart';
 import 'package:volti/core/ink/score_annotations.dart';
@@ -235,6 +236,20 @@ void main() {
       expect(File('${eins.path}${SidecarStore.suffix}').existsSync(), isFalse);
       expect(lib.scores.map((e) => e.title), ['zwei']);
       expect((await SetlistStore(data.path).loadAll()).single.items.map((i) => i.relativePath), ['Noten/zwei.pdf']);
+    });
+
+    test('Notizblatt mit Vorlage landet in der Setlist (auch nach dem Neu-Einlesen)', () async {
+      final lib = LibraryController(await AppSettings.loadFrom(Directory(p.join(dir.path, 'cfg'))), root: data.path);
+      await lib.init();
+      final set = await lib.createSetlist('Gottesdienst');
+      final sheet = await lib.createSheet('Notizen', paper: Paper.staff);
+      expect(sheet, isNotNull);
+      // [set] ist nach dem Neu-Einlesen eine alte Fassung – trotzdem geht nichts verloren.
+      await lib.addToSetlist(set, [sheet!]);
+      final current = lib.setlists.single;
+      expect(current.items.map((i) => i.relativePath), [sheet.relativePath]);
+      expect(sheet.meta.fields[ScoreMeta.paper]?.value, 'staff');
+      expect(lib.scores, isEmpty); // Notizblätter erscheinen nicht in der Bibliothek
     });
   });
 }

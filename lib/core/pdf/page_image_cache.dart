@@ -6,6 +6,7 @@ import 'package:flutter/painting.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../library/page_setup.dart';
+import 'paper.dart';
 
 /// Rendert PDF-Seiten als Bilder und hält die letzten paar im Speicher.
 ///
@@ -28,6 +29,18 @@ class PageImageCache extends ChangeNotifier {
   void setVisiblePages(Set<int> pages) => _visible = pages;
 
   int get pageCount => document.pages.length;
+
+  /// Vorlage einer leeren Seite (Notenlinien usw.), null = weiss.
+  String? Function(int page)? paperOf;
+
+  /// Bilder einer Seite vergessen (z. B. wenn ihre Vorlage geändert wurde).
+  void invalidate(int page) {
+    final keys = _images.keys.where((k) => k.page == page).toList();
+    for (final k in keys) {
+      _images.remove(k)!.dispose();
+    }
+    notifyListeners();
+  }
 
   /// Seitenverhältnis (Breite / Höhe) der Seite.
   double aspectRatio(int page) {
@@ -59,11 +72,14 @@ class PageImageCache extends ChangeNotifier {
     }
   }
 
-  /// Leere Seite: einfach weiss.
-  static Future<ui.Image> _white(int w, int h) {
+  /// Leere Seite: weiss, auf Wunsch mit Vorlage (Notenlinien usw.).
+  static Future<ui.Image> _white(int w, int h, Paper paper) {
     final recorder = ui.PictureRecorder();
-    Canvas(recorder)
-        .drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Paint()..color = const Color(0xFFFFFFFF));
+    final canvas = Canvas(recorder);
+    final size = Size(w.toDouble(), h.toDouble());
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFFFFFFF));
+    // Linien mindestens einen Bildpunkt dick, sonst wirken sie am Bildschirm grau.
+    paintPaper(canvas, size, paper, minWidth: 1);
     final picture = recorder.endRecording();
     return picture.toImage(w, h).whenComplete(picture.dispose);
   }
@@ -81,7 +97,7 @@ class PageImageCache extends ChangeNotifier {
     final w = key.pixelWidth;
     final h = (w * page.height / page.width).round();
     final image = PageSetup.isBlank(key.page)
-        ? await _white(w, h)
+        ? await _white(w, h, Paper.fromName(paperOf?.call(key.page)))
         : await page.renderForDisplay(
             width: w,
             height: h,

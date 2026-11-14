@@ -132,6 +132,11 @@ class ToolController extends ChangeNotifier {
   /// Beim Bearbeiten mit einem Finger wischen = blättern.
   bool get swipeWhileEditing => settings.flag('swipeWhileEditing', orElse: true);
   Future<void> setSwipeWhileEditing(bool v) => _setFlag('swipeWhileEditing', v);
+
+  /// Kammerton für Stimmgerät und Stimmton (nur auf diesem Gerät gemerkt).
+  double get tuningA4 => double.tryParse(settings.text('tuningA4') ?? '') ?? 440;
+  Future<void> setTuningA4(double v) => settings.setText('tuningA4', '$v');
+
   Future<void> togglePaletteSide() async {
     popoverOffset = null; // Fenster wieder neben die Palette
     await _setFlag('paletteLeft', !paletteLeft);

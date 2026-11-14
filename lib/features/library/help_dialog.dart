@@ -61,6 +61,10 @@ List<_HelpPage> get _pages => [
     ),
     tr('Pedale und Pfeiltasten blättern ebenfalls.', 'Pedals and arrow keys turn pages too.'),
     tr(
+      'Unten zeigt die Bildleiste alle Seiten. Antippen springt hin. Der Knopf mit den vier Kästchen oben zeigt alle Seiten gross.',
+      'The strip at the bottom shows every page. Tap one to jump there. The button with four squares at the top shows all pages large.',
+    ),
+    tr(
       'Zwei Finger zoomen. Vergrössert verschiebt ein Finger die Seite.',
       'Two fingers zoom. When zoomed in, one finger moves the page.',
     ),
@@ -95,16 +99,16 @@ List<_HelpPage> get _pages => [
       'A setlist puts together the songs for a service or a concert. While playing, it behaves like a single book.',
     ),
     tr(
-      'Ein Notizblatt in der Setlist ist eine leere Seite für deine Notizen.',
-      'A note sheet in the setlist is a blank page for your notes.',
+      'Ein Notizblatt in der Setlist ist eine Seite für deine Notizen, leer oder mit Notenlinien, Tabulatur oder Akkord-Kästchen.',
+      'A note sheet in the setlist is a page for your notes, blank or with staff lines, tablature or chord boxes.',
     ),
     tr(
       'Ebenen, die du in einer Setlist anlegst, gibt es nur dort. Notizen aus der Bibliothek erscheinen überall.',
       'Layers you create in a setlist exist only there. Notes from the library appear everywhere.',
     ),
     tr(
-      'Das Metronom (oben in der Notenansicht) übernimmt das Tempo jedes Songs.',
-      'The metronome (at the top of the music view) picks up the tempo of each song.',
+      'Das Metronom (oben in der Notenansicht) übernimmt das Tempo jedes Songs. Daneben liegen Stimmgerät und Stimmton.',
+      'The metronome (at the top of the music view) picks up the tempo of each song. Next to it are the tuner and pitch pipe.',
     ),
   ]),
   _HelpPage(Icons.cloud_sync_outlined, tr('Abgleichen und sichern', 'Sync and backup'), [

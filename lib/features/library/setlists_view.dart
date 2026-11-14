@@ -11,6 +11,7 @@ import '../../core/library/library_scanner.dart';
 import '../../core/library/setlist.dart';
 import '../viewer/export_dialog.dart';
 import '../viewer/page_export.dart';
+import '../viewer/paper_picker.dart';
 import '../viewer/viewer_screen.dart';
 import 'folder_widgets.dart';
 import 'library_actions.dart';
@@ -838,14 +839,18 @@ class SetlistDetailScreen extends StatelessWidget {
                     'Blank sheet for notes (e.g. as music director)',
                   ),
                   onPressed: () async {
-                    final name = await askForName(
+                    final r = await showPaperPicker(
                       context,
                       title: tr('Neues Notizblatt', 'New note sheet'),
-                      initial: tr('Notizen', 'Notes'),
+                      confirm: tr('Anlegen', 'Create'),
+                      name: tr('Notizen', 'Notes'),
                     );
-                    if (name == null) return;
-                    final sheet = await library.createSheet(name);
-                    if (sheet != null) await library.addToSetlist(s, [sheet]);
+                    if (r == null) return;
+                    final sheet = await library.createSheet(r.name, paper: r.paper);
+                    // Das Anlegen liest die Bibliothek neu ein: die aktuelle
+                    // Fassung der Setlist nehmen, sonst ginge das Blatt verloren.
+                    final current = library.setlists.where((x) => x.id == s.id).firstOrNull ?? s;
+                    if (sheet != null) await library.addToSetlist(current, [sheet]);
                   },
                   icon: const Icon(Icons.sticky_note_2_outlined),
                   label: Text(tr('Notizblatt', 'Note sheet')),

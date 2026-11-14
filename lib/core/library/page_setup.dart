@@ -98,12 +98,19 @@ class PageCrop {
 ///
 /// Beim Sync gewinnt die jüngste Fassung als Ganzes ([modified]).
 class PageSetup {
-  const PageSetup({this.order, this.crops = const {}, this.modified, this.blanks = 0});
+  const PageSetup({this.order, this.crops = const {}, this.modified, this.blanks = 0, this.paper = const {}});
 
   final List<int>? order;
   final Map<int, PageCrop> crops;
   final DateTime? modified;
   final int blanks;
+
+  /// Vorlage pro leerer Seite (Notenlinien, Tabulatur …, siehe `Paper`).
+  /// Fehlt der Eintrag, ist die Seite weiss.
+  final Map<int, String> paper;
+
+  /// Vorlage der leeren Seite [page] (null = weiss).
+  String? paperOf(int page) => paper[page];
 
   static const empty = PageSetup();
 
@@ -131,21 +138,24 @@ class PageSetup {
   PageCrop cropOf(int pdfPage) => crops[pdfPage] ?? PageCrop.none;
 
   /// Neue Reihenfolge (null = wieder alle Seiten in PDF-Reihenfolge).
-  PageSetup withOrder(List<int>? order, {DateTime? now, int? blanks}) => PageSetup(
+  PageSetup withOrder(List<int>? order, {DateTime? now, int? blanks, Map<int, String>? paper}) => PageSetup(
     order: order == null ? null : List.unmodifiable(order),
     crops: crops,
     modified: now ?? _now(),
     blanks: blanks ?? this.blanks,
+    paper: paper ?? this.paper,
   );
 
   /// Eine neue leere Seite an Stelle [index] (0-basiert, in der Anzeige-
   /// Reihenfolge) einfügen. Gibt die neue Einrichtung und die Nummer der
   /// leeren Seite zurück.
-  (PageSetup, int) withBlankAt(int index, int pdfPages, {DateTime? now}) {
+  /// [paper]: Vorlage der neuen Seite (null = weiss).
+  (PageSetup, int) withBlankAt(int index, int pdfPages, {DateTime? now, String? paper}) {
     final list = [...pages(pdfPages)];
     final page = blankBase + blanks + 1;
     list.insert(index.clamp(0, list.length), page);
-    return (withOrder(list, now: now, blanks: blanks + 1), page);
+    final papers = paper == null ? this.paper : Map<int, String>.unmodifiable({...this.paper, page: paper});
+    return (withOrder(list, now: now, blanks: blanks + 1, paper: papers), page);
   }
 
   PageSetup withCrop(int pdfPage, PageCrop crop, {DateTime? now}) {
@@ -155,12 +165,13 @@ class PageSetup {
     } else {
       map[pdfPage] = crop.normalized();
     }
-    return PageSetup(order: order, crops: Map.unmodifiable(map), modified: now ?? _now(), blanks: blanks);
+    return PageSetup(order: order, crops: Map.unmodifiable(map), modified: now ?? _now(), blanks: blanks, paper: paper);
   }
 
   PageSetup withCrops(Map<int, PageCrop> all, {DateTime? now}) => PageSetup(
     order: order,
     blanks: blanks,
+    paper: paper,
     crops: Map.unmodifiable({
       for (final e in all.entries)
         if (!e.value.isNone) e.key: e.value.normalized(),
@@ -169,7 +180,7 @@ class PageSetup {
   );
 
   /// Alles zurück auf das PDF, wie es ist.
-  PageSetup reset({DateTime? now}) => PageSetup(modified: now ?? _now(), blanks: blanks);
+  PageSetup reset({DateTime? now}) => PageSetup(modified: now ?? _now(), blanks: blanks, paper: paper);
 
   static DateTime _now() => DateTime.now().toUtc();
 
@@ -187,6 +198,7 @@ class PageSetup {
       if (order != null) 'order': order,
       if (crops.isNotEmpty) 'crops': {for (final e in crops.entries) '${e.key}': e.value.toJson()},
       if (blanks > 0) 'blanks': blanks,
+      if (paper.isNotEmpty) 'paper': {for (final e in paper.entries) '${e.key}': e.value},
       'modified': modified!.toUtc().toIso8601String(),
     };
   }
@@ -199,7 +211,14 @@ class PageSetup {
       final page = int.tryParse(e.key);
       if (page != null) crops[page] = PageCrop.fromJson(e.value as Map<String, dynamic>);
     }
+    final paper = <int, String>{};
+    final rawPaper = j['paper'] as Map<String, dynamic>? ?? const {};
+    for (final e in rawPaper.entries) {
+      final page = int.tryParse(e.key);
+      if (page != null && e.value is String) paper[page] = e.value as String;
+    }
     return PageSetup(
+      paper: paper,
       order: (j['order'] as List<dynamic>?)?.map((v) => v as int).toList(),
       crops: crops,
       modified: j['modified'] == null ? null : DateTime.parse(j['modified'] as String),

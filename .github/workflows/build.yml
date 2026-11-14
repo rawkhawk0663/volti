@@ -29,6 +29,8 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      # Das Stimmgerät (flutter_recorder) braucht unter Linux ALSA zum Bauen der Tests.
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
