@@ -110,7 +110,9 @@ class _InkLayerState extends State<InkLayer> {
     const maxAhead = 14.0;
     if (ahead.distance > maxAhead) ahead = ahead / ahead.distance * maxAhead;
     if (ahead.distance < 0.5) return null;
-    return p1 + ahead;
+    final edge = _rulerEdge;
+    // Am Lineal: auch die Vorhersage liegt auf der Kante.
+    return edge == null ? p1 + ahead : _projectOnLine(p1 + ahead, edge.$1, edge.$2);
   }
 
   /// Schon gemalter Anfang des entstehenden Strichs (als fertiges Bild), damit
@@ -1618,6 +1620,15 @@ void paintStroke(
       path.lineTo(at(p).dx, at(p).dy);
     }
     if (pts.length == 1) path.lineTo(at(pts.first).dx + 0.1, at(pts.first).dy);
+    // Ganz gerade Striche (am Lineal) haben eine Umrandung ohne Höhe bzw.
+    // Breite. Manche Grafikkarten lassen solche Formen beim Malen ins
+    // Seitenbild einfach weg (beim Besitzer verschwanden Lineal-Striche
+    // nach dem Loslassen). Ein winziger, unsichtbarer Versatz verhindert das.
+    final b = path.getBounds();
+    if (b.height < 0.05 || b.width < 0.05) {
+      final e = at(pts.last);
+      path.lineTo(e.dx + (b.width < 0.05 ? 0.05 : 0), e.dy + (b.height < 0.05 ? 0.05 : 0));
+    }
     canvas.drawPath(
       path,
       Paint()
@@ -1676,7 +1687,8 @@ void paintHighlighterSegments(
     ..isAntiAlias = true;
   for (var i = math.max(1, from); i < to; i++) {
     final a = pts[i - 1], b = pts[i];
-    canvas.drawLine(Offset(a.x * size.width, a.y * size.height), Offset(b.x * size.width, b.y * size.height), paint);
+    final (p, q) = _nonFlat(Offset(a.x * size.width, a.y * size.height), Offset(b.x * size.width, b.y * size.height));
+    canvas.drawLine(p, q, paint);
   }
 }
 
@@ -1684,6 +1696,16 @@ void _drawSegments(Canvas canvas, Size size, Paint paint, double w, List<InkPoin
   for (var i = from; i < to; i++) {
     final a = pts[i - 1], b = pts[i];
     paint.strokeWidth = math.max(0.5, w * (0.35 + 1.3 * (a.pressure + b.pressure) / 2));
-    canvas.drawLine(Offset(a.x * size.width, a.y * size.height), Offset(b.x * size.width, b.y * size.height), paint);
+    final (p, q) = _nonFlat(Offset(a.x * size.width, a.y * size.height), Offset(b.x * size.width, b.y * size.height));
+    canvas.drawLine(p, q, paint);
   }
+}
+
+/// Ganz waagrechte oder senkrechte Linien (am Lineal) ganz leicht schräg
+/// stellen (0,05 Punkte, unsichtbar). Manche Grafikkarten lassen Formen ohne
+/// Höhe bzw. Breite beim Malen ins Seitenbild weg.
+(Offset, Offset) _nonFlat(Offset a, Offset b) {
+  final dx = (a.dx - b.dx).abs() < 0.05 ? 0.05 : 0.0;
+  final dy = (a.dy - b.dy).abs() < 0.05 ? 0.05 : 0.0;
+  return (a, b + Offset(dx, dy));
 }
