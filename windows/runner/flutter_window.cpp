@@ -128,6 +128,28 @@ bool FlutterWindow::OnCreate() {
         }
       });
 
+  // Bildschirm wach halten, solange Noten offen sind (beide Hände an der
+  // Gitarre: Windows soll das Display nicht abschalten oder sperren).
+  screen_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "volti/screen",
+          &flutter::StandardMethodCodec::GetInstance());
+  screen_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+             result) {
+        if (call.method_name() != "keepAwake") {
+          result->NotImplemented();
+          return;
+        }
+        const auto* on = std::get_if<bool>(call.arguments());
+        const EXECUTION_STATE state =
+            (on != nullptr && *on)
+                ? (ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)
+                : ES_CONTINUOUS;
+        result->Success(flutter::EncodableValue(SetThreadExecutionState(state) != 0));
+      });
+
   // Stift-Verzögerungen von Windows abschalten (Hauptfenster und Inhalt).
   DisablePenDelays(GetHandle());
   DisablePenDelays(flutter_controller_->view()->GetNativeWindow());

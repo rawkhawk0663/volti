@@ -33,6 +33,7 @@ import 'metronome.dart';
 import 'metronome_panel.dart';
 import '../../core/library/score_meta.dart';
 import '../library/settings_dialog.dart';
+import '../../app/keep_awake.dart';
 import '../../app/l10n.dart';
 
 /// Ein Stück, das im Notenbetrachter angezeigt wird.
@@ -250,6 +251,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void initState() {
     super.initState();
     tools.setMode(ToolMode.read);
+    // Solange Noten offen sind, bleibt der Bildschirm an.
+    KeepAwake.acquire();
     tools.addListener(_onToolsChanged);
     _zoom.settled.addListener(_onRenderScale);
     _zoom.matrix.addListener(_onZoom);
@@ -452,6 +455,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    KeepAwake.release();
     tools.removeListener(_onToolsChanged);
     _zoom.settled.removeListener(_onRenderScale);
     _zoom.matrix.removeListener(_onZoom);

@@ -122,4 +122,15 @@ void main() {
     zoom.dispose();
     c.dispose();
   });
+
+  test('Lineal verschwindet beim Verlassen des Bearbeitens', () async {
+    tools = await makeTools(dir);
+    tools.setMode(ToolMode.pen);
+    tools.toggleRuler();
+    expect(tools.rulerVisible, isTrue);
+    tools.setMode(ToolMode.highlighter);
+    expect(tools.rulerVisible, isTrue, reason: 'Werkzeugwechsel lässt es stehen');
+    tools.finishEditing();
+    expect(tools.rulerVisible, isFalse);
+  });
 }

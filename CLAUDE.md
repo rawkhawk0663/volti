@@ -169,6 +169,8 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Android: noch nicht (der Empfänger auf localhost geht dort so nicht; dafür später eine Rückleitung in die App). `canSync` ist auf Android weiterhin aus.
    **Google Drive ist ausgeblendet** (der Besitzer nutzt nur Dropbox, die Google-Einrichtung war ihm zu aufwendig). Der Code bleibt; die Möglichkeit erscheint erst, wenn `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` beim Bauen gesetzt sind.
 
+42. **Bildschirm bleibt wach**, solange eine Notenansicht offen ist (Wunsch des Besitzers: beide Hände an der Gitarre, das Surface sperrte sonst das Display). `KeepAwake.acquire/release` (`lib/app/keep_awake.dart`, mitgezählt) über den Kanal `volti/screen`: Windows `SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)` in `flutter_window.cpp`, Android `FLAG_KEEP_SCREEN_ON` in `MainActivity.kt`. **Lineal** verschwindet beim Verlassen des Bearbeitens (`ToolController.setMode(read)`).
+
 ## Prüfen
 ```bash
 flutter analyze

@@ -202,6 +202,11 @@ class ToolController extends ChangeNotifier {
     }
     if (m != ToolMode.lasso) clearSelection();
     if (m != ToolMode.link) linkStart.value = null;
+    // Lineal nur beim Bearbeiten (Wunsch des Besitzers): beim Verlassen weg.
+    if (m == ToolMode.read && rulerVisible) {
+      rulerVisible = false;
+      rulerChanged.value++;
+    }
     _mode = m;
     if (m != ToolMode.read && m != ToolMode.none) _lastTool = m;
     notifyListeners();
