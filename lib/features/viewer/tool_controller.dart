@@ -10,6 +10,7 @@ import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
 import 'rich_text.dart';
 import '../../app/l10n.dart';
+import 'shapes.dart';
 
 /// Was gerade aktiv ist.
 enum ToolMode {
@@ -292,7 +293,23 @@ class ToolController extends ChangeNotifier {
   StampSetting get stamp => _s.stamp;
   List<int> get recentStamps => List.unmodifiable(_s.recentStamps);
   DrawingPreset get shape => _s.shape;
-  ShapeKind get shapeKind => _s.shapeKind;
+  ShapeKind get shapeKind => normalizeShapeKind(_s.shapeKind);
+
+  /// Füllfarbe für Rechteck und Ellipse (0 = nicht gefüllt).
+  int get shapeFill => _s.shapeFill;
+  bool get shapeOutline => _s.shapeOutline;
+
+  void setShapeFill(int argb) {
+    _s.shapeFill = argb;
+    // Ohne Füllung braucht es einen Rand, sonst wäre die Form unsichtbar.
+    if (argb == 0) _s.shapeOutline = true;
+    _changed();
+  }
+
+  void setShapeOutline(bool on) {
+    _s.shapeOutline = on || _s.shapeFill == 0;
+    _changed();
+  }
 
   void setStamp(StampSetting st) {
     _s.stamp = st;

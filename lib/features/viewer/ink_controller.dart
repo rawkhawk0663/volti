@@ -145,9 +145,11 @@ class InkController extends ChangeNotifier {
     required int color,
     required double width,
     required List<InkPoint> points,
+    int? fill,
   }) {
     if (points.isEmpty) return;
     final stroke = Stroke(
+      fill: fill,
       id: _uuid.v4(),
       page: page,
       tool: tool,
@@ -880,6 +882,7 @@ class InkController extends ChangeNotifier {
         width: s.width,
         createdAt: now,
         layer: layer ?? s.layer,
+        fill: s.fill,
         points: List.unmodifiable([
           for (final p in s.points)
             () {
@@ -967,6 +970,7 @@ class InkController extends ChangeNotifier {
         createdAt: s.createdAt,
         modifiedAt: now,
         layer: s.layer,
+        fill: s.fill,
       );
       _annotations.put(copy);
       inverse.added.add(copy.id);

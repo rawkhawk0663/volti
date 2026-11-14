@@ -30,7 +30,11 @@ void main() {
         Directionality(
           textDirection: TextDirection.ltr,
           child: Center(
-            child: SizedBox(width: 400, height: 600, child: InkLayer(page: 1, controller: c, tools: tools)),
+            child: SizedBox(
+              width: 400,
+              height: 600,
+              child: InkLayer(page: 1, controller: c, tools: tools),
+            ),
           ),
         ),
       );
@@ -83,7 +87,11 @@ void main() {
                 tools: tools,
                 onFingerSwipe: (_) {},
                 child: Center(
-                  child: SizedBox(width: 400, height: 600, child: InkLayer(page: 1, controller: c, tools: tools)),
+                  child: SizedBox(
+                    width: 400,
+                    height: 600,
+                    child: InkLayer(page: 1, controller: c, tools: tools),
+                  ),
                 ),
               ),
             ),

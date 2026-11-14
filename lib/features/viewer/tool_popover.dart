@@ -815,8 +815,8 @@ Map<ShapeKind, String> get _shapeNames => {
   ShapeKind.arrow: tr('Pfeil', 'Arrow'),
   ShapeKind.rectangle: tr('Rechteck', 'Rectangle'),
   ShapeKind.ellipse: tr('Ellipse', 'Ellipse'),
-  ShapeKind.crescendo: tr('Crescendo', 'Crescendo'),
-  ShapeKind.decrescendo: tr('Decrescendo', 'Decrescendo'),
+  ShapeKind.crescendo: tr('Crescendo / Decrescendo', 'Crescendo / decrescendo'),
+  ShapeKind.decrescendo: tr('Crescendo / Decrescendo', 'Crescendo / decrescendo'),
   ShapeKind.slur: tr('Bogen', 'Slur'),
   ShapeKind.staff: tr('Notenlinien', 'Staff lines'),
 };
@@ -836,7 +836,7 @@ class _ShapeSettings extends StatelessWidget {
           spacing: 6,
           runSpacing: 6,
           children: [
-            for (final k in ShapeKind.values)
+            for (final k in offeredShapeKinds)
               _FavoriteChip(
                 selected: tools.shapeKind == k,
                 tooltip: _shapeNames[k]!,
@@ -847,12 +847,17 @@ class _ShapeSettings extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          tools.shapeKind == ShapeKind.staff
-              ? tr(
-                  'Vom Anfang zum Ende ziehen. Nach unten ziehen bestimmt die Höhe, nur waagrecht ergibt die übliche Höhe.',
-                  'Drag from start to end. Dragging downwards sets the height; dragging only sideways gives the usual height.',
-                )
-              : tr('Auf der Seite vom Anfang zum Ende ziehen.', 'Drag on the page from start to end.'),
+          switch (tools.shapeKind) {
+            ShapeKind.staff => tr(
+              'Vom Anfang zum Ende ziehen. Nach unten ziehen bestimmt die Höhe, nur waagrecht ergibt die übliche Höhe.',
+              'Drag from start to end. Dragging downwards sets the height; dragging only sideways gives the usual height.',
+            ),
+            ShapeKind.crescendo || ShapeKind.decrescendo => tr(
+              'Von der Spitze zum offenen Ende ziehen: nach rechts = crescendo, nach links = decrescendo.',
+              'Drag from the point to the open end: to the right = crescendo, to the left = decrescendo.',
+            ),
+            _ => tr('Auf der Seite vom Anfang zum Ende ziehen.', 'Drag on the page from start to end.'),
+          },
           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         _Label(tr('Farbe', 'Colour')),
@@ -875,6 +880,34 @@ class _ShapeSettings extends StatelessWidget {
           value: style.width.clamp(DrawingPreset.minPenWidth, DrawingPreset.maxPenWidth),
           onChanged: (v) => tools.setShape(style.copyWith(width: v)),
         ),
+        // Füllung nur bei geschlossenen Formen (z. B. weisses Rechteck zum Abdecken).
+        if (shapeCanFill(tools.shapeKind)) ...[
+          _Label(tr('Füllung', 'Fill')),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _Swatch(
+                color: null,
+                tooltip: tr('Ohne Füllung', 'No fill'),
+                selected: tools.shapeFill == 0,
+                onTap: () => tools.setShapeFill(0),
+              ),
+              for (final c in [0xFFFFFFFF, ...penColors.where((c) => c != 0xFFFFFFFF)])
+                _Swatch(color: Color(c), selected: tools.shapeFill == c, onTap: () => tools.setShapeFill(c)),
+            ],
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(tr('Rand zeichnen', 'Draw outline')),
+            subtitle: Text(
+              tr('Aus: nur die Fläche, z. B. weiss zum Abdecken.', 'Off: only the area, e.g. white to cover up.'),
+            ),
+            value: tools.shapeOutline,
+            onChanged: tools.shapeFill == 0 ? null : tools.setShapeOutline,
+          ),
+        ],
       ],
     );
   }
@@ -899,7 +932,8 @@ class _ShapeIconPainter extends CustomPainter {
       _ => (Offset(2, size.height / 2 + 4), Offset(size.width - 2, size.height / 2 + 4)),
     };
     for (final piece in shapeGeometry(kind, a, b, 1.5, pageWidth: size.width * 28)) {
-      canvas.drawPoints(PointMode.polygon, piece, paint);
+      if (piece.solid) canvas.drawPath(Path()..addPolygon(piece.points, true), Paint()..color = paint.color);
+      canvas.drawPoints(PointMode.polygon, piece.points, paint);
     }
   }
 

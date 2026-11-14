@@ -89,15 +89,17 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
                     'Volti talks to Dropbox directly, later on Android too. The data lives in Dropbox’s “Apps” folder.',
                   ),
                 ),
-                option(
-                  SyncKind.gdrive,
-                  Icons.add_to_drive_outlined,
-                  'Google Drive',
-                  tr(
-                    'Volti spricht direkt mit Google Drive. Die Daten liegen im Ordner „Volti“.',
-                    'Volti talks to Google Drive directly. The data lives in the folder “Volti”.',
+                // Google Drive nur, wenn es eingerichtet ist (der Besitzer nutzt Dropbox).
+                if (SyncKind.gdrive.available)
+                  option(
+                    SyncKind.gdrive,
+                    Icons.add_to_drive_outlined,
+                    'Google Drive',
+                    tr(
+                      'Volti spricht direkt mit Google Drive. Die Daten liegen im Ordner „Volti“.',
+                      'Volti talks to Google Drive directly. The data lives in the folder “Volti”.',
+                    ),
                   ),
-                ),
                 option(
                   SyncKind.folder,
                   Icons.folder_outlined,

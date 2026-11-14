@@ -184,6 +184,8 @@ class ToolSettings {
     List<int>? recentStamps,
     this.shape = const DrawingPreset(id: 'shape', tool: InkTool.pen, color: 0xFF1B1B1B, width: 0.0025),
     this.shapeKind = ShapeKind.crescendo,
+    this.shapeFill = 0,
+    this.shapeOutline = true,
   }) : recentStamps = recentStamps ?? [];
 
   DrawingPreset pen;
@@ -204,6 +206,12 @@ class ToolSettings {
 
   DrawingPreset shape;
   ShapeKind shapeKind;
+
+  /// Füllfarbe für Rechteck und Ellipse (ARGB, 0 = nicht gefüllt).
+  int shapeFill;
+
+  /// Rand zeichnen? Aus = nur die Fläche (z. B. weiss zum Abdecken).
+  bool shapeOutline;
 
   static ToolSettings defaults() => ToolSettings(
     pen: const DrawingPreset(id: 'pen', tool: InkTool.pen, color: 0xFF1B1B1B, width: 0.003),
@@ -247,6 +255,8 @@ class ToolSettings {
     'recentStamps': recentStamps,
     'shape': shape.toJson(),
     'shapeKind': shapeKind.name,
+    'shapeFill': shapeFill,
+    'shapeOutline': shapeOutline,
   };
 
   static ToolSettings fromJson(Map<String, dynamic> j) {
@@ -290,6 +300,8 @@ class ToolSettings {
       recentStamps: (j['recentStamps'] as List?)?.cast<int>().toList(),
       shape: j['shape'] is Map ? DrawingPreset.fromJson(j['shape'] as Map<String, dynamic>) : d.shape,
       shapeKind: ShapeKind.fromName(j['shapeKind'] as String?),
+      shapeFill: j['shapeFill'] as int? ?? 0,
+      shapeOutline: j['shapeOutline'] as bool? ?? true,
     );
   }
 }

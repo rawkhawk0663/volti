@@ -56,6 +56,7 @@ class Stroke {
     this.modifiedAt,
     this.deleted = false,
     this.layer,
+    this.fill,
   });
 
   /// Eindeutige ID (UUID).
@@ -84,6 +85,10 @@ class Stroke {
 
   /// Ebene (null = Grund-Ebene [kDefaultLayer]).
   final String? layer;
+
+  /// Füllfarbe (ARGB) einer geschlossenen Form, z. B. ein weisses Rechteck
+  /// zum Abdecken oder eine Pfeilspitze. null = nicht gefüllt.
+  final int? fill;
 
   DateTime get lastChange => modifiedAt ?? createdAt;
 
@@ -120,6 +125,7 @@ class Stroke {
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted,
     layer: layer ?? this.layer,
+    fill: fill,
   );
 
   Stroke markDeleted(DateTime when) => Stroke(
@@ -133,6 +139,7 @@ class Stroke {
     modifiedAt: when,
     deleted: true,
     layer: layer,
+    fill: fill,
   );
 
   Map<String, dynamic> toJson() => {
@@ -145,6 +152,7 @@ class Stroke {
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
     if (layer != null && layer != kDefaultLayer) 'layer': layer,
+    if (fill != null) 'fill': fill,
     // Gelöschte Striche brauchen keine Punkte mehr – spart Platz.
     'points': deleted ? <List<double>>[] : points.map((p) => p.toJson()).toList(),
   };
@@ -159,6 +167,7 @@ class Stroke {
     modifiedAt: json['modified'] == null ? null : DateTime.parse(json['modified'] as String),
     deleted: json['deleted'] == true,
     layer: json['layer'] as String?,
+    fill: json['fill'] as int?,
     points: (json['points'] as List<dynamic>? ?? const []).map((p) => InkPoint.fromJson(p as List<dynamic>)).toList(),
   );
 }

@@ -73,7 +73,7 @@ Future<void> closeExportPieces(List<ExportPiece> pieces) async {
 void paintAnnotations(Canvas canvas, Size size, ScoreAnnotations a, int page) {
   final strokes = a.visibleStrokesOn(page);
   for (final s in strokes.where((s) => s.tool == InkTool.highlighter)) {
-    paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points);
+    paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points, fill: s.fill);
   }
   final stamps = a.visibleStampsOn(page);
   for (final l in a.layers) {
@@ -86,7 +86,7 @@ void paintAnnotations(Canvas canvas, Size size, ScoreAnnotations a, int page) {
     ]..sort((x, y) => _created(x).compareTo(_created(y)));
     for (final it in items) {
       if (it is Stroke) {
-        paintStroke(canvas, size, it.tool, Color(it.color), it.width, it.points);
+        paintStroke(canvas, size, it.tool, Color(it.color), it.width, it.points, fill: it.fill);
       } else if (it is Stamp) {
         paintStamp(canvas, size, it);
       }

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:io';
 import 'dart:ui';
 
@@ -6,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:volti/core/ink/score_annotations.dart';
 import 'package:volti/core/ink/stamp.dart';
 import 'package:volti/core/ink/stamp_catalog.dart';
+import 'package:volti/core/ink/stroke.dart';
 import 'package:volti/core/ink/tool_settings.dart';
 import 'package:volti/core/library/sidecar_store.dart';
 import 'package:volti/features/viewer/ink_controller.dart';
@@ -14,6 +16,9 @@ import 'package:volti/features/viewer/shapes.dart';
 import 'package:volti/features/viewer/tool_controller.dart';
 
 import 'helpers/tools.dart';
+
+List<List<Offset>> geo(ShapeKind k, Offset a, Offset b, double w, {double? pageWidth}) =>
+    shapeGeometry(k, a, b, w, pageWidth: pageWidth).map((p) => p.points).toList();
 
 void main() {
   late Directory dir;
@@ -82,53 +87,88 @@ void main() {
   });
 
   group('Formen', () {
+    test('Notenlinien sind feiner als die eingestellte Breite', () {
+      final lines = shapeGeometry(ShapeKind.staff, Offset.zero, const Offset(400, 0), 2, pageWidth: 1000);
+      expect(lines.every((l) => l.widthFactor < 1), isTrue);
+    });
+
+    test('Pfeilspitze: gefüllt, Grösse nur von der Breite abhängig', () {
+      double headLen(double len, double w) {
+        final head = shapeGeometry(ShapeKind.arrow, Offset.zero, Offset(len, 0), w).last;
+        expect(head.solid, isTrue);
+        final xs = head.points.map((p) => p.dx);
+        return xs.reduce(math.max) - xs.reduce(math.min);
+      }
+
+      expect(headLen(200, 2), closeTo(headLen(600, 2), 1e-9), reason: 'gleich gross bei jeder Länge');
+      expect(headLen(600, 4), greaterThan(headLen(600, 2)), reason: 'breiter = grössere Spitze');
+    });
+
+    test('Rechteck und Ellipse lassen sich füllen, die Füllung wird gespeichert', () {
+      expect(shapeGeometry(ShapeKind.rectangle, Offset.zero, const Offset(50, 40), 2).single.closed, isTrue);
+      expect(shapeCanFill(ShapeKind.ellipse), isTrue);
+      expect(shapeCanFill(ShapeKind.line), isFalse);
+      final s = Stroke(
+        id: 'r',
+        page: 1,
+        tool: InkTool.pen,
+        color: 0xFFFFFFFF,
+        width: 0.002,
+        fill: 0xFFFFFFFF,
+        points: const [InkPoint(0, 0, 0.5), InkPoint(1, 0, 0.5), InkPoint(1, 1, 0.5)],
+        createdAt: DateTime.utc(2026),
+      );
+      expect(Stroke.fromJson(s.toJson()).fill, 0xFFFFFFFF);
+      expect(s.markDeleted(DateTime.utc(2027)).fill, 0xFFFFFFFF);
+      expect(Stroke.fromJson({...s.toJson()}..remove('fill')).fill, isNull, reason: 'alte Striche ohne Füllung');
+    });
+
     test('Jede Form ergibt Linienzüge zwischen Start und Ende', () {
       for (final k in ShapeKind.values) {
-        final pieces = shapeGeometry(k, const Offset(10, 50), const Offset(210, 80), 2);
+        final pieces = geo(k, const Offset(10, 50), const Offset(210, 80), 2);
         expect(pieces, isNotEmpty, reason: k.name);
         expect(pieces.every((p) => p.length >= 2), isTrue, reason: k.name);
       }
-      expect(shapeGeometry(ShapeKind.arrow, Offset.zero, const Offset(100, 0), 2).length, 2, reason: 'Linie + Spitze');
+      expect(geo(ShapeKind.arrow, Offset.zero, const Offset(100, 0), 2).length, 2, reason: 'Linie + Spitze');
       // Crescendo: Spitze am Anfang, Öffnung am Ende
-      final cresc = shapeGeometry(ShapeKind.crescendo, Offset.zero, const Offset(100, 0), 2).single;
+      final cresc = geo(ShapeKind.crescendo, Offset.zero, const Offset(100, 0), 2).single;
       expect(cresc[1], Offset.zero);
       expect(cresc.first.dx, 100);
       // Öffnung bleibt gleich weit, egal wie lang die Gabel ist
       double opening(double len) {
-        final g = shapeGeometry(ShapeKind.crescendo, Offset.zero, Offset(len, 0), 2, pageWidth: 1000).single;
+        final g = geo(ShapeKind.crescendo, Offset.zero, Offset(len, 0), 2, pageWidth: 1000).single;
         return (g.first - g.last).distance;
       }
 
       expect(opening(100), closeTo(16, 0.01));
       expect(opening(600), closeTo(16, 0.01));
-      final dim = shapeGeometry(ShapeKind.decrescendo, Offset.zero, const Offset(400, 0), 2, pageWidth: 1000).single;
-      expect(dim[1], const Offset(400, 0), reason: 'Decrescendo: Spitze am Ende');
+      // Ein Werkzeug für beide Richtungen: nach links gezogen = Decrescendo.
+      final dim = geo(ShapeKind.crescendo, const Offset(400, 0), Offset.zero, 2, pageWidth: 1000).single;
+      expect(dim[1], const Offset(400, 0), reason: 'Spitze dort, wo man anfängt');
+      expect(dim.first.dx, 0, reason: 'offen nach links');
       expect((dim.first - dim.last).distance, closeTo(16, 0.01));
+      // Alte Einstellung „decrescendo“ wird zur Gabel.
+      expect(normalizeShapeKind(ShapeKind.decrescendo), ShapeKind.crescendo);
+      expect(offeredShapeKinds, isNot(contains(ShapeKind.decrescendo)));
       // Notenlinien: 5 waagrechte Linien; nur waagrecht gezogen → übliche Höhe
-      final flat = shapeGeometry(ShapeKind.staff, const Offset(100, 200), const Offset(500, 203), 2, pageWidth: 1000);
+      final flat = geo(ShapeKind.staff, const Offset(100, 200), const Offset(500, 203), 2, pageWidth: 1000);
       expect(flat.length, 5);
       expect(flat.every((l) => l.first.dy == l.last.dy), isTrue, reason: 'immer waagrecht');
       expect(flat.last.first.dy - flat.first.first.dy, closeTo(33, 0.01));
       expect(flat.first.first.dx, 100);
       expect(flat.first.last.dx, 500);
-      final wobble = shapeGeometry(ShapeKind.staff, const Offset(100, 200), const Offset(500, 250), 2, pageWidth: 1000);
+      final wobble = geo(ShapeKind.staff, const Offset(100, 200), const Offset(500, 250), 2, pageWidth: 1000);
       expect(wobble.last.first.dy, closeTo(233, 0.01), reason: '50 px nach unten reichen noch nicht');
-      final tall = shapeGeometry(ShapeKind.staff, const Offset(100, 200), const Offset(500, 300), 2, pageWidth: 1000);
+      final tall = geo(ShapeKind.staff, const Offset(100, 200), const Offset(500, 300), 2, pageWidth: 1000);
       expect(tall.last.first.dy, 300, reason: 'Höhe aus dem Ziehen nach unten');
       expect(tall[1].first.dy, 225);
       // Gabeln immer waagrecht
-      final hairpin = shapeGeometry(
-        ShapeKind.crescendo,
-        const Offset(0, 0),
-        const Offset(300, 80),
-        2,
-        pageWidth: 1000,
-      ).single;
+      final hairpin = geo(ShapeKind.crescendo, const Offset(0, 0), const Offset(300, 80), 2, pageWidth: 1000).single;
       expect(hairpin[1], Offset.zero);
       expect((hairpin.first.dy + hairpin.last.dy) / 2, closeTo(0, 1e-9), reason: 'Mitte auf der Höhe des Starts');
       expect(hairpin.first.dx, 300);
       // Zu kurz → keine Form
-      expect(shapeGeometry(ShapeKind.line, Offset.zero, const Offset(1, 0), 2), isEmpty);
+      expect(geo(ShapeKind.line, Offset.zero, const Offset(1, 0), 2), isEmpty);
     });
   });
 

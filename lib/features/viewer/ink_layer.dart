@@ -629,12 +629,14 @@ class _InkLayerState extends State<InkLayer> {
     if (pieces.isNotEmpty && (b - a).distance > 6) {
       c.beginBatch(); // eine Form = ein Rückgängig-Schritt
       for (final piece in pieces) {
+        final look = _shapeLook(piece);
         c.addStroke(
           page: widget.page,
           tool: InkTool.pen,
-          color: style.color,
-          width: style.width,
-          points: [for (final p in piece) InkPoint(p.dx / size.width, p.dy / size.height, 0.5)],
+          color: look.color,
+          width: style.width * piece.widthFactor,
+          fill: look.fill,
+          points: [for (final p in piece.points) InkPoint(p.dx / size.width, p.dy / size.height, 0.5)],
         );
       }
       c.endBatch();
@@ -643,6 +645,15 @@ class _InkLayerState extends State<InkLayer> {
     _pointer = null;
     tools.isDrawing.value = false;
     _activeRepaint.value++;
+  }
+
+  /// Farbe von Rand und Fläche eines Teils einer Form.
+  ({int color, int? fill}) _shapeLook(ShapePiece piece) {
+    final color = tools.shape.color;
+    if (piece.solid) return (color: color, fill: color);
+    final fill = piece.closed && tools.shapeFill != 0 ? tools.shapeFill : null;
+    // Ohne Rand: Rand in der Füllfarbe (so bleiben Radieren und Auswählen gleich).
+    return (color: fill != null && !tools.shapeOutline ? fill : color, fill: fill);
   }
 
   // ----------------------------------------------------------------- Lineal
@@ -706,6 +717,11 @@ class _InkLayerState extends State<InkLayer> {
     final b = s.bounds;
     final box = Rect.fromLTRB(b.left * size.width, b.top * size.height, b.right * size.width, b.bottom * size.height);
     if (!box.inflate(r + half * 1.7).contains(pos)) return false;
+    // Gefüllte Form: auch innen getroffen.
+    if (s.fill != null && s.points.length >= 3) {
+      final area = Path()..addPolygon([for (final p in s.points) Offset(p.x * size.width, p.y * size.height)], true);
+      if (area.contains(pos)) return true;
+    }
     Offset? prev;
     for (final p in s.points) {
       final cur = Offset(p.x * size.width, p.y * size.height);
@@ -720,6 +736,11 @@ class _InkLayerState extends State<InkLayer> {
   /// Der Rest wird zu einem oder mehreren neuen Strichen.
   void _eraseInside(Stroke s, Offset pos, double r, Size size) {
     if (!_touches(s, pos, r, size)) return;
+    // Gefüllte Formen nicht zerschneiden (die Fläche würde sonst zerfallen).
+    if (s.fill != null) {
+      c.eraseStrokes([s]);
+      return;
+    }
     final reach = r + s.width * size.width / 2;
     Offset at(InkPoint p) => Offset(p.x * size.width, p.y * size.height);
 
@@ -1011,7 +1032,7 @@ class _StrokesImageState extends State<_StrokesImage> {
   static void _paintItems(Canvas canvas, Size size, Iterable<Object> items, {bool multiply = true}) {
     for (final it in items) {
       if (it is Stroke) {
-        paintStroke(canvas, size, it.tool, Color(it.color), it.width, it.points, multiply: multiply);
+        paintStroke(canvas, size, it.tool, Color(it.color), it.width, it.points, multiply: multiply, fill: it.fill);
       } else if (it is Stamp) {
         paintStamp(canvas, size, it);
       }
@@ -1320,7 +1341,7 @@ class _SelectionPainter extends CustomPainter {
     canvas.translate(-a.dx, -a.dy);
     final strokes = [for (final id in ids.strokes) ?ann[id]]..sort((x, y) => x.createdAt.compareTo(y.createdAt));
     for (final s in strokes) {
-      paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points);
+      paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points, fill: s.fill);
     }
     for (final id in ids.stamps) {
       final st = ann.stamp(id);
@@ -1398,7 +1419,7 @@ class StrokesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final s in strokes) {
-      paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points);
+      paintStroke(canvas, size, s.tool, Color(s.color), s.width, s.points, fill: s.fill);
     }
   }
 
@@ -1439,7 +1460,14 @@ class _ActivePainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
       for (final piece in shapeGeometry(tools.shapeKind, a, b, style.width * size.width, pageWidth: size.width)) {
-        canvas.drawPoints(ui.PointMode.polygon, piece, paint);
+        final look = state._shapeLook(piece);
+        if (look.fill != null) {
+          canvas.drawPath(Path()..addPolygon(piece.points, true), Paint()..color = Color(look.fill!));
+        }
+        paint
+          ..color = Color(look.color)
+          ..strokeWidth = math.max(0.8, style.width * piece.widthFactor * size.width);
+        canvas.drawPoints(ui.PointMode.polygon, piece.points, paint);
       }
       return;
     }
@@ -1609,10 +1637,15 @@ void paintStroke(
   double width,
   List<InkPoint> pts, {
   bool multiply = true,
+  int? fill,
 }) {
   if (pts.isEmpty) return;
   final w = width * size.width;
   Offset at(InkPoint p) => Offset(p.x * size.width, p.y * size.height);
+  // Gefüllte Form (Rechteck, Ellipse, Pfeilspitze): zuerst die Fläche.
+  if (fill != null && pts.length >= 3) {
+    canvas.drawPath(Path()..addPolygon([for (final p in pts) at(p)], true), Paint()..color = Color(fill));
+  }
 
   if (tool == InkTool.highlighter) {
     final path = Path()..moveTo(at(pts.first).dx, at(pts.first).dy);
@@ -1654,6 +1687,27 @@ void paintStroke(
     ..isAntiAlias = true;
   if (pts.length == 1) {
     canvas.drawCircle(at(pts.first), widthFor(pts.first.pressure) / 2, paint);
+  } else if (pts.every((p) => p.pressure == pts.first.pressure)) {
+    // Gleichmässiger Druck (Lineal, Formen): in einem Zug malen. Einzelne
+    // Teilstücke überlappen sich an den Enden, bei dünnen Linien sieht man
+    // dort sonst dunklere Pünktchen.
+    final path = Path()..moveTo(at(pts.first).dx, at(pts.first).dy);
+    for (final p in pts.skip(1)) {
+      path.lineTo(at(p).dx, at(p).dy);
+    }
+    // Nie ganz ohne Höhe bzw. Breite (siehe _nonFlat).
+    final b = path.getBounds();
+    if (b.height < 0.05 || b.width < 0.05) {
+      final e = at(pts.last);
+      path.lineTo(e.dx + (b.width < 0.05 ? 0.05 : 0), e.dy + (b.height < 0.05 ? 0.05 : 0));
+    }
+    canvas.drawPath(
+      path,
+      paint
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = math.max(0.5, widthFor(pts.first.pressure)),
+    );
   } else {
     _drawSegments(canvas, size, paint, w, pts, 1, pts.length);
   }

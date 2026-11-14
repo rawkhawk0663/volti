@@ -19,12 +19,45 @@ const kStaffHeight = 0.033;
 /// Ziehen die Höhe der Notenlinien.
 const kStaffFreeHeight = 0.07;
 
+/// Breite der Notenlinien relativ zur eingestellten Breite.
+const kStaffLineWidth = 0.45;
+
 /// Öffnung von Crescendo/Decrescendo relativ zur Seitenbreite.
 const kHairpinOpening = 0.016;
 
-List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double strokePx, {double? pageWidth}) {
+/// Ein Linienzug einer Form.
+class ShapePiece {
+  const ShapePiece(this.points, {this.closed = false, this.solid = false, this.widthFactor = 1});
+  final List<Offset> points;
+
+  /// Geschlossene Fläche, die man füllen kann (Rechteck, Ellipse).
+  final bool closed;
+
+  /// Immer in der Linienfarbe gefüllt (Pfeilspitze).
+  final bool solid;
+
+  /// Linienbreite relativ zur eingestellten Breite.
+  final double widthFactor;
+}
+
+/// Können Formen dieser Art gefüllt werden?
+bool shapeCanFill(ShapeKind kind) => kind == ShapeKind.rectangle || kind == ShapeKind.ellipse;
+
+/// Crescendo und Decrescendo sind ein einziges Werkzeug: Die Gabel öffnet
+/// sich in Zugrichtung (nach rechts gezogen = crescendo, nach links =
+/// decrescendo). Gespeicherte Einstellungen mit „decrescendo“ gelten als Gabel.
+ShapeKind normalizeShapeKind(ShapeKind k) => k == ShapeKind.decrescendo ? ShapeKind.crescendo : k;
+
+/// Die Formen, die das Werkzeug anbietet (ohne das alte „Decrescendo“).
+List<ShapeKind> get offeredShapeKinds => [
+  for (final k in ShapeKind.values)
+    if (k != ShapeKind.decrescendo) k,
+];
+
+List<ShapePiece> shapeGeometry(ShapeKind kind, Offset a, Offset b, double strokePx, {double? pageWidth}) {
+  kind = normalizeShapeKind(kind);
   // Gabeln liegen immer waagrecht (sie werden nie schräg gebraucht).
-  if (kind == ShapeKind.crescendo || kind == ShapeKind.decrescendo) b = Offset(b.dx, a.dy);
+  if (kind == ShapeKind.crescendo) b = Offset(b.dx, a.dy);
   final d = b - a;
   final len = d.distance;
   if (len < 2) return const [];
@@ -33,42 +66,43 @@ List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double stro
   switch (kind) {
     case ShapeKind.line:
       return [
-        [a, b],
+        ShapePiece([a, b]),
       ];
     case ShapeKind.arrow:
-      final head = (len * 0.25).clamp(8.0, 26.0) + strokePx * 2;
-      Offset rot(Offset v, double angle) =>
-          Offset(v.dx * math.cos(angle) - v.dy * math.sin(angle), v.dx * math.sin(angle) + v.dy * math.cos(angle));
+      // Gefüllte, spitze Pfeilspitze. Ihre Grösse hängt nur von der Breite ab,
+      // nicht von der Länge des Pfeils (Wunsch des Besitzers).
+      final headLen = math.min(5.0 + strokePx * 4.5, len * 0.6);
+      final halfWidth = headLen * 0.42;
+      final base = b - dir * headLen;
       return [
-        [a, b],
-        [b + rot(-dir, 0.45) * head, b, b + rot(-dir, -0.45) * head],
+        // Der Schaft endet in der Spitze, damit sein rundes Ende nicht vorsteht.
+        ShapePiece([a, b - dir * (headLen * 0.6)]),
+        ShapePiece([b, base + normal * halfWidth, base - normal * halfWidth, b], solid: true, widthFactor: 0.3),
       ];
     case ShapeKind.rectangle:
       final tl = Offset(math.min(a.dx, b.dx), math.min(a.dy, b.dy));
       final br = Offset(math.max(a.dx, b.dx), math.max(a.dy, b.dy));
       return [
-        [tl, Offset(br.dx, tl.dy), br, Offset(tl.dx, br.dy), tl],
+        ShapePiece([tl, Offset(br.dx, tl.dy), br, Offset(tl.dx, br.dy), tl], closed: true),
       ];
     case ShapeKind.ellipse:
       final c = (a + b) / 2;
       final rx = (b.dx - a.dx).abs() / 2, ry = (b.dy - a.dy).abs() / 2;
       return [
-        [
+        ShapePiece([
           for (var i = 0; i <= 64; i++)
             c + Offset(rx * math.cos(i / 64 * 2 * math.pi), ry * math.sin(i / 64 * 2 * math.pi)),
-        ],
+        ], closed: true),
       ];
     case ShapeKind.crescendo:
     case ShapeKind.decrescendo:
-      // Gabel: öffnet sich beim Crescendo zum Ende hin, beim Decrescendo zum Anfang.
+      // Gabel: spitz am Anfang, offen am Ende des Ziehens.
       // Öffnung ≈ 1.6 % der Seitenbreite (etwas mehr als ein Linienabstand auf A4),
       // bei sehr kurzen Gabeln höchstens halb so weit wie lang.
       final opening = math.min((pageWidth ?? 800) * kHairpinOpening, len * 0.5);
       final h = opening / 2;
-      final tip = kind == ShapeKind.crescendo ? a : b;
-      final open = kind == ShapeKind.crescendo ? b : a;
       return [
-        [open + normal * h, tip, open - normal * h],
+        ShapePiece([b + normal * h, a, b - normal * h]),
       ];
     case ShapeKind.staff:
       // Immer waagrecht. Die Länge kommt vom Ziehen nach links/rechts, die
@@ -82,9 +116,14 @@ List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double stro
       final free = dy.abs() >= w * kStaffFreeHeight;
       final height = free ? dy.abs() : w * kStaffHeight;
       final down = dy >= 0 || !free ? 1.0 : -1.0;
+      // Feiner als die eingestellte Breite (Wunsch des Besitzers): Notenlinien
+      // sind auch im Druck dünner als Hälse und Bögen.
       return [
         for (var i = 0; i < 5; i++)
-          [Offset(a.dx, a.dy + down * height * i / 4), Offset(b.dx, a.dy + down * height * i / 4)],
+          ShapePiece([
+            Offset(a.dx, a.dy + down * height * i / 4),
+            Offset(b.dx, a.dy + down * height * i / 4),
+          ], widthFactor: kStaffLineWidth),
       ];
     case ShapeKind.slur:
       // Bogen nach oben (bzw. zur linken Seite der Zugrichtung).
@@ -92,13 +131,13 @@ List<List<Offset>> shapeGeometry(ShapeKind kind, Offset a, Offset b, double stro
       if (bulge.dy > 0) bulge = -bulge;
       final ctrl = (a + b) / 2 + bulge;
       return [
-        [
+        ShapePiece([
           for (var i = 0; i <= 32; i++)
             () {
               final t = i / 32;
               return a * ((1 - t) * (1 - t)) + ctrl * (2 * (1 - t) * t) + b * (t * t);
             }(),
-        ],
+        ]),
       ];
   }
 }
