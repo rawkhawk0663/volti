@@ -87,6 +87,8 @@ jobs:
           Copy-Item build\installer\Volti-Setup.exe Volti-Setup.exe
       - uses: actions/upload-artifact@v4
         with:
+          # Nur zum Weiterreichen an den nächsten Schritt; die Downloads liegen im Release.
+          retention-days: 1
           name: Volti-Windows
           path: |
             Volti-Windows.zip
@@ -119,6 +121,8 @@ jobs:
       - run: cp build/app/outputs/flutter-apk/app-release.apk Volti-Android.apk
       - uses: actions/upload-artifact@v4
         with:
+          # Nur zum Weiterreichen an den nächsten Schritt; die Downloads liegen im Release.
+          retention-days: 1
           name: Volti-Android
           path: Volti-Android.apk
 
