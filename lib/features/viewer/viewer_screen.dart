@@ -1064,6 +1064,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       key: ValueKey('strip/${_left.piece}'),
       count: _pageCount,
       current: current,
+      visible: visible,
       onTouch: _restartHideTimer,
       onTap: _goTo,
       thumb: (display) => visible

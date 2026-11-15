@@ -108,6 +108,7 @@ class PageStrip extends StatefulWidget {
     required this.thumb,
     required this.onTap,
     this.onTouch,
+    this.visible = true,
   });
 
   /// Anzahl angezeigter Seiten.
@@ -123,11 +124,18 @@ class PageStrip extends StatefulWidget {
   /// Bei jeder Berührung (hält die Leiste offen).
   final VoidCallback? onTouch;
 
+  /// Ist die Leiste gerade eingeblendet? (Beim Einblenden steht die aktuelle
+  /// Seite wieder in der Mitte, auch wenn vorher durch die Leiste gewischt wurde.)
+  final bool visible;
+
   /// Höhe der Fläche samt Abstand zum Rand (ohne den Platz fürs Vergrössern).
   static const height = _dock + _margin;
 
   static const _dock = 92.0, _margin = 10.0, _headroom = 26.0;
-  static const _itemExtent = 62.0, _pad = 10.0;
+  static const _itemExtent = 64.0, _pad = 10.0;
+
+  /// So viele Plätze hat das Dock höchstens (dann wird gewischt).
+  static const _maxSlots = 15;
 
   @override
   State<PageStrip> createState() => _PageStripState();
@@ -137,7 +145,6 @@ class _PageStripState extends State<PageStrip> {
   static final _none = ValueNotifier<ui.Image?>(null);
 
   ScrollController? _scroll;
-  double _width = 0;
 
   /// Seite unter dem Mauszeiger (ab 1), null = keine.
   int? _hover;
@@ -148,27 +155,34 @@ class _PageStripState extends State<PageStrip> {
     super.dispose();
   }
 
-  /// Versatz, bei dem die aktuelle Seite in der Mitte steht.
-  double _offsetFor(Set<int> current, double width) {
+  /// Versatz, bei dem die aktuelle Seite genau in der Mitte des Docks steht
+  /// (Wunsch des Besitzers: immer, auch bei der ersten und letzten Seite).
+  /// Links und rechts ist dafür je ein halbes Dock Platz.
+  double _offsetFor(Set<int> current) {
     if (current.isEmpty) return 0;
     final first = current.reduce(math.min), last = current.reduce(math.max);
-    final center = ((first + last) / 2 - 0.5) * PageStrip._itemExtent + PageStrip._pad;
-    final max = math.max(0.0, widget.count * PageStrip._itemExtent + 2 * PageStrip._pad - width);
-    return (center - width / 2).clamp(0.0, max);
+    final center = (first + last) / 2 - 1;
+    return (center * PageStrip._itemExtent).clamp(0.0, math.max(0, widget.count - 1) * PageStrip._itemExtent);
+  }
+
+  void _recenter({bool animate = true}) {
+    final s = _scroll;
+    if (s == null || !s.hasClients) return;
+    final target = _offsetFor(widget.current);
+    if (animate) {
+      s.animateTo(target, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    } else {
+      s.jumpTo(target);
+    }
   }
 
   @override
   void didUpdateWidget(PageStrip old) {
     super.didUpdateWidget(old);
     if (old.current.length != widget.current.length || !old.current.containsAll(widget.current)) {
-      final s = _scroll;
-      if (s != null && s.hasClients) {
-        s.animateTo(
-          _offsetFor(widget.current, _width),
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
-        );
-      }
+      _recenter();
+    } else if (widget.visible && !old.visible) {
+      _recenter(animate: false);
     }
   }
 
@@ -176,7 +190,7 @@ class _PageStripState extends State<PageStrip> {
   /// die Nachbarn etwas, die aktuelle Seite leicht.
   double _scaleOf(int page, bool here) {
     final h = _hover;
-    var scale = here ? 1.06 : 1.0;
+    var scale = here ? 1.14 : 1.0;
     if (h != null) {
       final d = (page - h).abs();
       if (d < 2) scale = math.max(scale, 1 + 0.32 * (1 - d / 2));
@@ -204,10 +218,15 @@ class _PageStripState extends State<PageStrip> {
           padding: const EdgeInsets.only(bottom: PageStrip._margin),
           child: LayoutBuilder(
             builder: (context, box) {
-              final content = widget.count * PageStrip._itemExtent + 2 * PageStrip._pad;
-              final width = math.min(content, box.maxWidth - 32);
-              _width = width;
-              _scroll ??= ScrollController(initialScrollOffset: _offsetFor(widget.current, width));
+              // Breit genug, dass links und rechts der Mitte alle übrigen Seiten
+              // Platz hätten (höchstens [_maxSlots] Plätze, ungerade Zahl).
+              final slots = math.min(2 * widget.count - 1, PageStrip._maxSlots);
+              final fit = ((box.maxWidth - 32 - 2 * PageStrip._pad) / PageStrip._itemExtent).floor();
+              final n = math.max(1, math.min(slots, fit.isOdd ? fit : fit - 1));
+              final width = n * PageStrip._itemExtent + 2 * PageStrip._pad;
+              // Seitenrand so, dass die erste und die letzte Seite in die Mitte rücken können.
+              final side = (width - PageStrip._itemExtent) / 2;
+              _scroll ??= ScrollController(initialScrollOffset: _offsetFor(widget.current));
               return Center(
                 heightFactor: 1,
                 child: SizedBox(
@@ -241,7 +260,7 @@ class _PageStripState extends State<PageStrip> {
                               controller: _scroll,
                               clipBehavior: Clip.none,
                               scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.symmetric(horizontal: PageStrip._pad),
+                              padding: EdgeInsets.symmetric(horizontal: side),
                               itemExtent: PageStrip._itemExtent,
                               itemCount: widget.count,
                               itemBuilder: (context, i) => _item(context, i + 1),
@@ -269,7 +288,7 @@ class _PageStripState extends State<PageStrip> {
         behavior: HitTestBehavior.opaque,
         onTap: () => widget.onTap(page),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+          padding: const EdgeInsets.fromLTRB(6, 8, 6, 4),
           child: Column(
             children: [
               Expanded(
