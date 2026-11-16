@@ -85,14 +85,17 @@ jobs:
           & $iscc "/DAppVersion=${{ env.VERSION_PREFIX }}.${{ github.run_number }}" windows\installer\volti.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item build\installer\Volti-Setup.exe Volti-Setup.exe
-      - uses: actions/upload-artifact@v4
+      # Weiterreichen an den letzten Schritt über den Cache statt über
+      # „Artifacts“: deren Speicher ist bei privaten Projekten knapp (im
+      # November 2026 voll, alle Builds scheiterten). Der Cache wird nach
+      # 7 Tagen von selbst geleert.
+      - shell: bash
+        run: mkdir -p dist && cp Volti-Windows.zip Volti-Setup.exe dist/
+      - uses: actions/cache/save@v4
         with:
-          # Nur zum Weiterreichen an den nächsten Schritt; die Downloads liegen im Release.
-          retention-days: 1
-          name: Volti-Windows
-          path: |
-            Volti-Windows.zip
-            Volti-Setup.exe
+          path: dist
+          key: dist-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          enableCrossOsArchive: true
 
   android:
     name: Android-Build
@@ -118,13 +121,12 @@ jobs:
         run: |
           ARGS="--release --build-name=${{ env.VERSION_PREFIX }}.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v${{ env.VERSION_PREFIX }}.${{ github.run_number }} --dart-define=DROPBOX_APP_KEY=$DROPBOX_APP_KEY --dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID --dart-define=GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET"
           flutter build apk $ARGS || (echo "Zweiter Versuch …" && sleep 30 && flutter build apk $ARGS)
-      - run: cp build/app/outputs/flutter-apk/app-release.apk Volti-Android.apk
-      - uses: actions/upload-artifact@v4
+      - run: mkdir -p dist && cp build/app/outputs/flutter-apk/app-release.apk dist/Volti-Android.apk
+      - uses: actions/cache/save@v4
         with:
-          # Nur zum Weiterreichen an den nächsten Schritt; die Downloads liegen im Release.
-          retention-days: 1
-          name: Volti-Android
-          path: Volti-Android.apk
+          path: dist
+          key: dist-android-${{ github.run_id }}-${{ github.run_attempt }}
+          enableCrossOsArchive: true
 
   release:
     name: Zum Download bereitstellen
@@ -136,10 +138,19 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
         with:
           path: dist
-          merge-multiple: true
+          key: dist-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
+      # Android ist optional (siehe oben).
+      - uses: actions/cache/restore@v4
+        with:
+          path: dist
+          key: dist-android-${{ github.run_id }}-${{ github.run_attempt }}
+          enableCrossOsArchive: true
+      - run: ls -la dist
       - name: Release erstellen
         env:
           GH_TOKEN: ${{ github.token }}
