@@ -6,6 +6,7 @@ import 'package:volti/core/ink/stroke.dart';
 import 'package:volti/core/library/setlist.dart';
 import 'package:volti/core/sync/sync_engine.dart';
 import 'package:volti/core/sync/sync_store.dart';
+import 'package:volti/core/teaching/school_calendar.dart';
 import 'package:volti/core/teaching/student.dart';
 import 'package:volti/features/teaching/homework_share.dart';
 import 'package:volti/features/teaching/timetable.dart';
@@ -136,6 +137,50 @@ void main() {
       other.dispose();
     }
     forAnna.dispose();
+  });
+
+  test('Schulkalender: Wochen, Semester, Ferien und Feiertage', () {
+    expect(isoWeek(DateTime(2026, 10, 12)), 42);
+    expect(isoWeek(DateTime(2027, 1, 1)), 53);
+    expect(isoWeek(DateTime(2026, 1, 1)), 1);
+    expect(easterSunday(2026), DateTime(2026, 4, 5));
+    expect(easterSunday(2027), DateTime(2027, 3, 28));
+
+    final cal = SchoolCalendar(
+      semesters: [
+        Semester(id: 'hs', name: 'Herbstsemester 2026', start: DateTime(2026, 8, 10), end: DateTime(2027, 1, 31)),
+      ],
+      free: [
+        FreePeriod.create(name: 'Herbstferien', start: DateTime(2026, 9, 26), end: DateTime(2026, 10, 11)),
+        FreePeriod.create(name: 'Weihnachten', start: DateTime(2026, 12, 25), holiday: true),
+      ],
+    );
+    final days = lessonDates(cal.semesterFor(DateTime(2026, 11, 17)), DateTime.tuesday);
+    expect(days.first, DateTime(2026, 8, 11));
+    expect(days.every((d) => d.weekday == DateTime.tuesday), isTrue);
+    expect(days.last.isAfter(DateTime(2027, 1, 24)), isTrue);
+    expect(cal.freeOn(DateTime(2026, 9, 29))!.name, 'Herbstferien');
+    expect(cal.freeOn(DateTime(2026, 12, 25))!.holiday, isTrue);
+    expect(cal.freeOn(DateTime(2026, 10, 13)), isNull);
+
+    // JSON hin und zurück.
+    final back = SchoolCalendar.fromJson(cal.toJson());
+    expect(back.semesters.single.name, 'Herbstsemester 2026');
+    expect(back.free.length, 2);
+
+    // Ohne eingetragene Semester: Herbst- und Frühlingssemester.
+    final def = SchoolCalendar().semesterFor(DateTime(2026, 11, 17));
+    expect(def.start, DateTime(2026, 8, 1));
+    expect(def.end, DateTime(2027, 1, 31));
+
+    // Schweizer Feiertage im Herbstsemester.
+    final swiss = swissHolidays(DateTime(2026, 8, 1), DateTime(2027, 1, 31)).map((f) => f.start).toList();
+    expect(swiss, containsAll([DateTime(2026, 8, 1), DateTime(2026, 12, 25), DateTime(2027, 1, 2)]));
+  });
+
+  test('Noten pro Semester bleiben erhalten', () {
+    final s = anna()..grades['hs-2026'] = '5.5';
+    expect(Student.fromJson(s.toJson()).grades['hs-2026'], '5.5');
   });
 
   test('Hausaufgaben: Text und WhatsApp-Nummer', () {

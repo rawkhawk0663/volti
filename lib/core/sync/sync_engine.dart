@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../library/folders.dart';
 import '../library/setlist.dart';
 import '../library/sidecar_store.dart';
+import '../teaching/school_calendar.dart';
 import '../teaching/student.dart';
 import 'sync_store.dart';
 import '../../app/l10n.dart';
@@ -110,7 +111,10 @@ class SyncEngine {
     // Setlists, Stift-Vorlagen, Liste der eigenen Stempel: ganze Datei, die
     // jüngste Fassung gewinnt.
     bool isSetlist(String rel) =>
-        rel.startsWith('.volti/setlists/') || rel == '.volti/presets.json' || rel == '.volti/stamps.json';
+        rel.startsWith('.volti/setlists/') ||
+        rel == '.volti/presets.json' ||
+        rel == '.volti/stamps.json' ||
+        rel == SchoolCalendar.file;
     // Ordner der Bibliothek: pro Ordner zusammengeführt.
     bool isFolders(String rel) => FolderStore.files.contains(rel);
     // Unterricht: Karteien, Stücke und Lektionen pro Eintrag zusammengeführt.

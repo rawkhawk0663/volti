@@ -31,10 +31,12 @@ class Student {
     this.group = '',
     this.notes = '',
     this.archived = false,
+    Map<String, String>? grades,
     Map<String, StudentPiece>? pieces,
     Map<String, Lesson>? lessons,
     Map<String, StudentNote>? memos,
-  }) : pieces = pieces ?? {},
+  }) : grades = grades ?? {},
+       pieces = pieces ?? {},
        lessons = lessons ?? {},
        memos = memos ?? {};
 
@@ -63,6 +65,9 @@ class Student {
   String group;
   String notes;
   bool archived;
+
+  /// Note pro Semester (Semester-ID → Text), Teil der Angaben zur Person.
+  final Map<String, String> grades;
 
   /// Letzte Änderung der Angaben zur Person (nicht der Stücke/Lektionen).
   DateTime modified;
@@ -139,6 +144,7 @@ class Student {
     if (group.isNotEmpty) 'group': group,
     if (notes.isNotEmpty) 'notes': notes,
     if (archived) 'archived': true,
+    if (grades.isNotEmpty) 'grades': grades,
     'pieces': [for (final x in pieces.values) x.toJson()],
     'lessons': [for (final l in lessons.values) l.toJson()],
     if (memos.isNotEmpty) 'memos': [for (final m in memos.values) m.toJson()],
@@ -158,6 +164,10 @@ class Student {
     group: j['group'] as String? ?? '',
     notes: j['notes'] as String? ?? '',
     archived: j['archived'] as bool? ?? false,
+    grades: {
+      for (final e in (j['grades'] as Map<String, dynamic>? ?? const {}).entries)
+        if (e.value is String) e.key: e.value as String,
+    },
     pieces: {
       for (final piece in (j['pieces'] as List? ?? const []).map(StudentPiece.tryFromJson).nonNulls) piece.id: piece,
     },

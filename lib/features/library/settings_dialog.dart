@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -44,7 +45,7 @@ Future<void> showSettingsDialog(
   );
 }
 
-class _SettingsDialog extends StatelessWidget {
+class _SettingsDialog extends StatefulWidget {
   const _SettingsDialog({
     required this.tools,
     this.sync,
@@ -64,263 +65,130 @@ class _SettingsDialog extends StatelessWidget {
   final String? dataFolder;
 
   @override
+  State<_SettingsDialog> createState() => _SettingsDialogState();
+}
+
+/// Kategorien im Einstellungsfenster (links als Menüleiste).
+enum _Page { appearance, music, teaching, sync, backup, about }
+
+class _SettingsDialogState extends State<_SettingsDialog> {
+  _Page _page = _Page.appearance;
+
+  ToolController get tools => widget.tools;
+  AutoBackupController? get autoBackup => widget.autoBackup;
+  SyncController? get sync => widget.sync;
+  VoidCallback? get onSetupSync => widget.onSetupSync;
+  VoidCallback? get onStopSync => widget.onStopSync;
+  VoidCallback? get onOpenDataFolder => widget.onOpenDataFolder;
+  VoidCallback? get onCreateBackup => widget.onCreateBackup;
+  VoidCallback? get onRestoreBackup => widget.onRestoreBackup;
+  String? get dataFolder => widget.dataFolder;
+
+  List<_Page> get _pages => [
+    _Page.appearance,
+    _Page.music,
+    _Page.teaching,
+    if (sync != null) _Page.sync,
+    if (onCreateBackup != null || dataFolder != null) _Page.backup,
+    _Page.about,
+  ];
+
+  // Symbole als feste Listen (Reihenfolge wie [_Page]): So erkennt das Bauen
+  // sie sicher und nimmt sie in die verkleinerte Symbolschrift auf.
+  static const _icons = <IconData>[
+    Icons.palette_outlined,
+    Icons.menu_book_outlined,
+    Icons.school_outlined,
+    Icons.cloud_sync_outlined,
+    Icons.save_outlined,
+    Icons.info_outline,
+  ];
+  static const _selectedIcons = <IconData>[
+    Icons.palette,
+    Icons.menu_book,
+    Icons.school,
+    Icons.cloud_sync,
+    Icons.save,
+    Icons.info,
+  ];
+
+  Icon _icon(_Page p, {bool selected = false}) => Icon((selected ? _selectedIcons : _icons)[p.index]);
+
+  String _label(_Page p) => switch (p) {
+    _Page.appearance => tr('Darstellung', 'Appearance'),
+    _Page.music => tr('Notenansicht', 'Music view'),
+    _Page.teaching => tr('Unterricht', 'Teaching'),
+    _Page.sync => tr('Sync', 'Sync'),
+    _Page.backup => tr('Sicherung', 'Backup'),
+    _Page.about => tr('Über Volti', 'About Volti'),
+  };
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = MediaQuery.sizeOf(context);
+    final pages = _pages;
+    if (!pages.contains(_page)) _page = pages.first;
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
+      clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 560, maxHeight: size.height - 32),
+        constraints: BoxConstraints(maxWidth: 820, maxHeight: math.min(size.height - 32, 640)),
         child: ListenableBuilder(
           listenable: Listenable.merge([tools, tools.themeMode, ?sync]),
-          builder: (context, _) => Column(
-            mainAxisSize: MainAxisSize.min,
+          builder: (context, _) => Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 8, 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.settings_outlined, color: theme.colorScheme.primary),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(tr('Einstellungen', 'Settings'), style: theme.textTheme.titleLarge)),
-                    IconButton(
-                      tooltip: tr('Schliessen', 'Close'),
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
+              NavigationRail(
+                selectedIndex: pages.indexOf(_page),
+                labelType: NavigationRailLabelType.all,
+                minWidth: 88,
+                backgroundColor: theme.colorScheme.surfaceContainerLow,
+                leading: Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Icon(Icons.settings_outlined, color: theme.colorScheme.primary),
                 ),
+                onDestinationSelected: (i) => setState(() => _page = pages[i]),
+                destinations: [
+                  for (final p in pages)
+                    NavigationRailDestination(
+                      icon: _icon(p),
+                      selectedIcon: _icon(p, selected: true),
+                      label: Text(_label(p)),
+                    ),
+                ],
               ),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _Section(tr('Darstellung', 'Appearance')),
-                    SegmentedButton<ThemeMode>(
-                      segments: [
-                        ButtonSegment(
-                          value: ThemeMode.light,
-                          icon: Icon(Icons.light_mode_outlined),
-                          label: Text(tr('Hell', 'Light')),
-                        ),
-                        ButtonSegment(
-                          value: ThemeMode.dark,
-                          icon: Icon(Icons.dark_mode_outlined),
-                          label: Text(tr('Dunkel', 'Dark')),
-                        ),
-                        ButtonSegment(
-                          value: ThemeMode.system,
-                          icon: const Icon(Icons.brightness_auto_outlined),
-                          label: Text(
-                            Platform.isWindows
-                                ? tr('Wie Windows', 'Like Windows')
-                                : tr('Wie das System', 'Like the system'),
-                          ),
-                        ),
-                      ],
-                      selected: {tools.themeMode.value},
-                      onSelectionChanged: (s) => tools.setThemeMode(s.first),
-                    ),
-                    const SizedBox(height: 16),
-                    // Absichtlich zweisprachig, damit man die Sprache auch findet,
-                    // wenn man die eingestellte nicht versteht.
-                    Text('Sprache · Language', style: theme.textTheme.bodyMedium),
-                    const SizedBox(height: 8),
-                    SegmentedButton<AppLanguage>(
-                      segments: [
-                        for (final l in AppLanguage.values)
-                          ButtonSegment(value: l, icon: const Icon(Icons.translate), label: Text(l.label)),
-                      ],
-                      selected: {L10n.language.value},
-                      onSelectionChanged: (s) => tools.setLanguage(s.first),
-                    ),
-                    _Section(tr('Notenansicht', 'Music view')),
-                    Text(tr('Seiten nebeneinander', 'Pages side by side'), style: theme.textTheme.bodyMedium),
-                    const SizedBox(height: 8),
-                    SegmentedButton<PageLayout>(
-                      segments: [
-                        ButtonSegment(value: PageLayout.auto, label: Text(tr('Automatisch', 'Automatic'))),
-                        ButtonSegment(value: PageLayout.single, label: Text(tr('Immer eine', 'Always one'))),
-                        ButtonSegment(value: PageLayout.double, label: Text(tr('Immer zwei', 'Always two'))),
-                      ],
-                      selected: {tools.pageLayout},
-                      onSelectionChanged: (s) => tools.setPageLayout(s.first),
-                    ),
                     Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        tr(
-                          'Automatisch: im Querformat zwei Seiten, im Hochformat eine.',
-                          'Automatic: two pages in landscape, one in portrait.',
-                        ),
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(tr('Halbe Seitenwechsel', 'Half page turns')),
-                      subtitle: Text(
-                        tr(
-                          'Bei einer Seite: zuerst wechselt nur die obere Hälfte.',
-                          'With one page: only the top half changes first.',
-                        ),
-                      ),
-                      value: tools.halfTurns,
-                      onChanged: tools.setHalfTurns,
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(tr('Mit dem Stift sofort zeichnen', 'Draw with the pen right away')),
-                      subtitle: Text(
-                        tr(
-                          'Auch in der Spielansicht, ohne zuerst „Bearbeiten“.',
-                          'Also while playing, without tapping “Edit” first.',
-                        ),
-                      ),
-                      value: tools.instantPen,
-                      onChanged: tools.setInstantPen,
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        tr('Beim Bearbeiten mit dem Finger blättern', 'Turn pages with a finger while editing'),
-                      ),
-                      subtitle: Text(
-                        tr(
-                          'Mit einem Finger zügig nach links oder rechts wischen. '
-                              'Eine aufliegende Hand blättert nicht, ebenso wenig, solange der Stift in der Nähe ist.',
-                          'Swipe quickly left or right with one finger. '
-                              'A resting hand does not turn pages, and neither does anything while the pen is nearby.',
-                        ),
-                      ),
-                      value: tools.swipeWhileEditing,
-                      onChanged: tools.setSwipeWhileEditing,
-                    ),
-                    _Section(tr('Unterricht', 'Teaching')),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(tr('Bereich „Unterricht“ zeigen', 'Show the “Teaching” area')),
-                      subtitle: Text(
-                        tr(
-                          'Für Lehrpersonen: Schülerkartei mit Lektionen, Hausaufgaben, Absenzen, Stundenplan und '
-                              'Stücken aus der Bibliothek. Ausgeschaltet bleibt alles gespeichert.',
-                          'For teachers: student records with lessons, homework, absences, timetable and pieces '
-                              'from the library. When switched off, everything stays saved.',
-                        ),
-                      ),
-                      value: tools.teaching,
-                      onChanged: tools.setTeaching,
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(tr('Werkzeugleiste links', 'Toolbar on the left')),
-                      subtitle: Text(
-                        tr(
-                          'Aus: am rechten Rand (z. B. für Linkshänder).',
-                          'Off: on the right edge (e.g. for left-handers).',
-                        ),
-                      ),
-                      value: tools.paletteLeft,
-                      onChanged: (_) => tools.togglePaletteSide(),
-                    ),
-                    if (onCreateBackup != null) ...[
-                      _Section(tr('Sicherung', 'Backup')),
-                      Text(
-                        tr(
-                          'Alle Noten mit Infos und Anmerkungen, Setlists, Ordnern, eigenen Stempeln und '
-                              'Stift-Vorlagen in einer einzigen Datei. Beim Einspielen wird nichts gelöscht oder '
-                              'überschrieben: Was fehlt, kommt dazu, Anmerkungen werden zusammengeführt.',
-                          'All your music with details and notes, setlists, folders, your own stamps and '
-                              'pen presets in a single file. Restoring never deletes or '
-                              'overwrites anything: whatever is missing is added, and notes are merged.',
-                        ),
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                      padding: const EdgeInsets.fromLTRB(24, 16, 8, 4),
+                      child: Row(
                         children: [
-                          FilledButton.tonalIcon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              onCreateBackup!();
-                            },
-                            icon: const Icon(Icons.save_alt),
-                            label: Text(tr('Sicherung erstellen …', 'Create backup …')),
+                          Expanded(child: Text(_label(_page), style: theme.textTheme.titleLarge)),
+                          IconButton(
+                            tooltip: tr('Schliessen', 'Close'),
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
                           ),
-                          if (onRestoreBackup != null)
-                            OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                onRestoreBackup!();
-                              },
-                              icon: const Icon(Icons.restore),
-                              label: Text(tr('Sicherung einspielen …', 'Restore backup …')),
-                            ),
                         ],
                       ),
-                      if (autoBackup != null) ...[const SizedBox(height: 12), AutoBackupSection(autoBackup!)],
-                    ],
-                    if (sync != null) ..._syncSection(context, sync!),
-                    _Section(tr('Über Volti', 'About Volti')),
-                    Text(
-                      tr(
-                        'Version $voltiVersion',
-                        'Version ${voltiVersion == 'Testversion' ? 'test build' : voltiVersion}',
-                      ),
-                      style: theme.textTheme.bodyMedium,
                     ),
-                    const SizedBox(height: 8),
-                    const UpdateSection(),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () => showHelpDialog(context),
-                          icon: const Icon(Icons.help_outline),
-                          label: Text(tr('Kurzanleitung', 'Quick guide')),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => showErrorLogDialog(context),
-                          icon: const Icon(Icons.bug_report_outlined),
-                          label: Text(tr('Fehlerprotokoll', 'Error log')),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => showVoltiLicenses(context),
-                          icon: const Icon(Icons.gavel_outlined),
-                          label: Text(tr('Lizenzen', 'Licences')),
-                        ),
-                      ],
-                    ),
-                    if (dataFolder != null) ...[
-                      _Section(tr('Datenordner', 'Data folder')),
-                      Text(
-                        tr(
-                          'Hier liegen deine importierten Noten, Infos und Anmerkungen:',
-                          'Your imported music, details and notes are stored here:',
-                        ),
-                        style: theme.textTheme.bodyMedium,
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                        children: switch (_page) {
+                          _Page.appearance => _appearance(context, theme),
+                          _Page.music => _music(context, theme),
+                          _Page.teaching => _teaching(context, theme),
+                          _Page.sync => _syncSection(context, sync!),
+                          _Page.backup => _backup(context, theme),
+                          _Page.about => _about(context, theme),
+                        },
                       ),
-                      const SizedBox(height: 4),
-                      SelectableText(dataFolder!, style: theme.textTheme.bodySmall),
-                      if (onOpenDataFolder != null) ...[
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            onPressed: onOpenDataFolder,
-                            icon: const Icon(Icons.folder_open),
-                            label: Text(tr('Datenordner öffnen', 'Open data folder')),
-                          ),
-                        ),
-                      ],
-                    ],
+                    ),
                   ],
                 ),
               ),
@@ -330,6 +198,213 @@ class _SettingsDialog extends StatelessWidget {
       ),
     );
   }
+
+  List<Widget> _appearance(BuildContext context, ThemeData theme) => [
+    SegmentedButton<ThemeMode>(
+      segments: [
+        ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_outlined), label: Text(tr('Hell', 'Light'))),
+        ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_outlined), label: Text(tr('Dunkel', 'Dark'))),
+        ButtonSegment(
+          value: ThemeMode.system,
+          icon: const Icon(Icons.brightness_auto_outlined),
+          label: Text(Platform.isWindows ? tr('Wie Windows', 'Like Windows') : tr('Wie das System', 'Like the system')),
+        ),
+      ],
+      selected: {tools.themeMode.value},
+      onSelectionChanged: (s) => tools.setThemeMode(s.first),
+    ),
+    const SizedBox(height: 16),
+    // Absichtlich zweisprachig, damit man die Sprache auch findet,
+    // wenn man die eingestellte nicht versteht.
+    Text('Sprache · Language', style: theme.textTheme.bodyMedium),
+    const SizedBox(height: 8),
+    SegmentedButton<AppLanguage>(
+      segments: [
+        for (final l in AppLanguage.values)
+          ButtonSegment(value: l, icon: const Icon(Icons.translate), label: Text(l.label)),
+      ],
+      selected: {L10n.language.value},
+      onSelectionChanged: (s) => tools.setLanguage(s.first),
+    ),
+  ];
+
+  List<Widget> _music(BuildContext context, ThemeData theme) => [
+    Text(tr('Seiten nebeneinander', 'Pages side by side'), style: theme.textTheme.bodyMedium),
+    const SizedBox(height: 8),
+    SegmentedButton<PageLayout>(
+      segments: [
+        ButtonSegment(value: PageLayout.auto, label: Text(tr('Automatisch', 'Automatic'))),
+        ButtonSegment(value: PageLayout.single, label: Text(tr('Immer eine', 'Always one'))),
+        ButtonSegment(value: PageLayout.double, label: Text(tr('Immer zwei', 'Always two'))),
+      ],
+      selected: {tools.pageLayout},
+      onSelectionChanged: (s) => tools.setPageLayout(s.first),
+    ),
+    Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        tr(
+          'Automatisch: im Querformat zwei Seiten, im Hochformat eine.',
+          'Automatic: two pages in landscape, one in portrait.',
+        ),
+        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      ),
+    ),
+    const SizedBox(height: 8),
+    SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(tr('Halbe Seitenwechsel', 'Half page turns')),
+      subtitle: Text(
+        tr('Bei einer Seite: zuerst wechselt nur die obere Hälfte.', 'With one page: only the top half changes first.'),
+      ),
+      value: tools.halfTurns,
+      onChanged: tools.setHalfTurns,
+    ),
+    SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(tr('Mit dem Stift sofort zeichnen', 'Draw with the pen right away')),
+      subtitle: Text(
+        tr('Auch in der Spielansicht, ohne zuerst „Bearbeiten“.', 'Also while playing, without tapping “Edit” first.'),
+      ),
+      value: tools.instantPen,
+      onChanged: tools.setInstantPen,
+    ),
+    SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(tr('Beim Bearbeiten mit dem Finger blättern', 'Turn pages with a finger while editing')),
+      subtitle: Text(
+        tr(
+          'Mit einem Finger zügig nach links oder rechts wischen. '
+              'Eine aufliegende Hand blättert nicht, ebenso wenig, solange der Stift in der Nähe ist.',
+          'Swipe quickly left or right with one finger. '
+              'A resting hand does not turn pages, and neither does anything while the pen is nearby.',
+        ),
+      ),
+      value: tools.swipeWhileEditing,
+      onChanged: tools.setSwipeWhileEditing,
+    ),
+    SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(tr('Werkzeugleiste links', 'Toolbar on the left')),
+      subtitle: Text(
+        tr('Aus: am rechten Rand (z. B. für Linkshänder).', 'Off: on the right edge (e.g. for left-handers).'),
+      ),
+      value: tools.paletteLeft,
+      onChanged: (_) => tools.togglePaletteSide(),
+    ),
+  ];
+
+  List<Widget> _teaching(BuildContext context, ThemeData theme) => [
+    SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(tr('Bereich „Unterricht“ zeigen', 'Show the “Teaching” area')),
+      subtitle: Text(
+        tr(
+          'Für Lehrpersonen: Schülerkartei mit Lektionen, Hausaufgaben, Absenzen, Stundenplan und '
+              'Stücken aus der Bibliothek. Ausgeschaltet bleibt alles gespeichert.',
+          'For teachers: student records with lessons, homework, absences, timetable and pieces '
+              'from the library. When switched off, everything stays saved.',
+        ),
+      ),
+      value: tools.teaching,
+      onChanged: tools.setTeaching,
+    ),
+  ];
+
+  List<Widget> _backup(BuildContext context, ThemeData theme) => [
+    if (onCreateBackup != null) ...[
+      Text(
+        tr(
+          'Alle Noten mit Infos und Anmerkungen, Setlists, Ordnern, eigenen Stempeln und '
+              'Stift-Vorlagen in einer einzigen Datei. Beim Einspielen wird nichts gelöscht oder '
+              'überschrieben: Was fehlt, kommt dazu, Anmerkungen werden zusammengeführt.',
+          'All your music with details and notes, setlists, folders, your own stamps and '
+              'pen presets in a single file. Restoring never deletes or '
+              'overwrites anything: whatever is missing is added, and notes are merged.',
+        ),
+        style: theme.textTheme.bodyMedium,
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilledButton.tonalIcon(
+            onPressed: () {
+              Navigator.pop(context);
+              onCreateBackup!();
+            },
+            icon: const Icon(Icons.save_alt),
+            label: Text(tr('Sicherung erstellen …', 'Create backup …')),
+          ),
+          if (onRestoreBackup != null)
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                onRestoreBackup!();
+              },
+              icon: const Icon(Icons.restore),
+              label: Text(tr('Sicherung einspielen …', 'Restore backup …')),
+            ),
+        ],
+      ),
+      if (autoBackup != null) ...[const SizedBox(height: 12), AutoBackupSection(autoBackup!)],
+    ],
+    if (dataFolder != null) ...[
+      _Section(tr('Datenordner', 'Data folder')),
+      Text(
+        tr(
+          'Hier liegen deine importierten Noten, Infos und Anmerkungen:',
+          'Your imported music, details and notes are stored here:',
+        ),
+        style: theme.textTheme.bodyMedium,
+      ),
+      const SizedBox(height: 4),
+      SelectableText(dataFolder!, style: theme.textTheme.bodySmall),
+      if (onOpenDataFolder != null) ...[
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: onOpenDataFolder,
+            icon: const Icon(Icons.folder_open),
+            label: Text(tr('Datenordner öffnen', 'Open data folder')),
+          ),
+        ),
+      ],
+    ],
+  ];
+
+  List<Widget> _about(BuildContext context, ThemeData theme) => [
+    Text(
+      tr('Version $voltiVersion', 'Version ${voltiVersion == 'Testversion' ? 'test build' : voltiVersion}'),
+      style: theme.textTheme.bodyMedium,
+    ),
+    const SizedBox(height: 8),
+    const UpdateSection(),
+    const SizedBox(height: 8),
+    Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => showHelpDialog(context),
+          icon: const Icon(Icons.help_outline),
+          label: Text(tr('Kurzanleitung', 'Quick guide')),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => showErrorLogDialog(context),
+          icon: const Icon(Icons.bug_report_outlined),
+          label: Text(tr('Fehlerprotokoll', 'Error log')),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => showVoltiLicenses(context),
+          icon: const Icon(Icons.gavel_outlined),
+          label: Text(tr('Lizenzen', 'Licences')),
+        ),
+      ],
+    ),
+  ];
 
   List<Widget> _syncSection(BuildContext context, SyncController sync) {
     final theme = Theme.of(context);
@@ -353,7 +428,6 @@ class _SettingsDialog extends StatelessWidget {
               ),
     };
     return [
-      _Section(tr('Sync', 'Sync')),
       Text(status, style: theme.textTheme.bodyMedium),
       if (sync.configured) ...[
         const SizedBox(height: 4),

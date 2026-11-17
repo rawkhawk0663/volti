@@ -42,7 +42,8 @@ bool isSyncedPath(String rel) {
       rel == '.volti/presets.json' ||
       rel == '.volti/stamps.json' ||
       rel == '.volti/folders.json' ||
-      rel == '.volti/setlist-folders.json';
+      rel == '.volti/setlist-folders.json' ||
+      rel == '.volti/teaching.json';
 }
 
 /// Ein gewöhnlicher Ordner als Sync-Ziel.

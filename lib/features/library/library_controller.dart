@@ -11,6 +11,7 @@ import '../../core/library/score_importer.dart';
 import '../../core/library/score_meta.dart';
 import '../../core/library/setlist.dart';
 import '../../core/library/sidecar_store.dart';
+import '../../core/teaching/school_calendar.dart';
 import '../../core/teaching/student.dart';
 import '../../core/pdf/paper.dart';
 import '../../core/pdf/paper_pdf.dart';
@@ -62,6 +63,17 @@ class LibraryController extends ChangeNotifier {
   List<Student> _students = [];
   List<Student> get students => _students;
 
+  /// Semester, Ferien und Feiertage des Unterrichts.
+  SchoolCalendar calendar = SchoolCalendar();
+
+  Future<void> saveCalendar(SchoolCalendar c) async {
+    c.touch();
+    await c.save(root);
+    calendar = c;
+    notifyListeners();
+    onLocalChange?.call();
+  }
+
   bool _loading = false;
   bool get loading => _loading;
 
@@ -100,6 +112,7 @@ class LibraryController extends ChangeNotifier {
       _scores = await _scanner.scan(root);
       _setlists = await _setlistStore.loadAll();
       _students = await _studentStore.loadAll();
+      calendar = await SchoolCalendar.load(root);
       await scoreFolders.load();
       await setlistFolders.load();
     } catch (e) {

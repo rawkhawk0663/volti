@@ -10,6 +10,7 @@ import '../library/open_scores.dart';
 import '../library/setlists_view.dart' show KeyBadge, showScorePicker;
 import '../viewer/viewer_screen.dart';
 import 'homework_share.dart';
+import 'attendance_table.dart';
 import 'student_dialog.dart';
 
 /// Beginn des Schuljahrs (1. August), für die Zahl der Absenzen.
@@ -85,7 +86,11 @@ class _StudentPageState extends State<StudentPage> {
     if (s == null) return null;
     final edited = _editing == null ? null : s.lessons[_editing];
     if (edited == null && !_hasText) return null;
-    final l = edited ?? Lesson.create(_date);
+    // Steht für den Tag schon ein Eintrag aus der Absenzenkontrolle (ohne Text), wird er ergänzt.
+    final same = edited == null ? s.lessonOn(_date) : null;
+    final reuse = same != null && same.content.trim().isEmpty && same.homework.trim().isEmpty ? same : null;
+    final l = edited ?? reuse ?? Lesson.create(_date);
+    if (reuse != null) l.status = LessonStatus.held;
     l
       ..date = _date
       ..content = _content.text.trimRight()
@@ -125,58 +130,37 @@ class _StudentPageState extends State<StudentPage> {
     if (d != null) setState(() => _date = d);
   }
 
-  /// Absenz eintragen (Abgemeldet, Gefehlt, Abgesagt) mit freiwilligem Grund.
-  Future<void> _addAbsence() async {
+  /// Absenzenkontrolle: Status an einem Tag setzen (null = leeren).
+  Future<void> _setAttendance(DateTime day, LessonStatus? status) async {
     final s = _student;
     if (s == null) return;
-    var status = LessonStatus.excused;
-    final reason = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setDialog) => AlertDialog(
-          title: Text(tr('Absenz am ${shortDate(_date)}', 'Absence on ${shortDate(_date)}')),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final st in [LessonStatus.excused, LessonStatus.missed, LessonStatus.cancelled])
-                      ChoiceChip(
-                        label: Text(lessonStatusLabel(st)),
-                        selected: status == st,
-                        onSelected: (_) => setDialog(() => status = st),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: reason,
-                  decoration: InputDecoration(labelText: tr('Grund (freiwillig)', 'Reason (optional)')),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(c).pop(false), child: Text(tr('Abbrechen', 'Cancel'))),
-            FilledButton(onPressed: () => Navigator.of(c).pop(true), child: Text(tr('Eintragen', 'Add'))),
-          ],
-        ),
-      ),
-    );
-    final text = reason.text.trim();
-    reason.dispose();
-    if (ok != true) return;
-    s.putLesson(
-      Lesson.create(_date)
-        ..status = status
-        ..reason = text,
-    );
+    final l = s.lessonOn(day);
+    if (l == null) {
+      if (status == null) return;
+      s.putLesson(Lesson.create(day)..status = status);
+    } else {
+      final empty = l.content.trim().isEmpty && l.homework.trim().isEmpty;
+      if (status == null && empty) {
+        l.deleted = true;
+      } else {
+        l.status = status ?? LessonStatus.held;
+      }
+      l.touch();
+      s.putLesson(l);
+    }
+    await library.saveStudent(s);
+  }
+
+  /// Note eines Semesters (leer = keine).
+  Future<void> _setGrade(String semesterId, String grade) async {
+    final s = _student;
+    if (s == null) return;
+    if (grade.isEmpty) {
+      if (s.grades.remove(semesterId) == null) return;
+    } else {
+      s.grades[semesterId] = grade;
+    }
+    s.touch();
     await library.saveStudent(s);
   }
 
@@ -487,6 +471,16 @@ class _StudentPageState extends State<StudentPage> {
                   ),
                   const Divider(height: 1),
                   _header(context, s),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                    child: AttendanceTable(
+                      student: s,
+                      calendar: library.calendar,
+                      onSet: _setAttendance,
+                      onGrade: _setGrade,
+                      onEditStudent: _editStudent,
+                    ),
+                  ),
                   const Divider(height: 1),
                   Expanded(
                     child: twoColumns
@@ -526,7 +520,6 @@ class _StudentPageState extends State<StudentPage> {
       if (s.weekday != null || s.time != null) tr('${s.duration} Minuten', '${s.duration} minutes'),
       if (s.instrument.isNotEmpty) s.instrument,
     ].join(' | ');
-    final absences = s.activeLessons.where((l) => l.isAbsence && !l.date.isBefore(schoolYearStart())).length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 16, 14),
       child: Row(
@@ -573,16 +566,6 @@ class _StudentPageState extends State<StudentPage> {
               ],
             ),
           ),
-          if (absences > 0)
-            Tooltip(
-              message: tr('Absenzen seit August', 'Absences since August'),
-              child: Chip(
-                avatar: const Icon(Icons.event_busy_outlined, size: 18),
-                label: Text(
-                  tr('$absences Absenz${absences == 1 ? '' : 'en'}', '$absences absence${absences == 1 ? '' : 's'}'),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -618,19 +601,7 @@ class _StudentPageState extends State<StudentPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _title2(
-          context,
-          editing ? tr('Lektion bearbeiten', 'Edit lesson') : tr('Neue Lektion', 'New lesson'),
-          trailing: [
-            if (!editing)
-              PopupMenuButton<int>(
-                tooltip: tr('Mehr', 'More'),
-                icon: Icon(Icons.more_vert, size: 20, color: theme.colorScheme.primary),
-                onSelected: (_) => _addAbsence(),
-                itemBuilder: (_) => [PopupMenuItem(value: 0, child: Text(tr('Absenz eintragen …', 'Add absence …')))],
-              ),
-          ],
-        ),
+        _title2(context, editing ? tr('Lektion bearbeiten', 'Edit lesson') : tr('Neue Lektion', 'New lesson')),
         Row(
           children: [
             Text(tr('Datum', 'Date'), style: theme.textTheme.bodyMedium),
@@ -705,7 +676,8 @@ class _StudentPageState extends State<StudentPage> {
     final scheme = theme.colorScheme;
     final all = [
       for (final l in s.activeLessons)
-        if (l.id != _editing) l,
+        // Reine Einträge der Absenzenkontrolle stehen nur in der Tabelle.
+        if (l.id != _editing && (l.content.trim().isNotEmpty || l.homework.trim().isNotEmpty || l.reason.isNotEmpty)) l,
     ];
     final shown = _allLessons ? all : all.take(6).toList();
     return Column(

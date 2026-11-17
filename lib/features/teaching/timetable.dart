@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../app/l10n.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_controller.dart';
+import 'calendar_dialog.dart';
 import 'homework_share.dart';
 import 'student_dialog.dart';
 
@@ -66,6 +67,11 @@ class TimetableView extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+              TextButton.icon(
+                onPressed: () => showCalendarDialog(context, library),
+                icon: const Icon(Icons.event_available_outlined, size: 18),
+                label: Text(tr('Ferien & Semester', 'Holidays & terms')),
               ),
               TextButton.icon(
                 onPressed: () => _openPdf(context, students),
