@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/l10n.dart';
+import '../../core/teaching/school_calendar.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_actions.dart';
 import '../library/library_controller.dart';
@@ -9,7 +11,9 @@ import '../library/sync_controller.dart';
 import 'homework_share.dart' show shortDate;
 import '../../core/teaching/school_level.dart';
 import 'student_dialog.dart';
+import 'attendance_table.dart' show absenceBackground;
 import 'student_page.dart';
+import 'absence_pdf.dart';
 import 'dashboard.dart';
 import 'timetable.dart';
 import 'todo_widgets.dart';
@@ -49,12 +53,39 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
   void initState() {
     super.initState();
     widget.reset.addListener(_onReset);
+    HardwareKeyboard.instance.addHandler(_onKey);
   }
 
   @override
   void dispose() {
     widget.reset.removeListener(_onReset);
+    HardwareKeyboard.instance.removeHandler(_onKey);
     super.dispose();
+  }
+
+  /// ← → wechseln in „Unterrichten“ zur vorigen bzw. nächsten Person,
+  /// ausser während man tippt oder ein Fenster offen ist.
+  bool _onKey(KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
+    final key = e.logicalKey;
+    if (key != LogicalKeyboardKey.arrowLeft && key != LogicalKeyboardKey.arrowRight) return false;
+    if (!mounted || !widget.active || _section != _Section.teach) return false;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isControlPressed || keys.isAltPressed || keys.isMetaPressed || keys.isShiftPressed) return false;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    final focus = FocusManager.instance.primaryFocus?.context;
+    if (focus != null &&
+        (focus.widget is EditableText || focus.findAncestorWidgetOfExactType<EditableText>() != null)) {
+      return false;
+    }
+    final order = _ordered;
+    final current = _currentStudent(order);
+    if (current == null) return false;
+    final i = order.indexWhere((x) => x.id == current.id);
+    final j = key == LogicalKeyboardKey.arrowLeft ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= order.length) return true;
+    _open(order[j]);
+    return true;
   }
 
   /// Nochmals auf „Unterricht“ getippt: zurück zur Übersicht.
@@ -77,7 +108,7 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
     final members = await showGroupMembersDialog(context, library);
     if (members == null || members.length < 2 || !mounted) return;
     final first = library.studentById(members.first)!;
-    final group = Student.create(members.map((id) => library.studentById(id)!.name.split(' ').first).join(' & '))
+    final group = Student.create(members.map((id) => library.studentById(id)!.name).join(' & '))
       ..members.addAll(members)
       ..instrument = first.instrument
       ..weekday = first.weekday
@@ -170,7 +201,14 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
           case _Section.absences:
             content = _AbsencesSection(state: this);
           case _Section.dashboard:
-            content = DashboardView(library: library, actions: headerActions(), onOpen: _open, onAdd: _add);
+            content = DashboardView(
+              library: library,
+              actions: headerActions(),
+              onOpen: _open,
+              onAdd: _add,
+              onTimetable: () => setState(() => _section = _Section.timetable),
+              onTodos: () => setState(() => _section = _Section.todos),
+            );
           case _Section.todos:
             content = _TodosSection(state: this);
         }
@@ -455,6 +493,42 @@ class _AbsencesSection extends StatelessWidget {
   const _AbsencesSection({required this.state});
   final _TeachingViewState state;
 
+  /// Semester wählen (das aktuelle ist vorgewählt), dann das PDF öffnen.
+  Future<void> _exportPdf(BuildContext anchor) async {
+    final lib = state.library;
+    final cal = lib.calendar;
+    final list = cal.effectiveSemesters;
+    final current = cal.semesterFor(DateTime.now());
+    var sem = current;
+    if (list.length > 1) {
+      final box = anchor.findRenderObject() as RenderBox;
+      final pos = box.localToGlobal(Offset(0, box.size.height));
+      final picked = await showMenu<Semester>(
+        context: anchor,
+        position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
+        items: [
+          for (final x in list.reversed)
+            PopupMenuItem(
+              value: x,
+              child: Text(
+                '${x.name}${x.id == current.id ? tr('  (aktuell)', '  (current)') : ''}',
+                style: TextStyle(fontWeight: x.id == current.id ? FontWeight.w600 : null),
+              ),
+            ),
+        ],
+      );
+      if (picked == null) return;
+      sem = picked;
+    }
+    if (!anchor.mounted) return;
+    final rows = absenceRows(lib.students, lib.groupOf);
+    await openPdfBytes(
+      anchor,
+      () => buildAbsencePdf(rows, cal, sem),
+      tr('Absenzenliste ${sem.name}.pdf', 'Attendance ${sem.name}.pdf').replaceAll(RegExp(r'[\\/:*?"<>|]'), ''),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -462,7 +536,7 @@ class _AbsencesSection extends StatelessWidget {
     final rows = [
       for (final s in state.library.students)
         for (final l in s.activeLessons)
-          if (l.status != LessonStatus.held) (student: s, lesson: l),
+          if (l.status != LessonStatus.held && l.status != LessonStatus.makeUp) (student: s, lesson: l),
     ]..sort((a, b) => b.lesson.date.compareTo(a.lesson.date));
     final start = schoolYearStart();
     final thisYear = rows.where((r) => !r.lesson.date.isBefore(start)).length;
@@ -472,7 +546,17 @@ class _AbsencesSection extends StatelessWidget {
         TeachingTopBar(
           title: tr('Absenzen', 'Absences'),
           subtitle: tr('$thisYear seit August', '$thisYear since August'),
-          trailing: state.headerActions(),
+          trailing: [
+            Builder(
+              builder: (anchor) => TextButton.icon(
+                onPressed: () => _exportPdf(anchor),
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: Text(tr('Absenzenliste als PDF', 'Attendance list as PDF')),
+              ),
+            ),
+            const SizedBox(width: 4),
+            ...state.headerActions(),
+          ],
         ),
         const Divider(height: 1),
         Expanded(
@@ -482,8 +566,8 @@ class _AbsencesSection extends StatelessWidget {
                     padding: const EdgeInsets.all(24),
                     child: Text(
                       tr(
-                        'Keine Absenzen. Eintragen kannst du sie bei einer Person über ⋮ neben „Neue Lektion“.',
-                        'No absences. You can add them for a person via ⋮ next to “New lesson”.',
+                        'Keine Absenzen. Eintragen kannst du sie in der Absenzenkontrolle unter dem Namen einer Person.',
+                        'No absences. You can add them in the attendance table below a person’s name.',
                       ),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
@@ -499,6 +583,8 @@ class _AbsencesSection extends StatelessWidget {
                           width: 92,
                           child: Text(shortDate(r.lesson.date), style: theme.textTheme.bodyMedium),
                         ),
+                        tileColor: absenceBackground(r.lesson.status, theme.brightness),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         title: Text(r.student.name),
                         subtitle: r.lesson.reason.isEmpty ? null : Text(r.lesson.reason),
                         trailing: LessonStatusBadge(r.lesson),

@@ -12,6 +12,68 @@ String attendanceLetter(LessonStatus s) => switch (s) {
   LessonStatus.cancelled => 'A',
 };
 
+/// Hintergrund einer Absenz: entschuldigt gelb, unentschuldigt rot,
+/// Ausfall grau (null = keiner).
+Color? absenceBackground(LessonStatus s, Brightness b) {
+  final dark = b == Brightness.dark;
+  return switch (s) {
+    LessonStatus.excused => dark ? const Color(0xFF4A4220) : const Color(0xFFFFF3C4),
+    LessonStatus.missed => dark ? const Color(0xFF4D2626) : const Color(0xFFFDDCDC),
+    LessonStatus.cancelled => dark ? const Color(0xFF34383A) : const Color(0xFFE9ECEE),
+    _ => null,
+  };
+}
+
+/// Grund einer Absenz oder eines Ausfalls erfragen (leer erlaubt).
+/// Gibt null zurück, wenn abgebrochen wurde.
+Future<String?> showAbsenceReasonDialog(
+  BuildContext context, {
+  required LessonStatus status,
+  required DateTime day,
+  String reason = '',
+  String? who,
+}) {
+  final text = TextEditingController(text: reason);
+  final kind = switch (status) {
+    LessonStatus.excused => tr('Entschuldigt', 'Excused'),
+    LessonStatus.missed => tr('Unentschuldigt', 'Unexcused'),
+    _ => tr('Ausfall', 'Cancelled'),
+  };
+  final date = '${day.day.toString().padLeft(2, '0')}.${day.month.toString().padLeft(2, '0')}.${day.year}';
+  return showDialog<String>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: Text('$kind · $date'),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (who != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(who)),
+            TextField(
+              controller: text,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: tr('Grund', 'Reason'),
+                hintText: status == LessonStatus.cancelled
+                    ? tr('z. B. Weiterbildung, Konzert', 'e.g. training, concert')
+                    : tr('z. B. krank, Skilager', 'e.g. ill, school trip'),
+              ),
+              onSubmitted: (v) => Navigator.of(c).pop(v.trim()),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(c).pop(), child: Text(tr('Abbrechen', 'Cancel'))),
+        FilledButton(onPressed: () => Navigator.of(c).pop(text.text.trim()), child: Text(tr('Speichern', 'Save'))),
+      ],
+    ),
+  ).whenComplete(text.dispose);
+}
+
 /// Farbe für Ferien und Feiertage.
 const _freeColor = Color(0xFF4A90D9);
 
@@ -38,8 +100,9 @@ class AttendanceTable extends StatefulWidget {
   final int? weekday;
   final SchoolCalendar calendar;
 
-  /// Status einer Person an einem Tag setzen (null = leeren).
-  final void Function(Student s, DateTime day, LessonStatus? status) onSet;
+  /// Status einer Person an einem Tag setzen (null = leeren), bei Absenz
+  /// und Ausfall mit Grund.
+  final void Function(Student s, DateTime day, LessonStatus? status, String reason) onSet;
   final void Function(Student s, String semesterId, String grade) onGrade;
   final VoidCallback onEditStudent;
 
@@ -78,7 +141,8 @@ class _AttendanceTableState extends State<AttendanceTable> {
     setState(() => _semester = list[next]);
   }
 
-  Future<void> _choose(BuildContext cellContext, Student s, DateTime day, LessonStatus? current) async {
+  Future<void> _choose(BuildContext cellContext, Student s, DateTime day, Lesson? lesson) async {
+    final current = lesson?.status;
     final box = cellContext.findRenderObject() as RenderBox;
     final pos = box.localToGlobal(Offset(0, box.size.height));
     PopupMenuItem<int> item(int v, String letter, String text) => PopupMenuItem(
@@ -106,13 +170,27 @@ class _AttendanceTableState extends State<AttendanceTable> {
       ],
     );
     if (v == null) return;
-    widget.onSet(s, day, switch (v) {
+    final status = switch (v) {
       0 => LessonStatus.held,
       1 => LessonStatus.excused,
       2 => LessonStatus.missed,
       3 => LessonStatus.cancelled,
       _ => null,
-    });
+    };
+    var reason = '';
+    if (status != null && status != LessonStatus.held) {
+      if (!mounted) return;
+      final r = await showAbsenceReasonDialog(
+        context,
+        status: status,
+        day: day,
+        reason: lesson?.reason ?? '',
+        who: widget.students.length > 1 ? s.name : null,
+      );
+      if (r == null) return;
+      reason = r;
+    }
+    widget.onSet(s, day, status, reason);
   }
 
   String _dm(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.';
@@ -256,13 +334,15 @@ class _AttendanceTableState extends State<AttendanceTable> {
                 child: Builder(
                   builder: (cellContext) => InkWell(
                     borderRadius: BorderRadius.circular(4),
-                    onTap: free != null ? null : () => _choose(cellContext, s, d, lesson?.status),
+                    onTap: free != null ? null : () => _choose(cellContext, s, d, lesson),
                     child: Container(
                       width: _cell - 10,
                       height: 30,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: free != null ? _freeColor.withValues(alpha: 0.35) : null,
+                        color: free != null
+                            ? _freeColor.withValues(alpha: 0.35)
+                            : (lesson == null ? null : absenceBackground(lesson.status, theme.brightness)),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: letter == 'U' || letter == 'E' ? letterColor : scheme.outlineVariant),
                       ),

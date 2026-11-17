@@ -61,6 +61,23 @@ Future<void> sendHomeworkByWhatsApp(Student s, Lesson l, {List<Student> members 
   return openUrl(Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(homeworkText(s, l, members: members))}'));
 }
 
+/// Telefonnummer schön geschrieben: „+41 78 876 54 32“ (mit Ländervorwahl)
+/// bzw. „078 876 54 32“ (ohne). Andere Nummern bleiben, wie sie sind.
+String formatPhone(String phone) {
+  final t = phone.trim();
+  var d = t.replaceAll(RegExp(r'[^0-9+]'), '');
+  if (d.startsWith('00')) d = '+${d.substring(2)}';
+  String group(String n) => '${n.substring(0, 2)} ${n.substring(2, 5)} ${n.substring(5, 7)} ${n.substring(7)}';
+  if (d.startsWith('+41')) {
+    var n = d.substring(3);
+    if (n.startsWith('0')) n = n.substring(1); // „+41 078 …“
+    if (n.length == 9 && !n.contains('+')) return '+41 ${group(n)}';
+  } else if (d.length == 10 && d.startsWith('0') && !d.contains('+')) {
+    return '0${group(d.substring(1))}';
+  }
+  return t;
+}
+
 /// Telefonnummer für WhatsApp: nur Ziffern, mit Ländervorwahl.
 /// Eine Schweizer Nummer ohne Vorwahl (079 …) bekommt +41.
 String whatsAppNumber(String phone) {
@@ -150,8 +167,10 @@ Future<void> shareHomeworkPdf(
 /// Umlaute und Sonderzeichen in Namen stimmen). null = Standardschrift.
 Future<pw.ThemeData?> voltiPdfTheme() async {
   try {
-    final font = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto.ttf'));
-    return pw.ThemeData.withFont(base: font, bold: font);
+    // Feste Schnitte: Variable Schriften zeigen manche PDF-Programme nicht an.
+    final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/pdf/RobotoPdf-Regular.ttf'));
+    final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/pdf/RobotoPdf-Bold.ttf'));
+    return pw.ThemeData.withFont(base: regular, bold: bold);
   } catch (_) {
     return null;
   }

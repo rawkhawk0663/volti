@@ -62,6 +62,9 @@ class _StudentPageState extends State<StudentPage> {
   bool _allLessons = false;
   bool _doneTodos = false;
 
+  /// Gelernte Stücke („Kann es“) im Repertoire zeigen.
+  bool _showLearned = false;
+
   /// Mitglieder einer Gruppe (sonst leer).
   List<Student> _members(Student s) => [for (final id in s.members) ?library.studentById(id)];
 
@@ -151,22 +154,46 @@ class _StudentPageState extends State<StudentPage> {
   }
 
   /// Absenzenkontrolle: Status an einem Tag setzen (null = leeren).
-  Future<void> _setAttendance(Student s, DateTime day, LessonStatus? status) async {
+  Future<void> _setAttendance(Student s, DateTime day, LessonStatus? status, String reason) async {
+    final absent = status != null && status != LessonStatus.held;
     final l = s.lessonOn(day);
     if (l == null) {
       if (status == null) return;
-      s.putLesson(Lesson.create(day)..status = status);
+      s.putLesson(
+        Lesson.create(day)
+          ..status = status
+          ..reason = absent ? reason : '',
+      );
     } else {
       final empty = l.content.trim().isEmpty && l.homework.trim().isEmpty;
       if (status == null && empty) {
         l.deleted = true;
       } else {
-        l.status = status ?? LessonStatus.held;
+        l
+          ..status = status ?? LessonStatus.held
+          ..reason = absent ? reason : '';
       }
       l.touch();
       s.putLesson(l);
     }
     await library.saveStudent(s);
+  }
+
+  /// Grund einer Absenz nachträglich ändern.
+  Future<void> _editReason(Lesson l, Student owner) async {
+    final r = await showAbsenceReasonDialog(
+      context,
+      status: l.status,
+      day: l.date,
+      reason: l.reason,
+      who: owner.id == widget.studentId ? null : owner.name,
+    );
+    if (r == null) return;
+    l
+      ..reason = r
+      ..touch();
+    owner.putLesson(l);
+    await library.saveStudent(owner);
   }
 
   /// Note eines Semesters (leer = keine).
@@ -180,8 +207,8 @@ class _StudentPageState extends State<StudentPage> {
     await library.saveStudent(s);
   }
 
-  Future<void> _deleteLesson(Lesson l) async {
-    final s = _student;
+  Future<void> _deleteLesson(Lesson l, [Student? owner]) async {
+    final s = owner ?? _student;
     if (s == null) return;
     if (l.id == _editing) setState(_clear);
     l
@@ -198,7 +225,7 @@ class _StudentPageState extends State<StudentPage> {
         action: SnackBarAction(
           label: tr('Rückgängig', 'Undo'),
           onPressed: () async {
-            final now = _student;
+            final now = library.studentById(s.id);
             final back = now?.lessons[l.id];
             if (now == null || back == null) return;
             back
@@ -244,7 +271,9 @@ class _StudentPageState extends State<StudentPage> {
                     ? tr('Per WhatsApp', 'By WhatsApp')
                     : tr('Per WhatsApp an ${chats[i].name}', 'By WhatsApp to ${chats[i].name}'),
               ),
-              subtitle: Text(chats[i].phone.isEmpty ? tr('Nummer fehlt noch', 'No number yet') : chats[i].phone),
+              subtitle: Text(
+                chats[i].phone.isEmpty ? tr('Nummer fehlt noch', 'No number yet') : formatPhone(chats[i].phone),
+              ),
               contentPadding: EdgeInsets.zero,
             ),
           ),
@@ -767,11 +796,17 @@ class _StudentPageState extends State<StudentPage> {
   Widget _pastLessons(BuildContext context, Student s) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final all = [
+    bool absence(Lesson l) => l.status != LessonStatus.held && l.status != LessonStatus.makeUp;
+    // Eigene Lektionen und Absenzen; bei einer Gruppe auch die Absenzen der
+    // Mitglieder (mit Namen). Reine „anwesend“-Einträge stehen nur in der Tabelle.
+    final all = <({Lesson lesson, Student owner})>[
       for (final l in s.activeLessons)
-        // Reine Einträge der Absenzenkontrolle stehen nur in der Tabelle.
-        if (l.id != _editing && (l.content.trim().isNotEmpty || l.homework.trim().isNotEmpty || l.reason.isNotEmpty)) l,
-    ];
+        if (l.id != _editing && (l.content.trim().isNotEmpty || l.homework.trim().isNotEmpty || absence(l)))
+          (lesson: l, owner: s),
+      for (final m in _members(s))
+        for (final l in m.activeLessons)
+          if (absence(l)) (lesson: l, owner: m),
+    ]..sort((a, b) => b.lesson.date.compareTo(a.lesson.date));
     final shown = _allLessons ? all : all.take(6).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -793,77 +828,108 @@ class _StudentPageState extends State<StudentPage> {
             tr('Noch keine.', 'None yet.'),
             style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
           ),
-        for (final l in shown)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: l.status == LessonStatus.held ? () => _edit(l) : null,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 6, 4, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
+        for (final (:lesson, :owner) in shown)
+          Builder(
+            builder: (context) {
+              final l = lesson;
+              final isAbsence = absence(l);
+              final other = owner.id != s.id;
+              final bg = absenceBackground(l.status, theme.brightness);
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: bg ?? scheme.outlineVariant),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: isAbsence ? () => _editReason(l, owner) : () => _edit(l),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 6, 4, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(shortDate(l.date), style: theme.textTheme.titleSmall),
-                        const SizedBox(width: 8),
-                        Text(_ago(l.date), style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                        if (l.status != LessonStatus.held) ...[const SizedBox(width: 10), LessonStatusBadge(l)],
-                        const Spacer(),
-                        Builder(
-                          builder: (anchor) => PopupMenuButton<int>(
-                            tooltip: tr('Mehr', 'More'),
-                            icon: const Icon(Icons.more_horiz, size: 20),
-                            onSelected: (v) => switch (v) {
-                              0 => _edit(l),
-                              1 => _send(l, anchor),
-                              _ => _deleteLesson(l),
-                            },
-                            itemBuilder: (_) => [
-                              if (l.status == LessonStatus.held)
-                                PopupMenuItem(value: 0, child: Text(tr('Bearbeiten', 'Edit'))),
-                              if (l.homework.trim().isNotEmpty)
-                                PopupMenuItem(value: 1, child: Text(tr('Hausaufgaben senden …', 'Send homework …'))),
-                              PopupMenuItem(value: 2, child: Text(tr('Löschen', 'Delete'))),
+                        Row(
+                          children: [
+                            Text(shortDate(l.date), style: theme.textTheme.titleSmall),
+                            const SizedBox(width: 8),
+                            Text(
+                              _ago(l.date),
+                              style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                            if (isAbsence) ...[const SizedBox(width: 10), LessonStatusBadge(l)],
+                            if (other) ...[
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  owner.name,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleSmall,
+                                ),
+                              ),
                             ],
-                          ),
+                            const Spacer(),
+                            Builder(
+                              builder: (anchor) => PopupMenuButton<int>(
+                                tooltip: tr('Mehr', 'More'),
+                                icon: const Icon(Icons.more_horiz, size: 20),
+                                onSelected: (v) => switch (v) {
+                                  0 => isAbsence ? _editReason(l, owner) : _edit(l),
+                                  1 => _send(l, anchor),
+                                  _ => _deleteLesson(l, owner),
+                                },
+                                itemBuilder: (_) => [
+                                  PopupMenuItem(
+                                    value: 0,
+                                    child: Text(
+                                      isAbsence ? tr('Grund bearbeiten', 'Edit reason') : tr('Bearbeiten', 'Edit'),
+                                    ),
+                                  ),
+                                  if (l.homework.trim().isNotEmpty)
+                                    PopupMenuItem(
+                                      value: 1,
+                                      child: Text(tr('Hausaufgaben senden …', 'Send homework …')),
+                                    ),
+                                  PopupMenuItem(value: 2, child: Text(tr('Löschen', 'Delete'))),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
+                        if (isAbsence)
+                          Text(
+                            l.reason.isEmpty ? tr('Kein Grund eingetragen', 'No reason given') : l.reason,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: l.reason.isEmpty ? scheme.onSurfaceVariant : null,
+                            ),
+                          )
+                        else
+                          LayoutBuilder(
+                            builder: (context, c) {
+                              final a = _cell(context, tr('Lektion', 'Lesson'), l.content);
+                              final b = _cell(context, tr('Hausaufgaben', 'Homework'), l.homework);
+                              return c.maxWidth >= 480
+                                  ? Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(child: a),
+                                        const SizedBox(width: 16),
+                                        Expanded(child: b),
+                                      ],
+                                    )
+                                  : Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [a, const SizedBox(height: 10), b],
+                                    );
+                            },
+                          ),
                       ],
                     ),
-                    if (l.status != LessonStatus.held)
-                      Text(
-                        l.reason.isEmpty ? '–' : l.reason,
-                        style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                      )
-                    else
-                      LayoutBuilder(
-                        builder: (context, c) {
-                          final a = _cell(context, tr('Lektion', 'Lesson'), l.content);
-                          final b = _cell(context, tr('Hausaufgaben', 'Homework'), l.homework);
-                          return c.maxWidth >= 480
-                              ? Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(child: a),
-                                    const SizedBox(width: 16),
-                                    Expanded(child: b),
-                                  ],
-                                )
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [a, const SizedBox(height: 10), b],
-                                );
-                        },
-                      ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
       ],
     );
@@ -986,15 +1052,29 @@ class _StudentPageState extends State<StudentPage> {
             onTap: _addPieces,
           ),
         ...practising.map(tile),
-        if (learned.isNotEmpty) ...[
+        if (all.isNotEmpty && practising.isEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 10, 0, 2),
+            padding: const EdgeInsets.fromLTRB(4, 4, 0, 4),
             child: Text(
-              tr('Kann es', 'Learned'),
-              style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+              tr('Gerade wird nichts geübt.', 'Nothing being practised right now.'),
+              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
-          ...learned.map(tile),
+        // Gelernte Stücke nur auf Wunsch, damit die Liste kurz bleibt.
+        if (learned.isNotEmpty) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _showLearned = !_showLearned),
+              icon: Icon(_showLearned ? Icons.expand_less : Icons.check_circle_outline, size: 18),
+              label: Text(
+                _showLearned
+                    ? tr('„Kann es“ ausblenden', 'Hide “Learned”')
+                    : tr('Kann es (${learned.length})', 'Learned (${learned.length})'),
+              ),
+            ),
+          ),
+          if (_showLearned) ...learned.map(tile),
         ],
       ],
     );
@@ -1149,9 +1229,9 @@ class _EmptyBox extends StatelessWidget {
 
 String lessonStatusLabel(LessonStatus s) => switch (s) {
   LessonStatus.held => tr('Gehalten', 'Held'),
-  LessonStatus.excused => tr('Abgemeldet', 'Excused'),
-  LessonStatus.missed => tr('Gefehlt', 'Missed'),
-  LessonStatus.cancelled => tr('Abgesagt (Lehrperson)', 'Cancelled (teacher)'),
+  LessonStatus.excused => tr('Entschuldigt', 'Excused'),
+  LessonStatus.missed => tr('Unentschuldigt', 'Unexcused'),
+  LessonStatus.cancelled => tr('Ausfall', 'Cancelled'),
   LessonStatus.makeUp => tr('Nachgeholt', 'Made up'),
 };
 
@@ -1164,7 +1244,7 @@ class LessonStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final color = switch (lesson.status) {
-      LessonStatus.excused => scheme.tertiary,
+      LessonStatus.excused => const Color(0xFFB07A00),
       LessonStatus.missed => scheme.error,
       LessonStatus.cancelled => scheme.outline,
       _ => scheme.primary,

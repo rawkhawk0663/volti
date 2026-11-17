@@ -5,6 +5,7 @@ import '../../app/l10n.dart';
 import '../../core/teaching/school_level.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_controller.dart';
+import 'homework_share.dart' show formatPhone;
 
 /// Namen der Wochentage (1 = Montag).
 String weekdayName(int d) => switch (d) {
@@ -95,7 +96,7 @@ class _StudentDialogState extends State<_StudentDialog> {
   late final _instrument = TextEditingController(text: s.instrument);
   late final _place = TextEditingController(text: s.place);
   late final _email = TextEditingController(text: s.email);
-  late final _phone = TextEditingController(text: s.phone);
+  late final _phone = TextEditingController(text: formatPhone(s.phone));
   late int? _weekday = s.weekday;
   late TimeOfDay? _time = _parse(s.time);
   late int _duration = s.duration;
@@ -129,7 +130,7 @@ class _StudentDialogState extends State<_StudentDialog> {
       ..instrument = _instrument.text.trim()
       ..place = _place.text.trim()
       ..email = _email.text.trim()
-      ..phone = _phone.text.trim()
+      ..phone = formatPhone(_phone.text)
       ..weekday = _weekday
       ..time = _time == null ? null : _fmt(_time!)
       ..duration = _duration
@@ -311,10 +312,17 @@ class _StudentDialogState extends State<_StudentDialog> {
                   decoration: deco(tr('E-Mail', 'Email')),
                 ),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _phone,
-                  keyboardType: TextInputType.phone,
-                  decoration: deco(tr('Handy (WhatsApp)', 'Mobile (WhatsApp)'), '079 123 45 67'),
+                // Beim Verlassen des Feldes schön schreiben (078 876 54 32).
+                Focus(
+                  onFocusChange: (has) {
+                    final f = formatPhone(_phone.text);
+                    if (!has && f != _phone.text) _phone.text = f;
+                  },
+                  child: TextField(
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
+                    decoration: deco(tr('Handy (WhatsApp)', 'Mobile (WhatsApp)'), '078 876 54 32'),
+                  ),
                 ),
               ],
             ],

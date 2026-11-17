@@ -39,6 +39,8 @@ flutter:
     - assets/fonts/OFL-NotoSerif.txt
     - assets/fonts/OFL-Roboto.txt
     - assets/fonts/OFL-RobotoMono.txt
+    # Feste Roboto-Schnitte für selbst erzeugte PDFs (tool/make_pdf_fonts.py)
+    - assets/fonts/pdf/
   # Schriften für Text-Notizen (SIL Open Font License, siehe assets/fonts/OFL-*.txt)
   fonts:
     - family: VoltiSans

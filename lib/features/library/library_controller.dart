@@ -82,6 +82,21 @@ class LibraryController extends ChangeNotifier {
     await saveTodo(t);
   }
 
+  /// Gruppen aus der ersten Fassung hiessen nur mit Vornamen („Lea & Noah“):
+  /// auf die vollen Namen umstellen. Selbst gewählte Namen bleiben.
+  Future<void> _fullGroupNames() async {
+    for (final g in _students.where((x) => x.isGroup).toList()) {
+      final members = [for (final id in g.members) ?studentById(id)];
+      final short = members.map((m) => m.name.split(' ').first).join(' & ');
+      final full = members.map((m) => m.name).join(' & ');
+      if (members.isEmpty || g.name != short || full == short) continue;
+      g
+        ..name = full
+        ..touch();
+      await _studentStore.save(g);
+    }
+  }
+
   /// Gruppe, zu der eine Person gehört (null = keine).
   Student? groupOf(String studentId) =>
       _students.where((g) => g.isGroup && !g.archived && g.members.contains(studentId)).firstOrNull;
@@ -135,6 +150,7 @@ class LibraryController extends ChangeNotifier {
       _scores = await _scanner.scan(root);
       _setlists = await _setlistStore.loadAll();
       _students = await _studentStore.loadAll();
+      await _fullGroupNames();
       calendar = await SchoolCalendar.load(root);
       _todos = await TodoStore.load(root);
       await scoreFolders.load();

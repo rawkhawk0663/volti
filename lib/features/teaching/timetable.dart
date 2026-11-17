@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -203,85 +204,175 @@ class TimetableView extends StatelessWidget {
 
   /// Stundenplan als PDF (A4 quer) im Standard-Programm öffnen (dort drucken
   /// oder speichern).
-  Future<void> _openPdf(BuildContext context, List<Student> students) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final bytes = await buildTimetablePdf(students);
-      final dir = Directory(p.join((await getTemporaryDirectory()).path, 'volti-stundenplan'));
-      await dir.create(recursive: true);
-      final path = p.join(dir.path, tr('Stundenplan.pdf', 'Timetable.pdf'));
-      await File(path).writeAsBytes(bytes, flush: true);
-      if (Platform.isWindows) {
-        await Process.start('cmd', ['/c', 'start', '', path], mode: ProcessStartMode.detached);
-      } else if (Platform.isMacOS) {
-        await Process.start('open', [path], mode: ProcessStartMode.detached);
-      } else {
-        await Process.start('xdg-open', [path], mode: ProcessStartMode.detached);
-      }
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('Das PDF liess sich nicht erstellen: $e', 'The PDF could not be created: $e'))),
-      );
+  Future<void> _openPdf(BuildContext context, List<Student> students) =>
+      openPdfBytes(context, () => buildTimetablePdf(students), tr('Stundenplan.pdf', 'Timetable.pdf'));
+}
+
+/// Ein selbst erzeugtes PDF im Standard-Programm öffnen (dort drucken oder
+/// speichern). Fehler erscheinen als Hinweis.
+Future<void> openPdfBytes(BuildContext context, Future<List<int>> Function() build, String fileName) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final bytes = await build();
+    final dir = Directory(p.join((await getTemporaryDirectory()).path, 'volti-pdf'));
+    await dir.create(recursive: true);
+    final path = p.join(dir.path, fileName);
+    await File(path).writeAsBytes(bytes, flush: true);
+    if (Platform.isWindows) {
+      await Process.start('cmd', ['/c', 'start', '', path], mode: ProcessStartMode.detached);
+    } else if (Platform.isMacOS) {
+      await Process.start('open', [path], mode: ProcessStartMode.detached);
+    } else {
+      await Process.start('xdg-open', [path], mode: ProcessStartMode.detached);
     }
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(tr('Das PDF liess sich nicht erstellen: $e', 'The PDF could not be created: $e'))),
+    );
   }
 }
 
-/// Stundenplan als PDF: eine Spalte pro Tag.
+/// Stundenplan als PDF (A4 quer): eine Spalte pro Tag mit einem Zeitraster.
+/// Die Stunden werden so eng gesetzt, dass immer alles auf eine Seite passt.
 Future<List<int>> buildTimetablePdf(List<Student> students) async {
   final days = timetableDays(students);
+  final timed = students.where((s) => s.weekday != null && s.time != null).toList();
+  final untimed = students.where((s) => s.weekday != null && s.time == null).toList()
+    ..sort((a, b) => a.weekday!.compareTo(b.weekday!));
   final doc = pw.Document(title: tr('Stundenplan', 'Timetable'), creator: 'Volti');
   final theme = await voltiPdfTheme();
+  // Ganze Stunden vom frühesten Beginn bis zum spätesten Ende.
+  var first = 8 * 60, last = 12 * 60;
+  if (timed.isNotEmpty) {
+    first = timed.map((s) => s.minutes).reduce(min) ~/ 60 * 60;
+    last = ((timed.map((s) => s.minutes + s.duration).reduce(max) + 59) ~/ 60) * 60;
+  }
+  const grey = PdfColor.fromInt(0xFF666666);
+  const line = PdfColor.fromInt(0xFFDDDDDD);
+  const accent = PdfColor.fromInt(0xFF1A8070);
+  const axis = 34.0, headHeight = 18.0;
+  String hhmm(int m) => '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
+
   doc.addPage(
     pw.Page(
       theme: theme,
       pageFormat: PdfPageFormat.a4.landscape,
       margin: const pw.EdgeInsets.all(28),
-      build: (_) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(tr('Stundenplan', 'Timetable'), style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 14),
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              for (final d in days)
-                pw.Expanded(
-                  child: pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 3),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                      children: [
-                        pw.Text(weekdayName(d), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                        pw.SizedBox(height: 6),
-                        for (final s in studentsOn(students, d))
-                          pw.Container(
-                            margin: const pw.EdgeInsets.only(bottom: 4),
-                            padding: const pw.EdgeInsets.all(5),
-                            decoration: pw.BoxDecoration(
-                              border: pw.Border.all(color: PdfColor.fromInt(0xFFBBBBBB), width: 0.6),
-                              borderRadius: pw.BorderRadius.circular(3),
-                            ),
-                            child: pw.Column(
-                              crossAxisAlignment: pw.CrossAxisAlignment.start,
-                              children: [
-                                pw.Text(
-                                  s.time == null ? '–' : '${s.time}–${s.endTime}',
-                                  style: const pw.TextStyle(fontSize: 8, color: PdfColor.fromInt(0xFF666666)),
-                                ),
-                                pw.Text(s.name, style: const pw.TextStyle(fontSize: 10)),
-                                if (s.instrument.isNotEmpty)
-                                  pw.Text(s.instrument, style: const pw.TextStyle(fontSize: 8)),
-                              ],
-                            ),
-                          ),
-                      ],
+      build: (context) {
+        // Seite ohne den Rand von 28 Punkten ringsum.
+        final page = context.page.pageFormat;
+        final width = page.width - 56;
+        final footer = untimed.isEmpty ? 0.0 : 22.0;
+        final gridHeight = page.height - 56 - 34 - headHeight - footer - 4;
+        final perMinute = gridHeight / (last - first);
+        final column = (width - axis) / days.length;
+        double y(int minute) => (minute - first) * perMinute;
+
+        pw.Widget block(Student s) {
+          final h = s.duration * perMinute;
+          return pw.Positioned(
+            left: 2,
+            right: 2,
+            top: y(s.minutes),
+            child: pw.Container(
+              height: h - 1,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+              decoration: pw.BoxDecoration(
+                color: const PdfColor.fromInt(0xFFE6F3F0),
+                border: const pw.Border(left: pw.BorderSide(color: accent, width: 2)),
+              ),
+              child: pw.ClipRect(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      h >= 17 ? '${s.time}–${s.endTime}  ${s.name}' : s.name,
+                      style: pw.TextStyle(fontSize: h >= 12 ? 7.5 : 6, fontWeight: pw.FontWeight.bold),
+                      maxLines: 1,
+                    ),
+                    if (h >= 22 && s.instrument.isNotEmpty)
+                      pw.Text(s.instrument, style: const pw.TextStyle(fontSize: 6.5, color: grey), maxLines: 1),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.SizedBox(
+              height: 34,
+              child: pw.Text(
+                tr('Stundenplan', 'Timetable'),
+                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+              ),
+            ),
+            pw.Row(
+              children: [
+                pw.SizedBox(width: axis),
+                for (final d in days)
+                  pw.SizedBox(
+                    width: column,
+                    height: headHeight,
+                    child: pw.Padding(
+                      padding: const pw.EdgeInsets.only(left: 3),
+                      child: pw.Text(weekdayName(d), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                     ),
                   ),
+              ],
+            ),
+            pw.SizedBox(
+              height: gridHeight,
+              child: pw.Stack(
+                overflow: pw.Overflow.visible,
+                children: [
+                  // Stundenlinien mit Uhrzeit.
+                  for (var m = first; m <= last; m += 60) ...[
+                    pw.Positioned(
+                      left: axis,
+                      right: 0,
+                      top: y(m),
+                      child: pw.Container(height: 0.5, color: line),
+                    ),
+                    pw.Positioned(
+                      left: 0,
+                      top: y(m) - 4,
+                      child: pw.Text(hhmm(m), style: const pw.TextStyle(fontSize: 7, color: grey)),
+                    ),
+                  ],
+                  for (var i = 0; i < days.length; i++)
+                    pw.Positioned(
+                      left: axis + i * column,
+                      top: 0,
+                      child: pw.SizedBox(
+                        width: column,
+                        height: gridHeight,
+                        child: pw.Stack(
+                          children: [
+                            pw.Positioned(left: 0, top: 0, bottom: 0, child: pw.Container(width: 0.5, color: line)),
+                            for (final s in studentsOn(timed, days[i])) block(s),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (untimed.isNotEmpty)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 8),
+                child: pw.Text(
+                  '${tr('Ohne Zeit', 'No time')}: '
+                  '${untimed.map((s) => '${s.name} (${weekdayName(s.weekday!)})').join(', ')}',
+                  style: const pw.TextStyle(fontSize: 8, color: grey),
+                  maxLines: 1,
                 ),
-            ],
-          ),
-        ],
-      ),
+              ),
+          ],
+        );
+      },
     ),
   );
   return doc.save();

@@ -10,6 +10,7 @@ import 'package:volti/core/teaching/school_calendar.dart';
 import 'package:volti/core/teaching/school_level.dart';
 import 'package:volti/core/teaching/student.dart';
 import 'package:volti/core/teaching/todo.dart';
+import 'package:volti/features/teaching/absence_pdf.dart';
 import 'package:volti/features/teaching/dashboard.dart';
 import 'package:volti/features/teaching/homework_share.dart';
 import 'package:volti/features/teaching/teaching_view.dart' show upcomingBirthdays;
@@ -375,5 +376,68 @@ void main() {
     expect(skip.day, DateTime(2026, 11, 24));
     expect(durationText(25), '25 min');
     expect(durationText(130), '2 h 10 min');
+  });
+
+  test('Nächste Lektion: heute später, sonst am nächsten Unterrichtstag', () {
+    final a = anna(); // Dienstag 11:25
+    final b = Student.create('Ben')
+      ..weekday = 2
+      ..time = '15:00';
+    final c = Student.create('Cleo')
+      ..weekday = 4
+      ..time = '07:45';
+    expect(nextLesson([a, b, c], DateTime(2026, 11, 17, 9))!.student.name, 'Anna Muster');
+    expect(nextLesson([a, b, c], DateTime(2026, 11, 17, 12))!.student.name, 'Ben');
+    final later = nextLesson([a, b, c], DateTime(2026, 11, 17, 16))!;
+    expect(later.student.name, 'Cleo');
+    expect(later.day, DateTime(2026, 11, 19));
+    // Heute frei: dann gar nicht heute.
+    expect(
+      nextLesson([a, b, c], DateTime(2026, 11, 17, 9), isFree: (d) => d.day == 17)!.student.name,
+      'Cleo',
+    );
+  });
+
+  test('Telefonnummern schön geschrieben', () {
+    expect(formatPhone('0788765432'), '078 876 54 32');
+    expect(formatPhone('078 876 54 32'), '078 876 54 32');
+    expect(formatPhone('+41788765432'), '+41 78 876 54 32');
+    expect(formatPhone('0041 78 876 54 32'), '+41 78 876 54 32');
+    expect(formatPhone('+41 078 876 54 32'), '+41 78 876 54 32');
+    expect(formatPhone('+49 151 1234567'), '+49 151 1234567');
+    expect(formatPhone(''), '');
+    expect(whatsAppNumber(formatPhone('0788765432')), '41788765432');
+  });
+
+  test('Stundenplan-PDF mit vielen Lektionen an einem Tag', () async {
+    final many = [
+      for (var i = 0; i < 20; i++)
+        Student.create('Schüler:in $i')
+          ..weekday = 2
+          ..time = '${(8 + i ~/ 2).toString().padLeft(2, '0')}:${i.isEven ? '00' : '30'}',
+    ];
+    final bytes = await buildTimetablePdf(many);
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+  });
+
+  test('Absenzenliste: Zeilen mit Tag der Gruppe, PDF entsteht', () async {
+    final a = anna()
+      ..putLesson(
+        Lesson.create(DateTime(2026, 11, 10))
+          ..status = LessonStatus.excused
+          ..reason = 'krank',
+      );
+    final lea = Student.create('Lea Graf');
+    final group = Student.create('Gruppe')
+      ..weekday = 4
+      ..time = '15:00'
+      ..members.add(lea.id);
+    final nobody = Student.create('Ohne Tag');
+    final rows = absenceRows([group, lea, a, nobody], (id) => id == lea.id ? group : null);
+    expect(rows.map((r) => r.student.name), ['Anna Muster', 'Lea Graf']);
+    expect(rows.last.weekday, 4);
+    final cal = SchoolCalendar();
+    final bytes = await buildAbsencePdf(rows, cal, cal.semesterFor(DateTime(2026, 11, 17)));
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
   });
 }
