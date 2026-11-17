@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../core/teaching/student.dart';
+
 import '../../core/ink/annotation_layer.dart';
 import '../../core/ink/layer_drop.dart';
 import 'ink_controller.dart';
@@ -80,12 +82,19 @@ class _LayersPanelState extends State<LayersPanel> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
-                  tr(
-                    'Neue Ebenen gelten nur in dieser Setlist. Ebenen mit dem Bibliotheks-Zeichen gehören zum Song '
-                        'und sind überall sichtbar.',
-                    'New layers apply only to this setlist. Layers with the library sign belong to the song '
-                        'and are visible everywhere.',
-                  ),
+                  Student.isStudentScope(ink.scope)
+                      ? tr(
+                          'Neue Ebenen gelten nur für diese:n Schüler:in. Ebenen mit dem Bibliotheks-Zeichen gehören '
+                              'zum Song und sind überall sichtbar.',
+                          'New layers apply only to this student. Layers with the library sign belong to the song '
+                              'and are visible everywhere.',
+                        )
+                      : tr(
+                          'Neue Ebenen gelten nur in dieser Setlist. Ebenen mit dem Bibliotheks-Zeichen gehören zum Song '
+                              'und sind überall sichtbar.',
+                          'New layers apply only to this setlist. Layers with the library sign belong to the song '
+                              'and are visible everywhere.',
+                        ),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
@@ -294,13 +303,19 @@ class _Row extends StatelessWidget {
                 if (ink.scope != null)
                   Tooltip(
                     message: layer.scope != null
-                        ? tr('Nur in dieser Setlist', 'Only in this setlist')
+                        ? (Student.isStudentScope(layer.scope)
+                              ? tr('Nur für diese:n Schüler:in', 'Only for this student')
+                              : tr('Nur in dieser Setlist', 'Only in this setlist'))
                         : tr(
                             'Gehört zum Song – in der Bibliothek und allen Setlists',
                             'Belongs to the song – in the library and all setlists',
                           ),
                     child: Icon(
-                      layer.scope != null ? Icons.queue_music : Icons.library_music_outlined,
+                      layer.scope == null
+                          ? Icons.library_music_outlined
+                          : Student.isStudentScope(layer.scope)
+                          ? Icons.person_outline
+                          : Icons.queue_music,
                       size: 16,
                       color: layer.scope != null ? scheme.primary : scheme.outline,
                     ),

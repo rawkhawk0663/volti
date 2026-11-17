@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../library/folders.dart';
 import '../library/setlist.dart';
 import '../library/sidecar_store.dart';
+import '../teaching/student.dart';
 import 'sync_store.dart';
 import '../../app/l10n.dart';
 
@@ -112,6 +113,8 @@ class SyncEngine {
         rel.startsWith('.volti/setlists/') || rel == '.volti/presets.json' || rel == '.volti/stamps.json';
     // Ordner der Bibliothek: pro Ordner zusammengeführt.
     bool isFolders(String rel) => FolderStore.files.contains(rel);
+    // Unterricht: Karteien, Stücke und Lektionen pro Eintrag zusammengeführt.
+    bool isStudent(String rel) => rel.startsWith('${StudentStore.dir}/') && rel.endsWith('.json');
 
     // ---------------------------------------------------- Sicherheitsbremse
     final localPdfs = localFiles.where(isPdf).toSet();
@@ -134,7 +137,7 @@ class SyncEngine {
       ...localFiles,
       ...remoteFiles,
       ...base,
-    }.where((r) => isPdf(r) || isSetlist(r) || isStampImage(r) || isFolders(r));
+    }.where((r) => isPdf(r) || isSetlist(r) || isStampImage(r) || isFolders(r) || isStudent(r));
     for (final rel in whole) {
       final l = localFiles.contains(rel), r = remoteFiles.contains(rel), b = base.contains(rel);
       if (l && r) {
@@ -144,6 +147,7 @@ class SyncEngine {
         await _safely(rel, report, () async {
           if (isSetlist(rel)) await _syncSetlist(rel, report);
           if (isFolders(rel)) await _syncFolders(rel, report);
+          if (isStudent(rel)) await _syncStudent(rel, report);
         });
       } else if (l) {
         if (b) {
@@ -285,6 +289,34 @@ class SyncEngine {
     } else if (lm.isAfter(rm)) {
       await remote.writeString(rel, lj);
     }
+  }
+
+  /// Kartei einer Schülerin / eines Schülers: Angaben als Ganzes, Stücke und
+  /// Lektionen pro Eintrag (jüngste Fassung gewinnt).
+  Future<void> _syncStudent(String rel, SyncReport report) async {
+    final lj = await _local.readString(rel), rj = await remote.readString(rel);
+    if (lj == rj) return;
+    Student? parse(String j) {
+      try {
+        return Student.fromJson(jsonDecode(j) as Map<String, dynamic>);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final l = parse(lj), r = parse(rj);
+    if (l == null && r == null) return;
+    final merged = l == null
+        ? r!
+        : r == null
+        ? l
+        : Student.merge(l, r);
+    final out = StudentStore.encode(merged);
+    if (l == null || StudentStore.encode(l) != out) {
+      await _local.writeString(rel, out);
+      report.merged++;
+    }
+    if (r == null || StudentStore.encode(r) != out) await remote.writeString(rel, out);
   }
 
   /// Ordnerliste: pro Ordner gewinnt die jüngste Fassung.

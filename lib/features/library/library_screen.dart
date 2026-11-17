@@ -17,6 +17,8 @@ import '../../core/library/sidecar_store.dart';
 import '../viewer/export_dialog.dart';
 import '../viewer/page_export.dart';
 import '../viewer/page_setup_screen.dart';
+import '../teaching/teaching_view.dart';
+import '../viewer/tool_controller.dart';
 import '../viewer/viewer_screen.dart';
 import 'edit_meta_dialog.dart';
 import 'folder_widgets.dart';
@@ -44,7 +46,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   int _tab = 0;
 
   /// Nochmals auf den gewählten Punkt tippen = zurück zur Übersicht.
-  final _reset = [ValueNotifier(0), ValueNotifier(0)];
+  final _reset = [ValueNotifier(0), ValueNotifier(0), ValueNotifier(0)];
 
   LibraryController get lib => widget.library;
 
@@ -83,10 +85,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tools = ToolScope.read(context);
     return ListenableBuilder(
-      listenable: lib,
+      listenable: Listenable.merge([lib, tools]),
       builder: (context, _) {
         final wide = MediaQuery.sizeOf(context).width >= 720;
+        // Unterricht nur, wenn unter ⚙ eingeschaltet.
+        final teaching = tools.teaching;
+        if (!teaching && _tab == 2) _tab = 0;
         // Beide bleiben bestehen: Beim Wechsel ist man wieder am selben Ort
         // (Ordner, offene Setlist).
         final body = IndexedStack(
@@ -94,11 +100,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
           children: [
             _ScoresView(library: lib, sync: widget.sync, reset: _reset[0], active: _tab == 0),
             SetlistsView(library: lib, sync: widget.sync, reset: _reset[1], active: _tab == 1),
+            if (teaching)
+              TeachingView(library: lib, sync: widget.sync, reset: _reset[2], active: _tab == 2)
+            else
+              const SizedBox.shrink(),
           ],
         );
         final destinations = [
           (Icons.library_music_outlined, Icons.library_music, tr('Bibliothek', 'Library')),
           (Icons.queue_music_outlined, Icons.queue_music, tr('Setlists', 'Setlists')),
+          if (teaching) (Icons.school_outlined, Icons.school, tr('Unterricht', 'Teaching')),
         ];
         if (wide) {
           return VoltiBackground(

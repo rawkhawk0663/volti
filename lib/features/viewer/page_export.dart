@@ -175,8 +175,11 @@ Future<Uint8List> buildExportPdf(
   List<ExportPiece> pieces, {
   bool withAnnotations = true,
   void Function(int done, int total)? onProgress,
+  List<pw.Page> leading = const [],
 }) async {
   final out = pw.Document(title: 'Volti', creator: 'Volti');
+  // Vorangestellte Seiten (z. B. Hausaufgaben als Text).
+  leading.forEach(out.addPage);
   final total = pieces.fold<int>(0, (n, p) => n + p.pages.length);
   var done = 0;
   for (final piece in pieces) {

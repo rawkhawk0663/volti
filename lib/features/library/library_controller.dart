@@ -11,6 +11,7 @@ import '../../core/library/score_importer.dart';
 import '../../core/library/score_meta.dart';
 import '../../core/library/setlist.dart';
 import '../../core/library/sidecar_store.dart';
+import '../../core/teaching/student.dart';
 import '../../core/pdf/paper.dart';
 import '../../core/pdf/paper_pdf.dart';
 import 'auto_backup_controller.dart';
@@ -35,6 +36,7 @@ class LibraryController extends ChangeNotifier {
   final _sidecars = const SidecarStore();
   late final _importer = ScoreImporter(root);
   late final _setlistStore = SetlistStore(root);
+  late final _studentStore = StudentStore(root);
 
   List<ScoreEntry> _scores = [];
 
@@ -55,6 +57,10 @@ class LibraryController extends ChangeNotifier {
 
   List<Setlist> _setlists = [];
   List<Setlist> get setlists => _setlists;
+
+  /// Unterricht: Karteien der Schüler:innen (nach Name).
+  List<Student> _students = [];
+  List<Student> get students => _students;
 
   bool _loading = false;
   bool get loading => _loading;
@@ -93,6 +99,7 @@ class LibraryController extends ChangeNotifier {
     try {
       _scores = await _scanner.scan(root);
       _setlists = await _setlistStore.loadAll();
+      _students = await _studentStore.loadAll();
       await scoreFolders.load();
       await setlistFolders.load();
     } catch (e) {
@@ -101,6 +108,40 @@ class LibraryController extends ChangeNotifier {
     _loading = false;
     notifyListeners();
   }
+
+  // ----------------------------------------------------------- Unterricht
+  Student? studentById(String id) => _students.where((s) => s.id == id).firstOrNull;
+
+  Future<Student> createStudent(String name) async {
+    final s = await _studentStore.save(Student.create(name));
+    _students = [..._students, s]..sort(_byName);
+    notifyListeners();
+    onLocalChange?.call();
+    return s;
+  }
+
+  /// Kartei speichern (mit dem Stand auf der Festplatte zusammengeführt).
+  /// Gibt die gespeicherte Fassung zurück; sie ersetzt die bisherige in der Liste.
+  Future<Student> saveStudent(Student s) async {
+    final saved = await _studentStore.save(s);
+    _students = [
+      for (final x in _students)
+        if (x.id != s.id) x,
+      saved,
+    ]..sort(_byName);
+    notifyListeners();
+    onLocalChange?.call();
+    return saved;
+  }
+
+  Future<void> deleteStudent(Student s) async {
+    await _studentStore.delete(s);
+    _students = _students.where((x) => x.id != s.id).toList();
+    notifyListeners();
+    onLocalChange?.call();
+  }
+
+  static int _byName(Student a, Student b) => a.name.toLowerCase().compareTo(b.name.toLowerCase());
 
   ScoreEntry? byRelativePath(String rel) {
     for (final s in _scores) {

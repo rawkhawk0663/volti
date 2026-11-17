@@ -199,6 +199,21 @@ class _SettingsDialog extends StatelessWidget {
                       value: tools.swipeWhileEditing,
                       onChanged: tools.setSwipeWhileEditing,
                     ),
+                    _Section(tr('Unterricht', 'Teaching')),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(tr('Bereich „Unterricht“ zeigen', 'Show the “Teaching” area')),
+                      subtitle: Text(
+                        tr(
+                          'Für Lehrpersonen: Schülerkartei mit Lektionen, Hausaufgaben, Absenzen, Stundenplan und '
+                              'Stücken aus der Bibliothek. Ausgeschaltet bleibt alles gespeichert.',
+                          'For teachers: student records with lessons, homework, absences, timetable and pieces '
+                              'from the library. When switched off, everything stays saved.',
+                        ),
+                      ),
+                      value: tools.teaching,
+                      onChanged: tools.setTeaching,
+                    ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(tr('Werkzeugleiste links', 'Toolbar on the left')),

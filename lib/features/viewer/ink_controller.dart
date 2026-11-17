@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui' show Offset;
 
+import '../../core/teaching/student.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -128,7 +130,11 @@ class InkController extends ChangeNotifier {
     _annotations.putLayer(
       AnnotationLayer(
         id: id,
-        name: old?.name ?? tr('Setlist „${scopeName ?? 'Setlist'}“', 'Setlist “${scopeName ?? 'Setlist'}”'),
+        name:
+            old?.name ??
+            (Student.isStudentScope(s)
+                ? tr('Notizen für ${scopeName ?? 'Schüler:in'}', 'Notes for ${scopeName ?? 'student'}')
+                : tr('Setlist „${scopeName ?? 'Setlist'}“', 'Setlist “${scopeName ?? 'Setlist'}”')),
         order: _topOrder() + 1,
         createdAt: old?.createdAt ?? DateTime.now().toUtc(),
         modifiedAt: old == null ? null : DateTime.now().toUtc(),

@@ -34,6 +34,8 @@ bool isSyncedPath(String rel) {
     return name.endsWith('.pdf') || name.endsWith('.json');
   }
   if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'setlists') return parts[2].endsWith('.json');
+  // Unterricht: eine Datei pro Schüler:in
+  if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'students') return parts[2].endsWith('.json');
   // Bilder der eigenen Stempel
   if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'stamps') return parts[2].endsWith('.png');
   return rel == '.volti/library.json' ||
