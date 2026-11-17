@@ -96,7 +96,7 @@ class StripThumbs {
   }
 }
 
-/// Bildleiste unten in der Mitte, im Stil eines Docks: alle Seiten des
+/// Bildleiste unten in der Mitte, schwebend und abgerundet: alle Seiten des
 /// Stücks als kleine Bilder auf einer abgerundeten, schwebenden Fläche.
 /// Wischen blättert durch die Leiste, Antippen springt zur Seite. Mit der
 /// Maus wird die Seite unter dem Zeiger (und etwas ihre Nachbarn) grösser.
@@ -134,7 +134,7 @@ class PageStrip extends StatefulWidget {
   static const _dock = 92.0, _margin = 10.0, _headroom = 26.0;
   static const _itemExtent = 64.0, _pad = 10.0;
 
-  /// So viele Plätze hat das Dock höchstens (dann wird gewischt).
+  /// So viele Plätze hat die Leiste höchstens (dann wird gewischt).
   static const _maxSlots = 15;
 
   @override
@@ -155,9 +155,9 @@ class _PageStripState extends State<PageStrip> {
     super.dispose();
   }
 
-  /// Versatz, bei dem die aktuelle Seite genau in der Mitte des Docks steht
+  /// Versatz, bei dem die aktuelle Seite genau in der Mitte der Leiste steht
   /// (Wunsch des Besitzers: immer, auch bei der ersten und letzten Seite).
-  /// Links und rechts ist dafür je ein halbes Dock Platz.
+  /// Links und rechts ist dafür je eine halbe Leiste Platz.
   double _offsetFor(Set<int> current) {
     if (current.isEmpty) return 0;
     final first = current.reduce(math.min), last = current.reduce(math.max);
@@ -186,7 +186,7 @@ class _PageStripState extends State<PageStrip> {
     }
   }
 
-  /// Vergrösserung wie im Dock: die Seite unter der Maus am meisten,
+  /// Vergrösserung: die Seite unter der Maus am meisten,
   /// die Nachbarn etwas, die aktuelle Seite leicht.
   double _scaleOf(int page, bool here) {
     final h = _hover;
@@ -235,7 +235,7 @@ class _PageStripState extends State<PageStrip> {
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      // Die Fläche des Docks (deckend, ohne Schatten – das bleibt schnell).
+                      // Die Fläche der Leiste (deckend, ohne Schatten – das bleibt schnell).
                       Positioned.fill(
                         top: PageStrip._headroom,
                         child: DecoratedBox(

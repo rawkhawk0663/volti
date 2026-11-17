@@ -1,4 +1,4 @@
-/// Formatierung eines Teils einer Text-Notiz (wie in Word: ein Wort fett,
+/// Formatierung eines Teils einer Text-Notiz (z. B. ein Wort fett,
 /// eines rot …). Was hier nicht gesetzt ist (null), kommt vom Stil der
 /// ganzen Notiz.
 class CharStyle {
@@ -108,7 +108,7 @@ List<TextMark> clampMarks(List<TextMark> marks, int length) => [
 ];
 
 /// Formatierung nach einer Textänderung von [before] zu [after] anpassen:
-/// Neu Getipptes übernimmt die Formatierung des Zeichens davor (wie in Word).
+/// Neu Getipptes übernimmt die Formatierung des Zeichens davor.
 List<CharStyle> adjustChars(List<CharStyle> chars, String before, String after) {
   if (chars.length != before.length) chars = List<CharStyle>.filled(before.length, CharStyle.plain);
   var p = 0;

@@ -6,15 +6,17 @@ import '../../core/teaching/student.dart';
 import '../library/library_actions.dart';
 import '../library/library_controller.dart';
 import '../library/sync_controller.dart';
+import 'homework_share.dart' show shortDate;
 import 'student_dialog.dart';
 import 'student_page.dart';
 import 'timetable.dart';
 
 /// Bereich „Unterricht“ (nur sichtbar, wenn unter ⚙ eingeschaltet).
 ///
-/// Bewusst schlicht: links eine zweite, schmale Leiste mit den
-/// Schüler:innen (nach Wochentag, heute zuoberst) und dem Stundenplan,
-/// rechts die Seite der gewählten Person.
+/// Aufbau (Wunsch des Besitzers): eine zweite, schmale
+/// Menüleiste mit Unterrichten, Schüler:innen, Stundenplan und Absenzen.
+/// „Unterrichten“ zeigt eine Person über die ganze Breite, unten rechts
+/// schwebt eine kleine Leiste mit Suche und ← → zur vorigen/nächsten Person.
 class TeachingView extends StatefulWidget {
   const TeachingView({super.key, required this.library, required this.sync, required this.reset, required this.active});
 
@@ -27,8 +29,7 @@ class TeachingView extends StatefulWidget {
   State<TeachingView> createState() => _TeachingViewState();
 }
 
-/// Was rechts gezeigt wird.
-const _timetable = '#stundenplan';
+enum _Section { teach, students, timetable, absences }
 
 class _TeachingViewState extends State<TeachingView> with LibraryActions {
   @override
@@ -36,11 +37,10 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
   @override
   SyncController get syncController => widget.sync;
 
-  /// ID der gewählten Person oder [_timetable].
-  String? _selected;
-  String _query = '';
-  final _search = TextEditingController();
-  bool _showArchive = false;
+  _Section _section = _Section.teach;
+
+  /// Person in „Unterrichten“ (ID). Ohne Wahl: wer jetzt bzw. als Nächstes dran ist.
+  String? _current;
 
   @override
   void initState() {
@@ -51,22 +51,22 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
   @override
   void dispose() {
     widget.reset.removeListener(_onReset);
-    _search.dispose();
     super.dispose();
   }
 
-  void _select(String id) => setState(() => _selected = id);
-  void _setQuery(String q) => setState(() => _query = q);
-  void _toggleArchive() => setState(() => _showArchive = !_showArchive);
+  /// Nochmals auf „Unterricht“ getippt: zurück zu „Unterrichten“.
+  void _onReset() => setState(() => _section = _Section.teach);
 
-  /// Nochmals auf „Unterricht“ getippt: in der schmalen Ansicht zurück zur Liste.
-  void _onReset() => setState(() => _selected = null);
+  void _open(Student s) => setState(() {
+    _current = s.id;
+    _section = _Section.teach;
+  });
 
   Future<void> _add() async {
     final draft = Student.create('');
     if (!await showStudentDialog(context, draft, isNew: true)) return;
     final s = await library.saveStudent(draft);
-    if (mounted) setState(() => _selected = s.id);
+    if (mounted) _open(s);
   }
 
   /// Reihenfolge wie im Stundenplan, beginnend mit heute.
@@ -81,53 +81,107 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
     });
   }
 
+  /// Wer jetzt bzw. als Nächstes Unterricht hat (sonst die erste Person).
+  Student? _currentStudent(List<Student> order) {
+    final chosen = _current == null ? null : library.studentById(_current!);
+    if (chosen != null) return chosen;
+    if (order.isEmpty) return null;
+    final now = DateTime.now();
+    final minute = now.hour * 60 + now.minute;
+    for (final s in order) {
+      if (s.weekday == now.weekday && s.minutes + s.duration > minute) return s;
+    }
+    return order.first;
+  }
+
+  Future<void> _search(List<Student> order) async {
+    final picked = await showDialog<Student>(
+      context: context,
+      builder: (_) => _StudentSearch(students: [...order, ...library.students.where((s) => s.archived)]),
+    );
+    if (picked != null) _open(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListenableBuilder(
       listenable: library,
       builder: (context, _) {
-        final wide = MediaQuery.sizeOf(context).width >= 900;
-        final selected = _selected;
-        final student = selected == null || selected == _timetable ? null : library.studentById(selected);
-        Widget? detail;
-        if (selected == _timetable) {
-          detail = TimetableView(
-            library: library,
-            actions: headerActions(),
-            onOpen: (s) => setState(() => _selected = s.id),
-            onBack: wide ? null : () => setState(() => _selected = null),
-          );
-        } else if (student != null) {
-          final order = _ordered;
-          final i = order.indexWhere((x) => x.id == student.id);
-          detail = StudentPage(
-            key: ValueKey(student.id),
-            library: library,
-            studentId: student.id,
-            actions: headerActions(),
-            onPrevious: i > 0 ? () => setState(() => _selected = order[i - 1].id) : null,
-            onNext: i >= 0 && i < order.length - 1 ? () => setState(() => _selected = order[i + 1].id) : null,
-            onDeleted: () => setState(() => _selected = null),
-            onBack: wide ? null : () => setState(() => _selected = null),
-          );
-        }
-        final list = _StudentList(state: this, selected: selected, ordered: _ordered);
-        if (!wide) {
-          return PopScope(
-            canPop: !widget.active || detail == null,
-            onPopInvokedWithResult: (didPop, _) {
-              if (!didPop && widget.active) setState(() => _selected = null);
-            },
-            child: detail ?? list,
-          );
+        final order = _ordered;
+        final current = _currentStudent(order);
+        Widget content;
+        switch (_section) {
+          case _Section.teach:
+            if (current == null) {
+              content = _Empty(actions: headerActions(), onAdd: _add);
+            } else {
+              final i = order.indexWhere((x) => x.id == current.id);
+              content = Stack(
+                children: [
+                  Positioned.fill(
+                    child: StudentPage(
+                      key: ValueKey(current.id),
+                      library: library,
+                      studentId: current.id,
+                      actions: headerActions(),
+                      onDeleted: () => setState(() => _current = null),
+                    ),
+                  ),
+                  // Schwebende Leiste: suchen, vorige, nächste Person.
+                  Positioned(
+                    right: 20,
+                    bottom: 20,
+                    child: _NavPill(
+                      onSearch: () => _search(order),
+                      onPrevious: i > 0 ? () => _open(order[i - 1]) : null,
+                      onNext: i >= 0 && i < order.length - 1 ? () => _open(order[i + 1]) : null,
+                    ),
+                  ),
+                ],
+              );
+            }
+          case _Section.students:
+            content = _StudentsSection(state: this);
+          case _Section.timetable:
+            content = TimetableView(library: library, actions: headerActions(), onOpen: _open);
+          case _Section.absences:
+            content = _AbsencesSection(state: this);
         }
         return Row(
           children: [
-            SizedBox(width: 270, child: list),
-            const VerticalDivider(width: 1),
-            Expanded(
-              child: detail ?? _Welcome(actions: headerActions(), onAdd: _add, empty: library.students.isEmpty),
+            // Zweite Menüleiste des Unterrichts.
+            NavigationRail(
+              backgroundColor: scheme.surfaceContainerLow.withValues(alpha: 0.6),
+              minWidth: 76,
+              selectedIndex: _section.index,
+              labelType: NavigationRailLabelType.all,
+              onDestinationSelected: (i) => setState(() => _section = _Section.values[i]),
+              destinations: [
+                NavigationRailDestination(
+                  icon: const Icon(Icons.co_present_outlined),
+                  selectedIcon: const Icon(Icons.co_present),
+                  label: Text(tr('Unterrichten', 'Teach')),
+                ),
+                NavigationRailDestination(
+                  icon: const Icon(Icons.people_outline),
+                  selectedIcon: const Icon(Icons.people),
+                  label: Text(tr('Schüler:innen', 'Students')),
+                ),
+                NavigationRailDestination(
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  selectedIcon: const Icon(Icons.calendar_month),
+                  label: Text(tr('Stundenplan', 'Timetable')),
+                ),
+                NavigationRailDestination(
+                  icon: const Icon(Icons.event_busy_outlined),
+                  selectedIcon: const Icon(Icons.event_busy),
+                  label: Text(tr('Absenzen', 'Absences')),
+                ),
+              ],
             ),
+            const VerticalDivider(width: 1),
+            Expanded(child: content),
           ],
         );
       },
@@ -135,185 +189,282 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
   }
 }
 
-/// Die zweite Leiste: Stundenplan und alle Schüler:innen.
-class _StudentList extends StatelessWidget {
-  const _StudentList({required this.state, required this.selected, required this.ordered});
-  final _TeachingViewState state;
-  final String? selected;
-  final List<Student> ordered;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final q = state._query.trim().toLowerCase();
-    bool matches(Student s) => q.isEmpty || s.name.toLowerCase().contains(q) || s.instrument.toLowerCase().contains(q);
-    final today = DateTime.now();
-    final active = ordered.where(matches).toList();
-    final archived = state.library.students.where((s) => s.archived && matches(s)).toList();
-
-    final children = <Widget>[];
-    int? lastDay = -1;
-    for (final s in active) {
-      if (s.weekday != lastDay) {
-        lastDay = s.weekday;
-        final label = s.weekday == null
-            ? tr('Ohne festen Tag', 'No fixed day')
-            : s.weekday == today.weekday
-            ? tr('Heute · ${weekdayName(s.weekday!)}', 'Today · ${weekdayName(s.weekday!)}')
-            : weekdayName(s.weekday!);
-        children.add(_Header(label, highlight: s.weekday == today.weekday));
-      }
-      children.add(_tile(context, s, done: s.weekday == today.weekday && s.lessonOn(today) != null));
-    }
-    if (archived.isNotEmpty) {
-      children.add(
-        ListTile(
-          dense: true,
-          leading: Icon(state._showArchive ? Icons.expand_less : Icons.expand_more, size: 20),
-          title: Text(tr('Archiv (${archived.length})', 'Archive (${archived.length})')),
-          onTap: () => state._toggleArchive(),
-        ),
-      );
-      if (state._showArchive) {
-        for (final s in archived) {
-          children.add(_tile(context, s, dim: true));
-        }
-      }
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 4, 4),
-            child: Row(
-              children: [
-                Expanded(child: Text(tr('Unterricht', 'Teaching'), style: theme.textTheme.titleLarge)),
-                IconButton(
-                  tooltip: tr('Neue:r Schüler:in', 'New student'),
-                  icon: const Icon(Icons.person_add_alt),
-                  onPressed: state._add,
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
-            child: SearchBar(
-              controller: state._search,
-              hintText: tr('Suchen', 'Search'),
-              elevation: const WidgetStatePropertyAll(0),
-              constraints: const BoxConstraints(minHeight: 40),
-              leading: const Icon(Icons.search, size: 20),
-              trailing: [
-                if (state._query.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: () {
-                      state._search.clear();
-                      state._setQuery('');
-                    },
-                  ),
-              ],
-              onChanged: state._setQuery,
-            ),
-          ),
-          ListTile(
-            dense: true,
-            selected: selected == _timetable,
-            selectedTileColor: scheme.secondaryContainer.withValues(alpha: 0.6),
-            leading: const Icon(Icons.calendar_view_week_outlined),
-            title: Text(tr('Stundenplan', 'Timetable'), style: theme.textTheme.titleSmall),
-            onTap: () => state._select(_timetable),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: state.library.students.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      tr(
-                        'Noch niemand erfasst. Mit + legst du die erste Kartei an.',
-                        'Nobody yet. Use + to add the first student.',
-                      ),
-                      style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                  )
-                : ListView(padding: const EdgeInsets.only(bottom: 24), children: children),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tile(BuildContext context, Student s, {bool done = false, bool dim = false}) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      dense: true,
-      selected: selected == s.id,
-      selectedTileColor: scheme.secondaryContainer.withValues(alpha: 0.6),
-      leading: SizedBox(
-        width: 44,
-        child: Text(
-          s.time ?? '',
-          style: TextStyle(fontFeatures: const [FontFeature.tabularFigures()], color: scheme.onSurfaceVariant),
-        ),
-      ),
-      minLeadingWidth: 44,
-      title: Text(
-        s.name,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: 15, color: dim ? scheme.onSurfaceVariant : null),
-      ),
-      subtitle: s.instrument.isEmpty ? null : Text(s.instrument, overflow: TextOverflow.ellipsis),
-      // Heute schon erfasst: kleines Häkchen.
-      trailing: done ? Icon(Icons.check_circle, size: 18, color: scheme.primary) : null,
-      onTap: () => state._select(s.id),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header(this.text, {this.highlight = false});
-  final String text;
-  final bool highlight;
+/// Kopfzeile eines Unterrichts-Bereichs (Titel links, Knöpfe rechts).
+class TeachingTopBar extends StatelessWidget {
+  const TeachingTopBar({super.key, required this.title, this.subtitle, this.trailing = const []});
+  final String title;
+  final String? subtitle;
+  final List<Widget> trailing;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-      child: Text(
-        text.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
-          letterSpacing: 0.8,
-          fontWeight: FontWeight.w700,
-          color: highlight ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+      padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleLarge),
+                if (subtitle != null)
+                  Text(
+                    subtitle!,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+              ],
+            ),
+          ),
+          ...trailing,
+        ],
+      ),
+    );
+  }
+}
+
+class _NavPill extends StatelessWidget {
+  const _NavPill({required this.onSearch, this.onPrevious, this.onNext});
+  final VoidCallback onSearch;
+  final VoidCallback? onPrevious, onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget round(IconData icon, String tip, VoidCallback? onTap) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      child: IconButton.filledTonal(tooltip: tip, onPressed: onTap, icon: Icon(icon)),
+    );
+    return Material(
+      color: scheme.surfaceContainerHigh,
+      shape: StadiumBorder(side: BorderSide(color: scheme.outlineVariant)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            round(Icons.search, tr('Schüler:in suchen', 'Find student'), onSearch),
+            const SizedBox(width: 18),
+            round(Icons.arrow_back, tr('Vorherige:r', 'Previous'), onPrevious),
+            round(Icons.arrow_forward, tr('Nächste:r', 'Next'), onNext),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Rechts, solange niemand gewählt ist.
-class _Welcome extends StatelessWidget {
-  const _Welcome({required this.actions, required this.onAdd, required this.empty});
+/// Suchen und eine Person wählen.
+class _StudentSearch extends StatefulWidget {
+  const _StudentSearch({required this.students});
+  final List<Student> students;
+
+  @override
+  State<_StudentSearch> createState() => _StudentSearchState();
+}
+
+class _StudentSearchState extends State<_StudentSearch> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _q.trim().toLowerCase();
+    final hits = widget.students
+        .where((s) => q.isEmpty || s.name.toLowerCase().contains(q) || s.instrument.toLowerCase().contains(q))
+        .toList();
+    return AlertDialog(
+      contentPadding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+      content: SizedBox(
+        width: 420,
+        height: 440,
+        child: Column(
+          children: [
+            TextField(
+              autofocus: true,
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText: tr('Name oder Instrument', 'Name or instrument'),
+              ),
+              onChanged: (v) => setState(() => _q = v),
+              onSubmitted: (_) {
+                if (hits.isNotEmpty) Navigator.of(context).pop(hits.first);
+              },
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                children: [
+                  for (final s in hits)
+                    ListTile(
+                      title: Text(s.name),
+                      subtitle: Text(studentSummary(s)),
+                      trailing: s.archived ? Text(tr('Archiv', 'Archive')) : null,
+                      onTap: () => Navigator.of(context).pop(s),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Alle Schüler:innen nach Wochentag, mit „Neue:r Schüler:in“.
+class _StudentsSection extends StatefulWidget {
+  const _StudentsSection({required this.state});
+  final _TeachingViewState state;
+
+  @override
+  State<_StudentsSection> createState() => _StudentsSectionState();
+}
+
+class _StudentsSectionState extends State<_StudentsSection> {
+  bool _archive = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final lib = widget.state.library;
+    final active = lib.students.where((s) => !s.archived).toList();
+    final archived = lib.students.where((s) => s.archived).toList();
+    final days = [
+      for (var d = 1; d <= 7; d++)
+        if (active.any((s) => s.weekday == d)) d,
+    ];
+    final noDay = active.where((s) => s.weekday == null).toList();
+    Widget tile(Student s) => ListTile(
+      title: Text(s.name),
+      subtitle: Text(studentSummary(s)),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => widget.state._open(s),
+    );
+    Widget header(String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+      child: Text(
+        text,
+        style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TeachingTopBar(
+          title: tr('Schüler:innen', 'Students'),
+          subtitle: tr('${active.length} aktiv', '${active.length} active'),
+          trailing: [
+            FilledButton.icon(
+              onPressed: widget.state._add,
+              icon: const Icon(Icons.person_add_alt, size: 18),
+              label: Text(tr('Neue:r Schüler:in', 'New student')),
+            ),
+            const SizedBox(width: 8),
+            ...widget.state.headerActions(),
+          ],
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 32),
+            children: [
+              if (lib.students.isEmpty)
+                Padding(padding: const EdgeInsets.all(16), child: Text(tr('Noch niemand erfasst.', 'Nobody yet.'))),
+              for (final d in days) ...[header(weekdayName(d)), for (final s in studentsOn(active, d)) tile(s)],
+              if (noDay.isNotEmpty) ...[header(tr('Ohne festen Tag', 'No fixed day')), ...noDay.map(tile)],
+              if (archived.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: Icon(_archive ? Icons.expand_less : Icons.expand_more),
+                  title: Text(tr('Archiv (${archived.length})', 'Archive (${archived.length})')),
+                  onTap: () => setState(() => _archive = !_archive),
+                ),
+                if (_archive) ...archived.map(tile),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Absenzen aller Schüler:innen, jüngste zuerst.
+class _AbsencesSection extends StatelessWidget {
+  const _AbsencesSection({required this.state});
+  final _TeachingViewState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final rows = [
+      for (final s in state.library.students)
+        for (final l in s.activeLessons)
+          if (l.status != LessonStatus.held) (student: s, lesson: l),
+    ]..sort((a, b) => b.lesson.date.compareTo(a.lesson.date));
+    final start = schoolYearStart();
+    final thisYear = rows.where((r) => !r.lesson.date.isBefore(start)).length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TeachingTopBar(
+          title: tr('Absenzen', 'Absences'),
+          subtitle: tr('$thisYear seit August', '$thisYear since August'),
+          trailing: state.headerActions(),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: rows.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      tr(
+                        'Keine Absenzen. Eintragen kannst du sie bei einer Person über ⋮ neben „Neue Lektion“.',
+                        'No absences. You can add them for a person via ⋮ next to “New lesson”.',
+                      ),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 32),
+                  children: [
+                    for (final r in rows)
+                      ListTile(
+                        leading: SizedBox(
+                          width: 92,
+                          child: Text(shortDate(r.lesson.date), style: theme.textTheme.bodyMedium),
+                        ),
+                        title: Text(r.student.name),
+                        subtitle: r.lesson.reason.isEmpty ? null : Text(r.lesson.reason),
+                        trailing: LessonStatusBadge(r.lesson),
+                        onTap: () => state._open(r.student),
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Noch niemand erfasst.
+class _Empty extends StatelessWidget {
+  const _Empty({required this.actions, required this.onAdd});
   final List<Widget> actions;
   final VoidCallback onAdd;
-  final bool empty;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-          child: Row(children: [const Spacer(), ...actions]),
-        ),
+        TeachingTopBar(title: tr('Unterrichten', 'Teach'), trailing: actions),
+        const Divider(height: 1),
         Expanded(
           child: Center(
             child: ConstrainedBox(
@@ -321,26 +472,22 @@ class _Welcome extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.school_outlined, size: 56, color: theme.colorScheme.primary),
+                  Icon(Icons.co_present_outlined, size: 56, color: theme.colorScheme.primary),
                   const SizedBox(height: 16),
                   Text(
-                    empty
-                        ? tr(
-                            'Lege für jede Schülerin und jeden Schüler eine Kartei an: Lektionen, Hausaufgaben und Stücke aus deiner Bibliothek an einem Ort.',
-                            'Create a record for each student: lessons, homework and pieces from your library in one place.',
-                          )
-                        : tr('Wähle links eine Schülerin oder einen Schüler.', 'Choose a student on the left.'),
+                    tr(
+                      'Lege für jede Schülerin und jeden Schüler eine Kartei an: Lektionen, Hausaufgaben und Stücke aus deiner Bibliothek an einem Ort.',
+                      'Create a record for each student: lessons, homework and pieces from your library in one place.',
+                    ),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyLarge,
                   ),
-                  if (empty) ...[
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: onAdd,
-                      icon: const Icon(Icons.person_add_alt),
-                      label: Text(tr('Erste Kartei anlegen', 'Create first record')),
-                    ),
-                  ],
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: onAdd,
+                    icon: const Icon(Icons.person_add_alt),
+                    label: Text(tr('Erste:n Schüler:in erfassen', 'Add first student')),
+                  ),
                 ],
               ),
             ),

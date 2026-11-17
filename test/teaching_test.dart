@@ -65,6 +65,16 @@ void main() {
     expect(Student.merge(desktop, surface).toJson(), merged.toJson());
   });
 
+  test('Notiz-Karten werden pro Karte zusammengeführt', () {
+    final base = anna();
+    final a = Student.fromJson(base.toJson())..putMemo(StudentNote.create(title: 'Infos', text: 'Geburtstag 9.12.'));
+    final b = Student.fromJson(base.toJson())..putMemo(StudentNote.create(title: 'Ziele', text: 'Vorspiel'));
+    final merged = Student.merge(a, b);
+    expect(merged.activeMemos.map((m) => m.title).toSet(), {'Infos', 'Ziele'});
+    final back = Student.fromJson(merged.toJson());
+    expect(back.activeMemos.length, 2);
+  });
+
   test('Sync gleicht Karteien pro Lektion ab', () async {
     final cloud = p.join(tmp.path, 'cloud');
     await SyncEngine.initializeRemote(FolderSyncStore(cloud));

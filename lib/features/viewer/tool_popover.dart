@@ -988,7 +988,7 @@ class _TextSettings extends StatelessWidget {
           child: _TextSample(style: s, fontSize: (s.size * 900).clamp(11, 36), text: tr('Bogen ab', 'Sample')),
         ),
         // Ist in der getippten Notiz etwas markiert, gelten Fett, Kursiv,
-        // Unterstrichen und Farbe nur für diesen Teil (wie in Word).
+        // Unterstrichen und Farbe nur für diesen Teil.
         ValueListenableBuilder<RichTextTarget?>(
           valueListenable: tools.richText,
           builder: (context, target, _) => ListenableBuilder(

@@ -32,7 +32,7 @@ Future<void> prepareWindow() async {
   }
 }
 
-/// Schliessen, Minimieren, Maximieren – als drei runde Punkte wie bei macOS
+/// Schliessen, Minimieren, Maximieren – als drei runde, farbige Punkte
 /// (Wunsch des Besitzers). Beim Darüberfahren mit der Maus erscheinen die
 /// Zeichen darin.
 class WindowButtons extends StatefulWidget {
@@ -146,7 +146,7 @@ class _DotPainter extends CustomPainter {
     final c = size.center(Offset.zero);
     final r = size.width / 2;
     canvas.drawCircle(c, r, Paint()..color = color);
-    // Feiner, dunklerer Rand wie bei macOS.
+    // Feiner, dunklerer Rand.
     canvas.drawCircle(
       c,
       r - 0.4,

@@ -365,7 +365,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
               const SingleActivator(LogicalKeyboardKey.enter): _commit,
               const SingleActivator(LogicalKeyboardKey.numpadEnter): _commit,
               const SingleActivator(LogicalKeyboardKey.escape): _cancel,
-              // Wie in Word: Strg+B/I/U für den markierten Teil (sonst die ganze Notiz).
+              // Strg+B/I/U für den markierten Teil (sonst die ganze Notiz).
               const SingleActivator(LogicalKeyboardKey.keyB, control: true): () => _format(bold: true),
               const SingleActivator(LogicalKeyboardKey.keyI, control: true): () => _format(italic: true),
               const SingleActivator(LogicalKeyboardKey.keyU, control: true): () => _format(underline: true),

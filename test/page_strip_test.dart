@@ -19,7 +19,7 @@ void main() {
     addTearDown(() => t.binding.setSurfaceSize(null));
     const mid = 600.0;
 
-    // Erste Seite: in der Mitte, links ist das Dock leer.
+    // Erste Seite: in der Mitte, links ist die Leiste leer.
     await t.pumpWidget(strip(12, {1}));
     expect(centerOf(t, '1'), closeTo(mid, 0.5));
 

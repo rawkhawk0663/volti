@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw
 
 MARK = Image.open("assets/brand/volti_mark.png").convert("RGBA")
 
-# Rundung der Ecken (Anteil der Kantenlänge), etwa wie bei Windows-11-Symbolen.
+# Rundung der Ecken (Anteil der Kantenlänge).
 RADIUS = 0.22
 # Grösse der Bildmarke im Quadrat.
 SCALE = 0.68

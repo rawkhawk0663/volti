@@ -33,8 +33,10 @@ class Student {
     this.archived = false,
     Map<String, StudentPiece>? pieces,
     Map<String, Lesson>? lessons,
+    Map<String, StudentNote>? memos,
   }) : pieces = pieces ?? {},
-       lessons = lessons ?? {};
+       lessons = lessons ?? {},
+       memos = memos ?? {};
 
   factory Student.create(String name) =>
       Student(id: const Uuid().v4(), name: name.trim(), modified: DateTime.now().toUtc());
@@ -67,6 +69,15 @@ class Student {
 
   final Map<String, StudentPiece> pieces;
   final Map<String, Lesson> lessons;
+
+  /// Notiz-Karten (z. B. „Infos“: Geburtstag, Klasse …), pro Eintrag abgeglichen.
+  final Map<String, StudentNote> memos;
+
+  /// Notiz-Karten ohne gelöschte, älteste zuerst.
+  List<StudentNote> get activeMemos =>
+      memos.values.where((m) => !m.deleted).toList()..sort((a, b) => a.created.compareTo(b.created));
+
+  void putMemo(StudentNote m) => memos[m.id] = m;
 
   /// Kennzeichen der Notiz-Ebenen dieser Kartei in den Noten.
   String get scope => scopeOf(id);
@@ -130,6 +141,7 @@ class Student {
     if (archived) 'archived': true,
     'pieces': [for (final x in pieces.values) x.toJson()],
     'lessons': [for (final l in lessons.values) l.toJson()],
+    if (memos.isNotEmpty) 'memos': [for (final m in memos.values) m.toJson()],
   };
 
   static Student fromJson(Map<String, dynamic> j) => Student(
@@ -152,6 +164,7 @@ class Student {
     lessons: {
       for (final lesson in (j['lessons'] as List? ?? const []).map(Lesson.tryFromJson).nonNulls) lesson.id: lesson,
     },
+    memos: {for (final m in (j['memos'] as List? ?? const []).map(StudentNote.tryFromJson).nonNulls) m.id: m},
   );
 
   /// Zwei Fassungen derselben Kartei zusammenführen (Sync).
@@ -159,13 +172,17 @@ class Student {
     final newer = b.modified.isAfter(a.modified) ? b : a;
     final out = Student.fromJson(newer.toJson())
       ..pieces.clear()
-      ..lessons.clear();
+      ..lessons.clear()
+      ..memos.clear();
     // Sortiert, damit das Ergebnis auf beiden Geräten gleich aussieht.
     for (final id in ({...a.pieces.keys, ...b.pieces.keys}.toList()..sort())) {
       out.pieces[id] = _newest(a.pieces[id], b.pieces[id], (x) => x.modified)!;
     }
     for (final id in ({...a.lessons.keys, ...b.lessons.keys}.toList()..sort())) {
       out.lessons[id] = _newest(a.lessons[id], b.lessons[id], (x) => x.modified)!;
+    }
+    for (final id in ({...a.memos.keys, ...b.memos.keys}.toList()..sort())) {
+      out.memos[id] = _newest(a.memos[id], b.memos[id], (x) => x.modified)!;
     }
     return out;
   }
@@ -339,6 +356,57 @@ class Lesson {
         content: j['content'] as String? ?? '',
         homework: j['homework'] as String? ?? '',
         pieces: [for (final x in j['pieces'] as List? ?? const []) x as String],
+        created: DateTime.parse(j['created'] as String),
+        modified: DateTime.parse(j['modified'] as String),
+        deleted: j['deleted'] as bool? ?? false,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// Eine Notiz-Karte (Titel und Text), z. B. „Infos“.
+class StudentNote {
+  StudentNote({
+    required this.id,
+    required this.created,
+    required this.modified,
+    this.title = '',
+    this.text = '',
+    this.deleted = false,
+  });
+
+  factory StudentNote.create({String title = '', String text = ''}) {
+    final now = DateTime.now().toUtc();
+    return StudentNote(id: const Uuid().v4(), created: now, modified: now, title: title, text: text);
+  }
+
+  final String id;
+  String title;
+  String text;
+  final DateTime created;
+  DateTime modified;
+  bool deleted;
+
+  void touch() => modified = DateTime.now().toUtc();
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    if (title.isNotEmpty) 'title': title,
+    if (text.isNotEmpty) 'text': text,
+    'created': created.toUtc().toIso8601String(),
+    'modified': modified.toUtc().toIso8601String(),
+    if (deleted) 'deleted': true,
+  };
+
+  static StudentNote? tryFromJson(Object? o) {
+    try {
+      final j = o as Map<String, dynamic>;
+      return StudentNote(
+        id: j['id'] as String,
+        title: j['title'] as String? ?? '',
+        text: j['text'] as String? ?? '',
         created: DateTime.parse(j['created'] as String),
         modified: DateTime.parse(j['modified'] as String),
         deleted: j['deleted'] as bool? ?? false,
