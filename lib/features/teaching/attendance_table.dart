@@ -15,26 +15,32 @@ String attendanceLetter(LessonStatus s) => switch (s) {
 /// Farbe für Ferien und Feiertage.
 const _freeColor = Color(0xFF4A90D9);
 
-/// Absenzenkontrolle einer Person: eine Spalte pro Unterrichtswoche des
-/// Semesters (Kalenderwoche und Datum), darin X/E/U/A. Ferien und Feiertage
-/// kommen aus dem Schulkalender (blau bzw. „F“) und lassen sich hier nicht
-/// ändern. Rechts: Anwesenheiten, Absenzen und die Note.
+/// Absenzenkontrolle: eine Spalte pro Unterrichtswoche des Semesters
+/// (Kalenderwoche und Datum), darin X/E/U/A, eine Zeile pro Person (bei einer
+/// Gruppe für jedes Mitglied, mit Namen). Ferien und Feiertage kommen aus dem
+/// Schulkalender (blau bzw. „F“) und lassen sich hier nicht ändern.
+/// Rechts: Anwesenheiten, Absenzen und die Note.
 class AttendanceTable extends StatefulWidget {
   const AttendanceTable({
     super.key,
-    required this.student,
+    required this.students,
+    required this.weekday,
     required this.calendar,
     required this.onSet,
     required this.onGrade,
     required this.onEditStudent,
   });
 
-  final Student student;
+  /// Eine Zeile pro Person.
+  final List<Student> students;
+
+  /// Unterrichtstag (1 = Montag), null = noch nicht eingetragen.
+  final int? weekday;
   final SchoolCalendar calendar;
 
-  /// Status an einem Tag setzen (null = leeren).
-  final void Function(DateTime day, LessonStatus? status) onSet;
-  final void Function(String semesterId, String grade) onGrade;
+  /// Status einer Person an einem Tag setzen (null = leeren).
+  final void Function(Student s, DateTime day, LessonStatus? status) onSet;
+  final void Function(Student s, String semesterId, String grade) onGrade;
   final VoidCallback onEditStudent;
 
   @override
@@ -43,18 +49,27 @@ class AttendanceTable extends StatefulWidget {
 
 class _AttendanceTableState extends State<AttendanceTable> {
   late Semester _semester = widget.calendar.semesterFor(DateTime.now());
-  final _grade = TextEditingController();
+
+  /// Notenfelder pro Person und Semester (Schlüssel `id/semester`).
+  final _grades = <String, TextEditingController>{};
   final _scroll = ScrollController();
-  String? _gradeFor;
 
   static const _cell = 46.0;
+  static const _headHeight = 38.0;
+  static const _rowHeight = 38.0;
+  static const _nameWidth = 96.0;
 
   @override
   void dispose() {
-    _grade.dispose();
+    for (final c in _grades.values) {
+      c.dispose();
+    }
     _scroll.dispose();
     super.dispose();
   }
+
+  TextEditingController _gradeOf(Student s, Semester sem) =>
+      _grades.putIfAbsent('${s.id}/${sem.id}', () => TextEditingController(text: s.grades[sem.id] ?? ''));
 
   void _switch(int delta) {
     final list = widget.calendar.effectiveSemesters;
@@ -63,7 +78,7 @@ class _AttendanceTableState extends State<AttendanceTable> {
     setState(() => _semester = list[next]);
   }
 
-  Future<void> _choose(BuildContext cellContext, DateTime day, LessonStatus? current) async {
+  Future<void> _choose(BuildContext cellContext, Student s, DateTime day, LessonStatus? current) async {
     final box = cellContext.findRenderObject() as RenderBox;
     final pos = box.localToGlobal(Offset(0, box.size.height));
     PopupMenuItem<int> item(int v, String letter, String text) => PopupMenuItem(
@@ -91,7 +106,7 @@ class _AttendanceTableState extends State<AttendanceTable> {
       ],
     );
     if (v == null) return;
-    widget.onSet(day, switch (v) {
+    widget.onSet(s, day, switch (v) {
       0 => LessonStatus.held,
       1 => LessonStatus.excused,
       2 => LessonStatus.missed,
@@ -107,16 +122,13 @@ class _AttendanceTableState extends State<AttendanceTable> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final s = widget.student;
+    final people = widget.students;
+    final weekday = widget.weekday;
     final cal = widget.calendar;
     // Semester könnte inzwischen geändert worden sein.
     final list = cal.effectiveSemesters;
     _semester = list.firstWhere((x) => x.id == _semester.id, orElse: () => cal.semesterFor(DateTime.now()));
     final sem = _semester;
-    if (_gradeFor != '${s.id}/${sem.id}') {
-      _gradeFor = '${s.id}/${sem.id}';
-      _grade.text = s.grades[sem.id] ?? '';
-    }
 
     final header = Row(
       children: [
@@ -148,7 +160,7 @@ class _AttendanceTableState extends State<AttendanceTable> {
     );
 
     Widget body;
-    if (s.weekday == null) {
+    if (weekday == null) {
       body = Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -167,109 +179,149 @@ class _AttendanceTableState extends State<AttendanceTable> {
         ),
       );
     } else {
-      final days = lessonDates(sem, s.weekday!);
+      final days = lessonDates(sem, weekday);
       final today = DateTime.now();
-      var present = 0, absent = 0;
-      final columns = <Widget>[];
+      final withNames = people.length > 1;
       var scrollTo = 0.0;
+      final heads = <Widget>[];
       for (var i = 0; i < days.length; i++) {
         final d = days[i];
         final free = cal.freeOn(d);
-        final lesson = free == null ? s.lessonOn(d) : null;
-        if (lesson != null) {
-          if (lesson.status == LessonStatus.held || lesson.status == LessonStatus.makeUp) present++;
-          if (lesson.isAbsence) absent++;
-        }
         final thisWeek = isoWeek(d) == isoWeek(today) && d.year == today.year;
         if (!d.isAfter(today)) scrollTo = i * _cell;
-        final letter = free != null
-            ? (free.holiday ? 'F' : '')
-            : (lesson == null ? '' : attendanceLetter(lesson.status));
-        final letterColor = switch (letter) {
-          'U' => scheme.error,
-          'E' || 'A' => scheme.tertiary,
-          _ => scheme.onSurface,
-        };
-        final headerBg = free != null ? _freeColor.withValues(alpha: 0.85) : null;
-        columns.add(
+        heads.add(
           SizedBox(
             width: _cell,
+            height: _headHeight,
             child: Tooltip(
               message: free?.name ?? '',
-              child: Column(
-                children: [
-                  Container(
-                    width: _cell - 4,
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    decoration: BoxDecoration(
-                      color: headerBg,
-                      borderRadius: BorderRadius.circular(4),
-                      border: thisWeek ? Border.all(color: scheme.error, width: 1.5) : null,
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          '${isoWeek(d)}',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: free != null ? Colors.white : scheme.onSurfaceVariant,
-                            fontWeight: thisWeek ? FontWeight.w700 : null,
-                          ),
-                        ),
-                        Text(
-                          _dm(d),
-                          style: TextStyle(fontSize: 9.5, color: free != null ? Colors.white : scheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  width: _cell - 4,
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  decoration: BoxDecoration(
+                    color: free != null ? _freeColor.withValues(alpha: 0.85) : null,
+                    borderRadius: BorderRadius.circular(4),
+                    border: thisWeek ? Border.all(color: scheme.error, width: 1.5) : null,
                   ),
-                  const SizedBox(height: 6),
-                  Builder(
-                    builder: (cellContext) => InkWell(
-                      borderRadius: BorderRadius.circular(4),
-                      onTap: free != null ? null : () => _choose(cellContext, d, lesson?.status),
-                      child: Container(
-                        width: _cell - 10,
-                        height: 30,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: free != null ? _freeColor.withValues(alpha: 0.35) : null,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: letter == 'U' || letter == 'E' ? letterColor : scheme.outlineVariant,
-                          ),
-                        ),
-                        child: Text(
-                          letter,
-                          style: TextStyle(fontWeight: FontWeight.w700, color: letterColor),
+                  child: Column(
+                    children: [
+                      Text(
+                        '${isoWeek(d)}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: free != null ? Colors.white : scheme.onSurfaceVariant,
+                          fontWeight: thisWeek ? FontWeight.w700 : null,
                         ),
                       ),
-                    ),
+                      Text(
+                        _dm(d),
+                        style: TextStyle(fontSize: 9.5, color: free != null ? Colors.white : scheme.onSurfaceVariant),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
         );
       }
+
+      // Eine Zeile pro Person, dazu ihre Summen.
+      final rows = <Widget>[];
+      final totals = <({int present, int absent})>[];
+      for (final s in people) {
+        var present = 0, absent = 0;
+        final cells = <Widget>[];
+        for (final d in days) {
+          final free = cal.freeOn(d);
+          final lesson = free == null ? s.lessonOn(d) : null;
+          if (lesson != null) {
+            if (lesson.status == LessonStatus.held || lesson.status == LessonStatus.makeUp) present++;
+            if (lesson.isAbsence) absent++;
+          }
+          final letter = free != null
+              ? (free.holiday ? 'F' : '')
+              : (lesson == null ? '' : attendanceLetter(lesson.status));
+          final letterColor = switch (letter) {
+            'U' => scheme.error,
+            'E' || 'A' => scheme.tertiary,
+            _ => scheme.onSurface,
+          };
+          cells.add(
+            SizedBox(
+              width: _cell,
+              height: _rowHeight,
+              child: Center(
+                child: Builder(
+                  builder: (cellContext) => InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: free != null ? null : () => _choose(cellContext, s, d, lesson?.status),
+                    child: Container(
+                      width: _cell - 10,
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: free != null ? _freeColor.withValues(alpha: 0.35) : null,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: letter == 'U' || letter == 'E' ? letterColor : scheme.outlineVariant),
+                      ),
+                      child: Text(
+                        letter,
+                        style: TextStyle(fontWeight: FontWeight.w700, color: letterColor),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        rows.add(Row(children: cells));
+        totals.add((present: present, absent: absent));
+      }
+
       // Beim ersten Anzeigen zur aktuellen Woche scrollen.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scroll.hasClients && _scroll.offset == 0 && scrollTo > 0) {
           _scroll.jumpTo((scrollTo - 3 * _cell).clamp(0, _scroll.position.maxScrollExtent));
         }
       });
-      Widget total(String label, Widget value) => SizedBox(
+      Widget total(Widget child) => SizedBox(
         width: 58,
-        child: Column(
-          children: [
-            Text(label, style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            SizedBox(height: 30, child: Center(child: value)),
-          ],
+        height: _rowHeight,
+        child: Center(child: child),
+      );
+      Widget label(String text) => SizedBox(
+        width: 58,
+        height: _headHeight,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(text, style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ),
         ),
       );
       body = Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (withNames)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: _headHeight),
+                for (final s in people)
+                  SizedBox(
+                    width: _nameWidth,
+                    height: _rowHeight,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(s.name, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
+                    ),
+                  ),
+              ],
+            ),
           Expanded(
             child: Scrollbar(
               controller: _scroll,
@@ -277,29 +329,44 @@ class _AttendanceTableState extends State<AttendanceTable> {
                 controller: _scroll,
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: columns),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: heads),
+                    ...rows,
+                  ],
+                ),
               ),
             ),
           ),
-          Container(width: 1, height: 64, color: scheme.outlineVariant),
+          Container(width: 1, height: _headHeight + people.length * _rowHeight, color: scheme.outlineVariant),
           const SizedBox(width: 6),
-          total(tr('Anw.', 'Pres.'), Text('$present', style: theme.textTheme.titleMedium)),
-          total(tr('Abs.', 'Abs.'), Text('$absent', style: theme.textTheme.titleMedium)),
-          total(
-            tr('Note', 'Grade'),
-            SizedBox(
-              width: 48,
-              child: TextField(
-                controller: _grade,
-                textAlign: TextAlign.center,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(vertical: 6),
+          Column(
+            children: [
+              Row(children: [label(tr('Anw.', 'Pres.')), label(tr('Abs.', 'Abs.')), label(tr('Note', 'Grade'))]),
+              for (var i = 0; i < people.length; i++)
+                Row(
+                  children: [
+                    total(Text('${totals[i].present}', style: theme.textTheme.titleMedium)),
+                    total(Text('${totals[i].absent}', style: theme.textTheme.titleMedium)),
+                    total(
+                      SizedBox(
+                        width: 48,
+                        child: TextField(
+                          controller: _gradeOf(people[i], sem),
+                          textAlign: TextAlign.center,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(vertical: 6),
+                          ),
+                          onChanged: (v) => widget.onGrade(people[i], sem.id, v.trim()),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                onChanged: (v) => widget.onGrade(sem.id, v.trim()),
-              ),
-            ),
+            ],
           ),
         ],
       );
@@ -316,7 +383,7 @@ class _AttendanceTableState extends State<AttendanceTable> {
         children: [
           header,
           body,
-          if (s.weekday != null)
+          if (weekday != null)
             Text(
               tr(
                 'X = anwesend · U = unentschuldigt · E = entschuldigt · A = Ausfall · F = Feiertag · blau = Ferien und Feiertage',

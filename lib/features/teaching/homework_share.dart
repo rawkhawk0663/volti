@@ -17,32 +17,48 @@ import '../viewer/page_export.dart';
 /// Datum kurz, z. B. „17.11.2026“.
 String shortDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
 
-/// Text der Hausaufgaben zum Verschicken.
-String homeworkText(Student s, Lesson l) {
-  final first = s.name.split(' ').first;
+/// Vornamen für die Anrede („Anna“, „Anna und Ben“, „Anna, Ben und Lea“).
+String greetingNames(List<String> names) {
+  final first = [for (final n in names) n.trim().split(' ').first];
+  if (first.length <= 1) return first.isEmpty ? '' : first.first;
+  return '${first.sublist(0, first.length - 1).join(', ')} ${tr('und', 'and')} ${first.last}';
+}
+
+/// Text der Hausaufgaben zum Verschicken. Bei einer Gruppe ([members])
+/// werden alle Mitglieder angesprochen.
+String homeworkText(Student s, Lesson l, {List<Student> members = const []}) {
+  final group = members.length > 1;
+  final names = greetingNames(members.isEmpty ? [s.name] : [for (final m in members) m.name]);
   return tr(
-    'Hoi $first\n\nHier deine Hausaufgaben vom ${shortDate(l.date)}:\n\n${l.homework.trim()}\n\nViel Spass beim Üben!',
-    'Hi $first\n\nHere is your homework from ${shortDate(l.date)}:\n\n${l.homework.trim()}\n\nHappy practising!',
+    'Hoi $names\n\nHier ${group ? 'eure' : 'deine'} Hausaufgaben vom ${shortDate(l.date)}:\n\n${l.homework.trim()}\n\nViel Spass beim Üben!',
+    'Hi $names\n\nHere is your homework from ${shortDate(l.date)}:\n\n${l.homework.trim()}\n\nHappy practising!',
   );
 }
 
-/// Neue E-Mail mit den Hausaufgaben im Mailprogramm öffnen.
-Future<void> sendHomeworkByEmail(Student s, Lesson l) => openUrl(
+/// E-Mail-Adressen: die der Kartei bzw. aller Gruppenmitglieder.
+List<String> homeworkEmails(Student s, {List<Student> members = const []}) => [
+  for (final x in members.isEmpty ? [s] : members)
+    if (x.email.trim().isNotEmpty) x.email.trim(),
+];
+
+/// Neue E-Mail mit den Hausaufgaben im Mailprogramm öffnen (bei einer
+/// Gruppe an alle Mitglieder).
+Future<void> sendHomeworkByEmail(Student s, Lesson l, {List<Student> members = const []}) => openUrl(
   Uri(
     scheme: 'mailto',
-    path: s.email.trim(),
+    path: homeworkEmails(s, members: members).join(','),
     // Uri kodiert Leerzeichen sonst als „+“, das zeigen manche Mailprogramme so an.
     query:
         'subject=${Uri.encodeComponent(tr('Hausaufgaben vom ${shortDate(l.date)}', 'Homework from ${shortDate(l.date)}'))}'
-        '&body=${Uri.encodeComponent(homeworkText(s, l))}',
+        '&body=${Uri.encodeComponent(homeworkText(s, l, members: members))}',
   ),
 );
 
-/// WhatsApp mit den Hausaufgaben öffnen (an die gespeicherte Nummer, sonst
-/// wählt man den Kontakt in WhatsApp).
-Future<void> sendHomeworkByWhatsApp(Student s, Lesson l) {
-  final digits = whatsAppNumber(s.phone);
-  return openUrl(Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(homeworkText(s, l))}'));
+/// WhatsApp mit den Hausaufgaben öffnen (an [phone] bzw. die gespeicherte
+/// Nummer, sonst wählt man den Kontakt in WhatsApp).
+Future<void> sendHomeworkByWhatsApp(Student s, Lesson l, {List<Student> members = const [], String? phone}) {
+  final digits = whatsAppNumber(phone ?? s.phone);
+  return openUrl(Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(homeworkText(s, l, members: members))}'));
 }
 
 /// Telefonnummer für WhatsApp: nur Ziffern, mit Ländervorwahl.

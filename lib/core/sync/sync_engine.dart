@@ -8,6 +8,7 @@ import '../library/setlist.dart';
 import '../library/sidecar_store.dart';
 import '../teaching/school_calendar.dart';
 import '../teaching/student.dart';
+import '../teaching/todo.dart';
 import 'sync_store.dart';
 import '../../app/l10n.dart';
 
@@ -116,7 +117,7 @@ class SyncEngine {
         rel == '.volti/stamps.json' ||
         rel == SchoolCalendar.file;
     // Ordner der Bibliothek: pro Ordner zusammengeführt.
-    bool isFolders(String rel) => FolderStore.files.contains(rel);
+    bool isFolders(String rel) => FolderStore.files.contains(rel) || rel == TodoStore.file;
     // Unterricht: Karteien, Stücke und Lektionen pro Eintrag zusammengeführt.
     bool isStudent(String rel) => rel.startsWith('${StudentStore.dir}/') && rel.endsWith('.json');
 
@@ -323,8 +324,9 @@ class SyncEngine {
     if (r == null || StudentStore.encode(r) != out) await remote.writeString(rel, out);
   }
 
-  /// Ordnerliste: pro Ordner gewinnt die jüngste Fassung.
+  /// Ordnerliste: pro Ordner gewinnt die jüngste Fassung. To-Dos ebenso pro Eintrag.
   Future<void> _syncFolders(String rel, SyncReport report) async {
+    if (rel == TodoStore.file) return _syncTodos(rel, report);
     final lj = await _local.readString(rel), rj = await remote.readString(rel);
     if (lj == rj) return;
     List<ScoreFolder> parse(String j) {
@@ -345,6 +347,26 @@ class SyncEngine {
       report.merged++;
     }
     if (key(r) != m) await remote.writeString(rel, out);
+  }
+
+  Future<void> _syncTodos(String rel, SyncReport report) async {
+    final lj = await _local.readString(rel), rj = await remote.readString(rel);
+    if (lj == rj) return;
+    Map<String, Todo> parse(String j) {
+      try {
+        return TodoStore.decode(j);
+      } catch (_) {
+        return {};
+      }
+    }
+
+    final l = parse(lj), r = parse(rj);
+    final out = TodoStore.encode(TodoStore.merge(l, r));
+    if (TodoStore.encode(l) != out) {
+      await _local.writeString(rel, out);
+      report.merged++;
+    }
+    if (TodoStore.encode(r) != out) await remote.writeString(rel, out);
   }
 
   static DateTime? _modifiedOf(String json) {

@@ -9,6 +9,8 @@ import 'package:volti/core/sync/sync_store.dart';
 import 'package:volti/core/teaching/school_calendar.dart';
 import 'package:volti/core/teaching/school_level.dart';
 import 'package:volti/core/teaching/student.dart';
+import 'package:volti/core/teaching/todo.dart';
+import 'package:volti/features/teaching/dashboard.dart';
 import 'package:volti/features/teaching/homework_share.dart';
 import 'package:volti/features/teaching/teaching_view.dart' show upcomingBirthdays;
 import 'package:volti/features/teaching/timetable.dart';
@@ -280,5 +282,98 @@ void main() {
     expect(studentsOn(students, 2).map((s) => s.name), ['Ben', 'Anna Muster']);
     final bytes = await buildTimetablePdf(students);
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+  });
+
+  test('Neue Kartei: 25 Minuten, Gruppe mit Mitgliedern bleibt erhalten', () async {
+    expect(Student.create('Neu').duration, 25);
+    final store = StudentStore(tmp.path);
+    final a = anna(), b = Student.create('Ben Beispiel');
+    final g = Student.create('Anna & Ben')..members.addAll([a.id, b.id]);
+    expect(g.isGroup, isTrue);
+    expect(a.isGroup, isFalse);
+    for (final s in [a, b, g]) {
+      await store.save(s);
+    }
+    final back = {for (final s in await store.loadAll()) s.id: s};
+    expect(back[g.id]!.members, [a.id, b.id]);
+    expect(back[a.id]!.members, isEmpty);
+  });
+
+  test('Hausaufgaben an eine Gruppe', () {
+    expect(greetingNames(['Anna Muster']), 'Anna');
+    expect(greetingNames(['Anna Muster', 'Ben Beispiel']), 'Anna und Ben');
+    expect(greetingNames(['Anna', 'Ben', 'Lea']), 'Anna, Ben und Lea');
+    final a = anna()..email = 'anna@example.com';
+    final b = Student.create('Ben Beispiel')..email = 'ben@example.com';
+    final c = Student.create('Lea');
+    final g = Student.create('Gruppe')..members.addAll([a.id, b.id, c.id]);
+    final l = Lesson.create(DateTime(2026, 11, 17))..homework = 'Tonleiter';
+    final text = homeworkText(g, l, members: [a, b, c]);
+    expect(text, startsWith('Hoi Anna, Ben und Lea'));
+    expect(text, contains('eure Hausaufgaben'));
+    expect(homeworkEmails(g, members: [a, b, c]), ['anna@example.com', 'ben@example.com']);
+    expect(homeworkText(a, l), contains('deine Hausaufgaben'));
+  });
+
+  test('To-Dos: pro Eintrag zusammengeführt, überfällig', () {
+    final t = Todo.create('Noten kopieren', due: DateTime(2026, 11, 10), student: 'x');
+    final back = TodoStore.decode(TodoStore.encode({t.id: t}))[t.id]!;
+    expect(back.text, 'Noten kopieren');
+    expect(back.due, DateTime(2026, 11, 10));
+    expect(back.student, 'x');
+    expect(back.overdue(DateTime(2026, 11, 17, 9)), isTrue);
+    expect(back.overdue(DateTime(2026, 11, 10, 9)), isFalse);
+
+    // Gerät A hakt ab, Gerät B legt ein neues an: beides bleibt.
+    final onA = TodoStore.decode(TodoStore.encode({t.id: t}));
+    onA[t.id]!
+      ..done = true
+      ..modified = t.modified.add(const Duration(minutes: 1));
+    final u = Todo.create('Elterngespräch');
+    final onB = {t.id: t, u.id: u};
+    final merged = TodoStore.merge(onA, onB);
+    expect(merged.length, 2);
+    expect(merged[t.id]!.done, isTrue);
+  });
+
+  test('To-Dos werden abgeglichen', () async {
+    final cloud = p.join(tmp.path, 'cloud');
+    await SyncEngine.initializeRemote(FolderSyncStore(cloud));
+    SyncEngine engine(String name) => SyncEngine(
+      localRoot: p.join(tmp.path, name, 'Bibliothek'),
+      remote: FolderSyncStore(cloud),
+      baseFile: File(p.join(tmp.path, name, 'base.json')),
+    );
+    final rootA = p.join(tmp.path, 'surface', 'Bibliothek');
+    final rootB = p.join(tmp.path, 'desktop', 'Bibliothek');
+    final t1 = Todo.create('Auf Surface');
+    await TodoStore.save(rootA, {t1.id: t1});
+    await engine('surface').run();
+    final t2 = Todo.create('Auf Desktop');
+    await TodoStore.save(rootB, {t2.id: t2});
+    await engine('desktop').run();
+    await engine('surface').run();
+    for (final root in [rootA, rootB]) {
+      final texts = (await TodoStore.load(root)).values.map((t) => t.text).toList()..sort();
+      expect(texts, ['Auf Desktop', 'Auf Surface']);
+    }
+  });
+
+  test('Übersicht: Lektionen des Tages und nächster Unterrichtstag', () {
+    final a = anna(); // Dienstag 11:25
+    final b = Student.create('Ben')
+      ..weekday = 2
+      ..time = '09:00';
+    final c = Student.create('Cleo')..weekday = 4;
+    final tuesday = DateTime(2026, 11, 17);
+    expect(lessonsOn([a, b, c], tuesday).map((s) => s.name), ['Ben', 'Anna Muster']);
+    final next = nextTeachingDay([a, b, c], tuesday)!;
+    expect(next.day, DateTime(2026, 11, 19));
+    expect(next.lessons.single.name, 'Cleo');
+    // Donnerstag frei: dann erst der nächste Dienstag.
+    final skip = nextTeachingDay([a, b, c], tuesday, isFree: (d) => d.weekday == 4)!;
+    expect(skip.day, DateTime(2026, 11, 24));
+    expect(durationText(25), '25 min');
+    expect(durationText(130), '2 h 10 min');
   });
 }

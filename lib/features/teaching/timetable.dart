@@ -36,7 +36,8 @@ class TimetableView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final students = library.students.where((s) => !s.archived).toList();
+    // Gruppen zählen einmal, ihre Mitglieder nicht noch einmal einzeln.
+    final students = library.students.where((s) => !s.archived && library.groupOf(s.id) == null).toList();
     final days = timetableDays(students);
     final today = DateTime.now().weekday;
     final minutes = students.where((s) => s.weekday != null).fold<int>(0, (n, s) => n + s.duration);

@@ -13,6 +13,7 @@ import 'homework_share.dart';
 import '../../core/teaching/school_level.dart';
 import 'attendance_table.dart';
 import 'student_dialog.dart';
+import 'todo_widgets.dart';
 
 /// Beginn des Schuljahrs (1. August), für die Zahl der Absenzen.
 DateTime schoolYearStart() {
@@ -30,6 +31,7 @@ class StudentPage extends StatefulWidget {
     required this.studentId,
     required this.actions,
     this.onDeleted,
+    this.onOpen,
     this.banner,
   });
 
@@ -37,6 +39,9 @@ class StudentPage extends StatefulWidget {
   final String studentId;
   final List<Widget> actions;
   final VoidCallback? onDeleted;
+
+  /// Andere Kartei öffnen (Mitglied einer Gruppe bzw. die Gruppe).
+  final void Function(Student s)? onOpen;
 
   /// Hinweis oben (z. B. Geburtstage dieser Woche).
   final Widget? banner;
@@ -55,6 +60,10 @@ class _StudentPageState extends State<StudentPage> {
   final _content = TextEditingController();
   final _homework = TextEditingController();
   bool _allLessons = false;
+  bool _doneTodos = false;
+
+  /// Mitglieder einer Gruppe (sonst leer).
+  List<Student> _members(Student s) => [for (final id in s.members) ?library.studentById(id)];
 
   static DateTime _today() {
     final n = DateTime.now();
@@ -142,9 +151,7 @@ class _StudentPageState extends State<StudentPage> {
   }
 
   /// Absenzenkontrolle: Status an einem Tag setzen (null = leeren).
-  Future<void> _setAttendance(DateTime day, LessonStatus? status) async {
-    final s = _student;
-    if (s == null) return;
+  Future<void> _setAttendance(Student s, DateTime day, LessonStatus? status) async {
     final l = s.lessonOn(day);
     if (l == null) {
       if (status == null) return;
@@ -163,9 +170,7 @@ class _StudentPageState extends State<StudentPage> {
   }
 
   /// Note eines Semesters (leer = keine).
-  Future<void> _setGrade(String semesterId, String grade) async {
-    final s = _student;
-    if (s == null) return;
+  Future<void> _setGrade(Student s, String semesterId, String grade) async {
     if (grade.isEmpty) {
       if (s.grades.remove(semesterId) == null) return;
     } else {
@@ -212,6 +217,10 @@ class _StudentPageState extends State<StudentPage> {
     if (s == null) return;
     final box = anchor.findRenderObject() as RenderBox;
     final pos = box.localToGlobal(Offset(0, box.size.height));
+    final members = _members(s);
+    final emails = homeworkEmails(s, members: members);
+    // WhatsApp geht an eine Nummer: bei einer Gruppe pro Mitglied wählbar.
+    final chats = members.isEmpty ? [s] : members;
     final choice = await showMenu<int>(
       context: context,
       position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
@@ -220,20 +229,25 @@ class _StudentPageState extends State<StudentPage> {
           value: 0,
           child: ListTile(
             leading: const Icon(Icons.mail_outline),
-            title: Text(tr('Per E-Mail', 'By email')),
-            subtitle: Text(s.email.isEmpty ? tr('Adresse fehlt noch', 'No address yet') : s.email),
+            title: Text(members.isEmpty ? tr('Per E-Mail', 'By email') : tr('Per E-Mail an alle', 'By email to all')),
+            subtitle: Text(emails.isEmpty ? tr('Adresse fehlt noch', 'No address yet') : emails.join(', ')),
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        PopupMenuItem(
-          value: 1,
-          child: ListTile(
-            leading: const Icon(Icons.chat_outlined),
-            title: Text(tr('Per WhatsApp', 'By WhatsApp')),
-            subtitle: Text(s.phone.isEmpty ? tr('Nummer fehlt noch', 'No number yet') : s.phone),
-            contentPadding: EdgeInsets.zero,
+        for (var i = 0; i < chats.length; i++)
+          PopupMenuItem(
+            value: 10 + i,
+            child: ListTile(
+              leading: const Icon(Icons.chat_outlined),
+              title: Text(
+                members.isEmpty
+                    ? tr('Per WhatsApp', 'By WhatsApp')
+                    : tr('Per WhatsApp an ${chats[i].name}', 'By WhatsApp to ${chats[i].name}'),
+              ),
+              subtitle: Text(chats[i].phone.isEmpty ? tr('Nummer fehlt noch', 'No number yet') : chats[i].phone),
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
-        ),
         PopupMenuItem(
           value: 2,
           enabled: s.activePieces.isNotEmpty,
@@ -249,13 +263,13 @@ class _StudentPageState extends State<StudentPage> {
     if (!mounted || choice == null) return;
     switch (choice) {
       case 0:
-        await sendHomeworkByEmail(s, l);
-      case 1:
-        await sendHomeworkByWhatsApp(s, l);
+        await sendHomeworkByEmail(s, l, members: members);
       case 2:
         final pieces = await _choosePieces(s);
         if (pieces == null || pieces.isEmpty || !mounted) return;
         await shareHomeworkPdf(context, library, s, l, pieces);
+      default:
+        await sendHomeworkByWhatsApp(s, l, members: members, phone: chats[choice - 10].phone);
     }
   }
 
@@ -425,18 +439,32 @@ class _StudentPageState extends State<StudentPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(tr('Kartei von ${s.name} löschen?', 'Delete record of ${s.name}?')),
+        title: Text(
+          s.isGroup
+              ? tr('Gruppe ${s.name} auflösen?', 'Dissolve group ${s.name}?')
+              : tr('Kartei von ${s.name} löschen?', 'Delete record of ${s.name}?'),
+        ),
         content: Text(
-          tr(
-            'Lektionen, Hausaufgaben, Repertoire und Notizen werden gelöscht. Die Noten in der Bibliothek bleiben. '
-                'Tipp: Mit „Archivieren“ bleibt alles erhalten.',
-            'Lessons, homework, repertoire and notes will be deleted. The music in the library stays. '
-                'Tip: “Archive” keeps everything.',
-          ),
+          s.isGroup
+              ? tr(
+                  'Die Mitglieder behalten ihre eigenen Karteien und Absenzen. Lektionen, Repertoire und Notizen '
+                      'der Gruppe werden gelöscht. Tipp: Mit „Archivieren“ bleibt alles erhalten.',
+                  'Members keep their own records and attendance. The group’s lessons, repertoire and notes '
+                      'will be deleted. Tip: “Archive” keeps everything.',
+                )
+              : tr(
+                  'Lektionen, Hausaufgaben, Repertoire und Notizen werden gelöscht. Die Noten in der Bibliothek bleiben. '
+                      'Tipp: Mit „Archivieren“ bleibt alles erhalten.',
+                  'Lessons, homework, repertoire and notes will be deleted. The music in the library stays. '
+                      'Tip: “Archive” keeps everything.',
+                ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(c).pop(false), child: Text(tr('Abbrechen', 'Cancel'))),
-          FilledButton(onPressed: () => Navigator.of(c).pop(true), child: Text(tr('Löschen', 'Delete'))),
+          FilledButton(
+            onPressed: () => Navigator.of(c).pop(true),
+            child: Text(s.isGroup ? tr('Auflösen', 'Dissolve') : tr('Löschen', 'Delete')),
+          ),
         ],
       ),
     );
@@ -445,6 +473,18 @@ class _StudentPageState extends State<StudentPage> {
     _homework.clear();
     await library.deleteStudent(s);
     widget.onDeleted?.call();
+  }
+
+  Future<void> _editMembers() async {
+    final s = _student;
+    if (s == null) return;
+    final members = await showGroupMembersDialog(context, library, group: s);
+    if (members == null || members.length < 2) return;
+    s
+      ..members.clear()
+      ..members.addAll(members)
+      ..touch();
+    await library.saveStudent(s);
   }
 
   // ------------------------------------------------------------ Aufbau
@@ -466,7 +506,13 @@ class _StudentPageState extends State<StudentPage> {
                 _pastLessons(context, s),
                 const SizedBox(height: 90), // Platz für die schwebende Leiste
               ];
-              final right = [_repertoire(context, s), const Divider(height: 40), _memos(context, s)];
+              final right = [
+                _repertoire(context, s),
+                const Divider(height: 40),
+                _todos(context, s),
+                const Divider(height: 40),
+                _memos(context, s),
+              ];
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -486,7 +532,9 @@ class _StudentPageState extends State<StudentPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
                     child: AttendanceTable(
-                      student: s,
+                      students: s.isGroup ? _members(s) : [s],
+                      // Mitglied einer Gruppe: Unterrichtstag der Gruppe.
+                      weekday: s.weekday ?? library.groupOf(s.id)?.weekday,
                       calendar: library.calendar,
                       onSet: _setAttendance,
                       onGrade: _setGrade,
@@ -535,6 +583,7 @@ class _StudentPageState extends State<StudentPage> {
       if (s.birthday != null)
         tr('${ageOn(s.birthday!, DateTime.now())} Jahre', '${ageOn(s.birthday!, DateTime.now())} years'),
     ].join(' | ');
+    final group = s.isGroup ? null : library.groupOf(s.id);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 16, 14),
       child: Row(
@@ -545,7 +594,7 @@ class _StudentPageState extends State<StudentPage> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.person_outline, color: scheme.primary),
+                    Icon(s.isGroup ? Icons.groups_outlined : Icons.person_outline, color: scheme.primary),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
@@ -560,13 +609,19 @@ class _StudentPageState extends State<StudentPage> {
                       onSelected: (a) => a(),
                       itemBuilder: (_) => [
                         PopupMenuItem(value: _editStudent, child: Text(tr('Angaben bearbeiten …', 'Edit details …'))),
+                        if (s.isGroup) PopupMenuItem(value: _editMembers, child: Text(tr('Mitglieder …', 'Members …'))),
                         PopupMenuItem(
                           value: () => _archive(!s.archived),
                           child: Text(
                             s.archived ? tr('Aus dem Archiv holen', 'Restore') : tr('Archivieren', 'Archive'),
                           ),
                         ),
-                        PopupMenuItem(value: _delete, child: Text(tr('Löschen …', 'Delete …'))),
+                        PopupMenuItem(
+                          value: _delete,
+                          child: Text(
+                            s.isGroup ? tr('Gruppe auflösen …', 'Dissolve group …') : tr('Löschen …', 'Delete …'),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -578,6 +633,29 @@ class _StudentPageState extends State<StudentPage> {
                     style: theme.textTheme.bodyMedium?.copyWith(color: when.isEmpty ? scheme.primary : null),
                   ),
                 ),
+                // Gruppe: Mitglieder; Mitglied: seine Gruppe. Antippen öffnet die Kartei.
+                if (s.isGroup || group != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          s.isGroup ? tr('Mitglieder:', 'Members:') : tr('In der Gruppe:', 'In group:'),
+                          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                        for (final m in s.isGroup ? _members(s) : [group!])
+                          ActionChip(
+                            visualDensity: VisualDensity.compact,
+                            avatar: Icon(m.isGroup ? Icons.groups_outlined : Icons.person_outline, size: 16),
+                            label: Text(m.name),
+                            onPressed: widget.onOpen == null ? null : () => widget.onOpen!(m),
+                          ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -918,6 +996,53 @@ class _StudentPageState extends State<StudentPage> {
           ),
           ...learned.map(tile),
         ],
+      ],
+    );
+  }
+
+  /// To-Dos dieser Kartei (offene; erledigte auf Wunsch).
+  Widget _todos(BuildContext context, Student s) {
+    final theme = Theme.of(context);
+    final all = sortTodos(library.todos.where((t) => t.student == s.id));
+    final open = all.where((t) => !t.done).toList();
+    final done = all.where((t) => t.done).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _title2(
+          context,
+          tr('To-Dos', 'To-dos'),
+          trailing: [
+            const Spacer(),
+            OutlinedButton.icon(
+              onPressed: () => showTodoDialog(context, library, student: s.id),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(tr('Erstellen', 'Create')),
+            ),
+          ],
+        ),
+        if (open.isEmpty)
+          _EmptyBox(
+            text: tr('Nichts offen', 'Nothing open'),
+            action: null,
+            onTap: () => showTodoDialog(context, library, student: s.id),
+          ),
+        for (final t in open) TodoTile(todo: t, library: library),
+        if (done.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => setState(() => _doneTodos = !_doneTodos),
+              child: Text(
+                _doneTodos
+                    ? tr('Erledigte ausblenden', 'Hide done')
+                    : tr('Erledigte anzeigen (${done.length})', 'Show done (${done.length})'),
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          ),
+        if (_doneTodos)
+          for (final t in done) TodoTile(todo: t, library: library),
       ],
     );
   }

@@ -10,7 +10,9 @@ import 'homework_share.dart' show shortDate;
 import '../../core/teaching/school_level.dart';
 import 'student_dialog.dart';
 import 'student_page.dart';
+import 'dashboard.dart';
 import 'timetable.dart';
+import 'todo_widgets.dart';
 
 /// Bereich „Unterricht“ (nur sichtbar, wenn unter ⚙ eingeschaltet).
 ///
@@ -30,7 +32,7 @@ class TeachingView extends StatefulWidget {
   State<TeachingView> createState() => _TeachingViewState();
 }
 
-enum _Section { teach, students, timetable, absences }
+enum _Section { dashboard, teach, students, timetable, absences, todos }
 
 class _TeachingViewState extends State<TeachingView> with LibraryActions {
   @override
@@ -38,7 +40,7 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
   @override
   SyncController get syncController => widget.sync;
 
-  _Section _section = _Section.teach;
+  _Section _section = _Section.dashboard;
 
   /// Person in „Unterrichten“ (ID). Ohne Wahl: wer jetzt bzw. als Nächstes dran ist.
   String? _current;
@@ -55,8 +57,8 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
     super.dispose();
   }
 
-  /// Nochmals auf „Unterricht“ getippt: zurück zu „Unterrichten“.
-  void _onReset() => setState(() => _section = _Section.teach);
+  /// Nochmals auf „Unterricht“ getippt: zurück zur Übersicht.
+  void _onReset() => setState(() => _section = _Section.dashboard);
 
   void _open(Student s) => setState(() {
     _current = s.id;
@@ -70,11 +72,28 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
     if (mounted) _open(s);
   }
 
+  /// Mehrere Schüler:innen zu einer Gruppe zusammenfassen (eine Kartei für alle).
+  Future<void> _createGroup() async {
+    final members = await showGroupMembersDialog(context, library);
+    if (members == null || members.length < 2 || !mounted) return;
+    final first = library.studentById(members.first)!;
+    final group = Student.create(members.map((id) => library.studentById(id)!.name.split(' ').first).join(' & '))
+      ..members.addAll(members)
+      ..instrument = first.instrument
+      ..weekday = first.weekday
+      ..time = first.time
+      ..duration = first.duration
+      ..place = first.place;
+    if (!await showStudentDialog(context, group, isNew: true)) return;
+    final saved = await library.saveStudent(group);
+    if (mounted) _open(saved);
+  }
+
   /// Reihenfolge wie im Stundenplan, beginnend mit heute.
   List<Student> get _ordered {
     final today = DateTime.now().weekday;
     int dayRank(Student s) => s.weekday == null ? 99 : (s.weekday! - today + 7) % 7;
-    return library.students.where((s) => !s.archived).toList()..sort((a, b) {
+    return teachingUnits(library).toList()..sort((a, b) {
       final c = dayRank(a).compareTo(dayRank(b));
       if (c != 0) return c;
       final t = a.minutes.compareTo(b.minutes);
@@ -127,6 +146,7 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
                       studentId: current.id,
                       actions: headerActions(),
                       onDeleted: () => setState(() => _current = null),
+                      onOpen: _open,
                       banner: BirthdayBanner(students: library.students, onOpen: _open),
                     ),
                   ),
@@ -149,6 +169,10 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
             content = TimetableView(library: library, actions: headerActions(), onOpen: _open);
           case _Section.absences:
             content = _AbsencesSection(state: this);
+          case _Section.dashboard:
+            content = DashboardView(library: library, actions: headerActions(), onOpen: _open, onAdd: _add);
+          case _Section.todos:
+            content = _TodosSection(state: this);
         }
         return Row(
           children: [
@@ -160,6 +184,11 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
               labelType: NavigationRailLabelType.all,
               onDestinationSelected: (i) => setState(() => _section = _Section.values[i]),
               destinations: [
+                NavigationRailDestination(
+                  icon: const Icon(Icons.dashboard_outlined),
+                  selectedIcon: const Icon(Icons.dashboard),
+                  label: Text(tr('Übersicht', 'Overview')),
+                ),
                 NavigationRailDestination(
                   icon: const Icon(Icons.co_present_outlined),
                   selectedIcon: const Icon(Icons.co_present),
@@ -179,6 +208,11 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
                   icon: const Icon(Icons.event_busy_outlined),
                   selectedIcon: const Icon(Icons.event_busy),
                   label: Text(tr('Absenzen', 'Absences')),
+                ),
+                NavigationRailDestination(
+                  icon: const Icon(Icons.checklist_outlined),
+                  selectedIcon: const Icon(Icons.checklist),
+                  label: Text(tr('To-Dos', 'To-dos')),
                 ),
               ],
             ),
@@ -330,18 +364,35 @@ class _StudentsSectionState extends State<_StudentsSection> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final lib = widget.state.library;
-    final active = lib.students.where((s) => !s.archived).toList();
+    final active = teachingUnits(lib).toList();
     final archived = lib.students.where((s) => s.archived).toList();
     final days = [
       for (var d = 1; d <= 7; d++)
         if (active.any((s) => s.weekday == d)) d,
     ];
     final noDay = active.where((s) => s.weekday == null).toList();
-    Widget tile(Student s) => ListTile(
-      title: Text(s.name),
-      subtitle: Text(studentSummary(s)),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => widget.state._open(s),
+    Widget tile(Student s) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          leading: Icon(s.isGroup ? Icons.groups_outlined : Icons.person_outline, color: scheme.primary),
+          title: Text(s.name),
+          subtitle: Text(studentSummary(s)),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => widget.state._open(s),
+        ),
+        // Mitglieder einer Gruppe eingerückt (für Geburtstag, Klasse, Kontakt).
+        if (s.isGroup)
+          for (final id in s.members)
+            if (lib.studentById(id) case final m?)
+              ListTile(
+                dense: true,
+                contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                title: Text(m.name),
+                subtitle: Text(studentSummary(m)),
+                onTap: () => widget.state._open(m),
+              ),
+      ],
     );
     Widget header(String text) => Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
@@ -357,6 +408,12 @@ class _StudentsSectionState extends State<_StudentsSection> {
           title: tr('Schüler:innen', 'Students'),
           subtitle: tr('${active.length} aktiv', '${active.length} active'),
           trailing: [
+            OutlinedButton.icon(
+              onPressed: widget.state._createGroup,
+              icon: const Icon(Icons.groups_outlined, size: 18),
+              label: Text(tr('Gruppe bilden', 'Make group')),
+            ),
+            const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: widget.state._add,
               icon: const Icon(Icons.person_add_alt, size: 18),
@@ -577,6 +634,80 @@ class BirthdayBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Was im Unterricht als eigene Kartei erscheint: alle aktiven Karteien
+/// ausser den Mitgliedern einer (aktiven) Gruppe – für sie gilt die Gruppe.
+Iterable<Student> teachingUnits(LibraryController library) =>
+    library.students.where((s) => !s.archived && library.groupOf(s.id) == null);
+
+/// Alle To-Dos: offene nach Termin, erledigte eingeklappt.
+class _TodosSection extends StatefulWidget {
+  const _TodosSection({required this.state});
+  final _TeachingViewState state;
+
+  @override
+  State<_TodosSection> createState() => _TodosSectionState();
+}
+
+class _TodosSectionState extends State<_TodosSection> {
+  bool _showDone = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lib = widget.state.library;
+    final all = sortTodos(lib.todos);
+    final open = all.where((t) => !t.done).toList();
+    final done = all.where((t) => t.done).toList();
+    void openStudent(String id) {
+      final s = lib.studentById(id);
+      if (s != null) widget.state._open(s);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TeachingTopBar(
+          title: tr('To-Dos', 'To-dos'),
+          subtitle: tr('${open.length} offen', '${open.length} open'),
+          trailing: [
+            FilledButton.icon(
+              onPressed: () => showTodoDialog(context, lib, chooseStudent: true),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(tr('Neues To-Do', 'New to-do')),
+            ),
+            const SizedBox(width: 8),
+            ...widget.state.headerActions(),
+          ],
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 32),
+            children: [
+              if (open.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(tr('Nichts offen. 🎉', 'Nothing open. 🎉'), style: theme.textTheme.bodyLarge),
+                ),
+              for (final t in open) TodoTile(todo: t, library: lib, showStudent: true, onOpenStudent: openStudent),
+              if (done.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: Icon(_showDone ? Icons.expand_less : Icons.expand_more),
+                  title: Text(tr('Erledigt (${done.length})', 'Done (${done.length})')),
+                  onTap: () => setState(() => _showDone = !_showDone),
+                ),
+                if (_showDone)
+                  for (final t in done) TodoTile(todo: t, library: lib, showStudent: true, onOpenStudent: openStudent),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

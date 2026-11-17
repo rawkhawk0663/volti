@@ -28,7 +28,7 @@ class Student {
     this.phone = '',
     this.weekday,
     this.time,
-    this.duration = 45,
+    this.duration = 25,
     this.place = '',
     this.group = '',
     this.notes = '',
@@ -38,10 +38,12 @@ class Student {
     this.levelYear,
     this.track,
     Map<String, String>? grades,
+    List<String>? members,
     Map<String, StudentPiece>? pieces,
     Map<String, Lesson>? lessons,
     Map<String, StudentNote>? memos,
   }) : grades = grades ?? {},
+       members = members ?? [],
        pieces = pieces ?? {},
        lessons = lessons ?? {},
        memos = memos ?? {};
@@ -85,6 +87,12 @@ class Student {
 
   /// Heutige Klassenstufe als Kürzel (null = unbekannt oder nach der Oberstufe).
   String? currentLevel([DateTime? now]) => SchoolLevel.current(level, levelYear, track, now ?? DateTime.now()).code;
+
+  /// Gruppe: IDs der Mitglieder (selbst einzelne Karteien). Leer = einzelne Person.
+  /// Eine Gruppe hat eigene Lektionen, Hausaufgaben, Stücke und Notizen; die
+  /// Absenzen bleiben bei den Mitgliedern.
+  final List<String> members;
+  bool get isGroup => members.isNotEmpty;
 
   /// Note pro Semester (Semester-ID → Text), Teil der Angaben zur Person.
   final Map<String, String> grades;
@@ -165,6 +173,7 @@ class Student {
     if (notes.isNotEmpty) 'notes': notes,
     if (archived) 'archived': true,
     if (grades.isNotEmpty) 'grades': grades,
+    if (members.isNotEmpty) 'members': members,
     if (birthday != null)
       'birthday':
           '${birthday!.year.toString().padLeft(4, '0')}-${birthday!.month.toString().padLeft(2, '0')}-${birthday!.day.toString().padLeft(2, '0')}',
@@ -185,7 +194,8 @@ class Student {
     phone: j['phone'] as String? ?? '',
     weekday: (j['weekday'] as num?)?.toInt(),
     time: j['time'] as String?,
-    duration: (j['duration'] as num?)?.toInt() ?? 45,
+    duration: (j['duration'] as num?)?.toInt() ?? 25,
+    members: [for (final m in j['members'] as List? ?? const []) m as String],
     place: j['place'] as String? ?? '',
     group: j['group'] as String? ?? '',
     notes: j['notes'] as String? ?? '',

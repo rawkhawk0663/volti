@@ -13,6 +13,7 @@ import '../../core/library/setlist.dart';
 import '../../core/library/sidecar_store.dart';
 import '../../core/teaching/school_calendar.dart';
 import '../../core/teaching/student.dart';
+import '../../core/teaching/todo.dart';
 import '../../core/pdf/paper.dart';
 import '../../core/pdf/paper_pdf.dart';
 import 'auto_backup_controller.dart';
@@ -62,6 +63,28 @@ class LibraryController extends ChangeNotifier {
   /// Unterricht: Karteien der Schüler:innen (nach Name).
   List<Student> _students = [];
   List<Student> get students => _students;
+
+  /// To-Dos des Unterrichts (ID → To-Do, inkl. gelöschter).
+  Map<String, Todo> _todos = {};
+
+  /// Offene und erledigte To-Dos (ohne gelöschte).
+  List<Todo> get todos => _todos.values.where((t) => !t.deleted).toList();
+
+  Future<void> saveTodo(Todo t) async {
+    t.touch();
+    _todos = await TodoStore.save(root, {..._todos, t.id: t});
+    notifyListeners();
+    onLocalChange?.call();
+  }
+
+  Future<void> deleteTodo(Todo t) async {
+    t.deleted = true;
+    await saveTodo(t);
+  }
+
+  /// Gruppe, zu der eine Person gehört (null = keine).
+  Student? groupOf(String studentId) =>
+      _students.where((g) => g.isGroup && !g.archived && g.members.contains(studentId)).firstOrNull;
 
   /// Semester, Ferien und Feiertage des Unterrichts.
   SchoolCalendar calendar = SchoolCalendar();
@@ -113,6 +136,7 @@ class LibraryController extends ChangeNotifier {
       _setlists = await _setlistStore.loadAll();
       _students = await _studentStore.loadAll();
       calendar = await SchoolCalendar.load(root);
+      _todos = await TodoStore.load(root);
       await scoreFolders.load();
       await setlistFolders.load();
     } catch (e) {

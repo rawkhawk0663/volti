@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/l10n.dart';
 import '../../core/teaching/school_level.dart';
 import '../../core/teaching/student.dart';
+import '../library/library_controller.dart';
 
 /// Namen der Wochentage (1 = Montag).
 String weekdayName(int d) => switch (d) {
@@ -97,6 +99,7 @@ class _StudentDialogState extends State<_StudentDialog> {
   late int? _weekday = s.weekday;
   late TimeOfDay? _time = _parse(s.time);
   late int _duration = s.duration;
+  late final _durationText = TextEditingController(text: '${s.duration}');
   late DateTime? _birthday = s.birthday;
 
   /// Heutige Klassenstufe (Kürzel), null = keine Angabe.
@@ -113,7 +116,7 @@ class _StudentDialogState extends State<_StudentDialog> {
 
   @override
   void dispose() {
-    for (final c in [_name, _instrument, _place, _email, _phone]) {
+    for (final c in [_name, _instrument, _place, _email, _phone, _durationText]) {
       c.dispose();
     }
     super.dispose();
@@ -149,7 +152,11 @@ class _StudentDialogState extends State<_StudentDialog> {
     final theme = Theme.of(context);
     InputDecoration deco(String label, [String? hint]) => InputDecoration(labelText: label, hintText: hint);
     return AlertDialog(
-      title: Text(widget.isNew ? tr('Neue:r Schüler:in', 'New student') : tr('Angaben', 'Details')),
+      title: Text(
+        widget.isNew
+            ? (s.isGroup ? tr('Neue Gruppe', 'New group') : tr('Neue:r Schüler:in', 'New student'))
+            : tr('Angaben', 'Details'),
+      ),
       content: SizedBox(
         width: 440,
         child: SingleChildScrollView(
@@ -200,14 +207,15 @@ class _StudentDialogState extends State<_StudentDialog> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<int>(
-                      initialValue: [20, 25, 30, 40, 45, 50, 60, 90].contains(_duration) ? _duration : null,
-                      decoration: deco(tr('Dauer', 'Length')),
-                      items: [
-                        for (final m in [20, 25, 30, 40, 45, 50, 60, 90])
-                          DropdownMenuItem(value: m, child: Text(tr('$m Minuten', '$m minutes'))),
-                      ],
-                      onChanged: (v) => setState(() => _duration = v ?? _duration),
+                    child: TextField(
+                      controller: _durationText,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: deco(tr('Dauer (Minuten)', 'Length (minutes)')),
+                      onChanged: (v) {
+                        final m = int.tryParse(v);
+                        if (m != null && m > 0) _duration = m;
+                      },
                     ),
                   ),
                 ],
@@ -217,93 +225,98 @@ class _StudentDialogState extends State<_StudentDialog> {
                 controller: _place,
                 decoration: deco(tr('Ort', 'Place'), tr('z. B. Musikschule', 'e.g. music school')),
               ),
-              const SizedBox(height: 20),
-              Text(tr('Geburtstag und Klasse', 'Birthday and class'), style: theme.textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.cake_outlined, size: 18),
-                    label: Text(_birthday == null ? tr('Geburtstag eintragen', 'Add birthday') : longDate(_birthday!)),
-                    onPressed: () async {
-                      final d = await showDatePicker(
-                        context: context,
-                        initialDate: _birthday ?? DateTime(DateTime.now().year - 10, 1, 1),
-                        firstDate: DateTime(1920),
-                        lastDate: DateTime.now(),
-                        initialDatePickerMode: DatePickerMode.year,
-                      );
-                      if (d != null) setState(() => _birthday = d);
-                    },
-                  ),
-                  if (_birthday != null)
-                    IconButton(
-                      tooltip: tr('Entfernen', 'Remove'),
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () => setState(() => _birthday = null),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                tr(
-                  'Klasse heute (steigt jedes Jahr Mitte Juli von selbst um eine Stufe)',
-                  'Class today (goes up by one every year in mid-July)',
-                ),
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  ChoiceChip(
-                    label: Text(tr('keine', 'none')),
-                    selected: _level == null,
-                    onSelected: (_) => setState(() => _level = null),
-                  ),
-                  for (var i = 1; i <= 6; i++)
-                    ChoiceChip(
-                      label: Text('P$i'),
-                      selected: _level == 'P$i',
-                      onSelected: (_) => setState(() => _level = 'P$i'),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              for (final t in SchoolLevel.tracks)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    children: [
-                      SizedBox(width: 120, child: Text(SchoolLevel.trackName(t), style: theme.textTheme.bodySmall)),
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          for (var i = 1; i <= 3; i++)
-                            ChoiceChip(
-                              label: Text('$t$i'),
-                              selected: _level == '$t$i',
-                              onSelected: (_) => setState(() => _level = '$t$i'),
-                            ),
-                        ],
+              // Bei einer Gruppe stehen Geburtstag, Klasse und Kontakt bei den Mitgliedern.
+              if (!s.isGroup) ...[
+                const SizedBox(height: 20),
+                Text(tr('Geburtstag und Klasse', 'Birthday and class'), style: theme.textTheme.labelLarge),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.cake_outlined, size: 18),
+                      label: Text(
+                        _birthday == null ? tr('Geburtstag eintragen', 'Add birthday') : longDate(_birthday!),
                       ),
-                    ],
-                  ),
+                      onPressed: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: _birthday ?? DateTime(DateTime.now().year - 10, 1, 1),
+                          firstDate: DateTime(1920),
+                          lastDate: DateTime.now(),
+                          initialDatePickerMode: DatePickerMode.year,
+                        );
+                        if (d != null) setState(() => _birthday = d);
+                      },
+                    ),
+                    if (_birthday != null)
+                      IconButton(
+                        tooltip: tr('Entfernen', 'Remove'),
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => setState(() => _birthday = null),
+                      ),
+                  ],
                 ),
-              const SizedBox(height: 20),
-              Text(tr('Kontakt (für die Hausaufgaben)', 'Contact (for homework)'), style: theme.textTheme.labelLarge),
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: deco(tr('E-Mail', 'Email')),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                decoration: deco(tr('Handy (WhatsApp)', 'Mobile (WhatsApp)'), '079 123 45 67'),
-              ),
+                const SizedBox(height: 10),
+                Text(
+                  tr(
+                    'Klasse heute (steigt jedes Jahr Mitte Juli von selbst um eine Stufe)',
+                    'Class today (goes up by one every year in mid-July)',
+                  ),
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: Text(tr('keine', 'none')),
+                      selected: _level == null,
+                      onSelected: (_) => setState(() => _level = null),
+                    ),
+                    for (var i = 1; i <= 6; i++)
+                      ChoiceChip(
+                        label: Text('P$i'),
+                        selected: _level == 'P$i',
+                        onSelected: (_) => setState(() => _level = 'P$i'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                for (final t in SchoolLevel.tracks)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 120, child: Text(SchoolLevel.trackName(t), style: theme.textTheme.bodySmall)),
+                        Wrap(
+                          spacing: 6,
+                          children: [
+                            for (var i = 1; i <= 3; i++)
+                              ChoiceChip(
+                                label: Text('$t$i'),
+                                selected: _level == '$t$i',
+                                onSelected: (_) => setState(() => _level = '$t$i'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 20),
+                Text(tr('Kontakt (für die Hausaufgaben)', 'Contact (for homework)'), style: theme.textTheme.labelLarge),
+                TextField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: deco(tr('E-Mail', 'Email')),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: deco(tr('Handy (WhatsApp)', 'Mobile (WhatsApp)'), '079 123 45 67'),
+                ),
+              ],
             ],
           ),
         ),
@@ -314,4 +327,68 @@ class _StudentDialogState extends State<_StudentDialog> {
       ],
     );
   }
+}
+
+/// Mitglieder einer Gruppe wählen (mindestens zwei). [group]: bestehende Gruppe
+/// zum Bearbeiten. Gibt die IDs zurück oder null.
+Future<List<String>?> showGroupMembersDialog(BuildContext context, LibraryController library, {Student? group}) {
+  // Wählbar: einzelne, aktive Karteien, die nicht schon in einer anderen Gruppe sind.
+  final candidates = library.students.where((s) {
+    if (s.isGroup || s.archived) return false;
+    final g = library.groupOf(s.id);
+    return g == null || g.id == group?.id;
+  }).toList();
+  final chosen = {...?group?.members};
+  return showDialog<List<String>>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setDialog) => AlertDialog(
+        title: Text(group == null ? tr('Gruppe bilden', 'Make group') : tr('Mitglieder', 'Members')),
+        content: SizedBox(
+          width: 400,
+          child: candidates.length < 2 && group == null
+              ? Text(
+                  tr(
+                    'Lege zuerst mindestens zwei Schüler:innen einzeln an. Dann kannst du sie hier zusammenfassen.',
+                    'First create at least two students individually. Then you can combine them here.',
+                  ),
+                )
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    Text(
+                      tr(
+                        'Die Gruppe bekommt eine gemeinsame Kartei für Lektionen und Hausaufgaben. '
+                            'Absenzen, Geburtstag und Klasse bleiben bei jeder Person.',
+                        'The group gets a shared record for lessons and homework. '
+                            'Absences, birthday and class stay with each person.',
+                      ),
+                      style: Theme.of(c).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    for (final s in candidates)
+                      CheckboxListTile(
+                        value: chosen.contains(s.id),
+                        title: Text(s.name),
+                        subtitle: Text(studentSummary(s)),
+                        onChanged: (v) => setDialog(() => v == true ? chosen.add(s.id) : chosen.remove(s.id)),
+                      ),
+                  ],
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(c).pop(), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(
+            onPressed: chosen.length < 2
+                ? null
+                : () => Navigator.of(c).pop([
+                    for (final s in candidates)
+                      if (chosen.contains(s.id)) s.id,
+                  ]),
+            child: Text(group == null ? tr('Weiter', 'Next') : tr('Übernehmen', 'Apply')),
+          ),
+        ],
+      ),
+    ),
+  );
 }

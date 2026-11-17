@@ -111,10 +111,10 @@ List<_HelpPage> get _pages => [
       'The metronome (at the top of the music view) picks up the tempo of each song. Next to it are the tuner and pitch pipe.',
     ),
     tr(
-      'Für Lehrpersonen: Unter ⚙ lässt sich der Bereich „Unterricht“ einschalten, mit einer Kartei pro Schüler:in. '
-          'Notizen in den Noten gelten dort nur für diese Person.',
-      'For teachers: under ⚙ you can switch on the “Teaching” area, with a record per student. '
-          'Notes in the music there apply only to that person.',
+      'Für Lehrpersonen: Unter ⚙ lässt sich der Bereich „Unterricht“ einschalten, mit einer Übersicht über den Tag, '
+          'einer Kartei pro Schüler:in oder Gruppe und To-Dos. Notizen in den Noten gelten dort nur für diese Person.',
+      'For teachers: under ⚙ you can switch on the “Teaching” area, with an overview of the day, '
+          'a record per student or group, and to-dos. Notes in the music there apply only to that person.',
     ),
   ]),
   _HelpPage(Icons.cloud_sync_outlined, tr('Abgleichen und sichern', 'Sync and backup'), [
