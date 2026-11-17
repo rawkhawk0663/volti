@@ -199,6 +199,10 @@ flutter analyze
 flutter test
 ```
 
+## Einheitliche Knöpfe (Wunsch des Besitzers, gilt überall, auch für neue Seiten)
+- **Anlegen und Hinzufügen** einer Seite („Importieren“, „Neue Setlist“, „Stücke hinzufügen“, „Neue:r Schüler:in“, „Gruppe bilden“, „Neues To-Do“ …) steht immer als schwebender Knopf **unten rechts** (`FloatingActionButton.extended`; in Seiten ohne eigenes `Scaffold` über `FloatingActions`/`floatingAction` in `lib/app/floating_actions.dart`). Mehrere nebeneinander, die Hauptaktion mit „+“ ganz rechts. Nicht in die Kopfzeile. Listen darunter brauchen unten 96 Punkte Platz. Knöpfe *innerhalb* einer Karte (z. B. Repertoire „Hinzufügen“) bleiben in der Karte.
+- **Farbe:** Alle schwebenden Knöpfe haben dasselbe Seegrün (`colorScheme.primaryContainer` mit `onPrimaryContainer`, Standard der FAB), auch runde Symbol-Knöpfe in schwebenden Leisten (z. B. Suche und ← → in „Unterrichten“, `_NavPill`).
+
 ## Bedienung nur mit Finger/Stift
 - Die App soll vollständig als reine Tablet-App bedienbar sein (Wunsch des Besitzers). **Langes Drücken ist überall der Rechtsklick.** Wo es ein Rechtsklick-Menü gibt, braucht es auch `onLongPress`. Hinweise (`Tooltip`) erscheinen deshalb nur beim Darüberfahren mit der Maus (`TooltipTriggerMode.manual` im Theme), damit sie das lange Drücken nicht abfangen.
 

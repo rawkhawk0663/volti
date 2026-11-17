@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../app/floating_actions.dart';
 import '../../app/l10n.dart';
 import '../../core/teaching/school_calendar.dart';
 import '../../core/teaching/student.dart';
@@ -307,7 +308,16 @@ class _NavPill extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     Widget round(IconData icon, String tip, VoidCallback? onTap) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: IconButton.filledTonal(tooltip: tip, onPressed: onTap, icon: Icon(icon)),
+      // Gleiches Seegrün wie die schwebenden Knöpfe unten rechts.
+      child: IconButton.filled(
+        tooltip: tip,
+        onPressed: onTap,
+        icon: Icon(icon),
+        style: IconButton.styleFrom(
+          backgroundColor: scheme.primaryContainer,
+          foregroundColor: scheme.onPrimaryContainer,
+        ),
+      ),
     );
     return Material(
       color: scheme.surfaceContainerHigh,
@@ -439,51 +449,53 @@ class _StudentsSectionState extends State<_StudentsSection> {
         style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700),
       ),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TeachingTopBar(
-          title: tr('Schüler:innen', 'Students'),
-          subtitle: tr('${active.length} aktiv', '${active.length} active'),
-          trailing: [
-            OutlinedButton.icon(
-              onPressed: widget.state._createGroup,
-              icon: const Icon(Icons.groups_outlined, size: 18),
-              label: Text(tr('Gruppe bilden', 'Make group')),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: widget.state._add,
-              icon: const Icon(Icons.person_add_alt, size: 18),
-              label: Text(tr('Neue:r Schüler:in', 'New student')),
-            ),
-            const SizedBox(width: 8),
-            ...widget.state.headerActions(),
-          ],
+    return FloatingActions(
+      actions: [
+        floatingAction(
+          tag: 'group',
+          icon: Icons.groups_outlined,
+          label: tr('Gruppe bilden', 'Make group'),
+          onPressed: widget.state._createGroup,
         ),
-        const Divider(height: 1),
-        BirthdayBanner(students: lib.students, onOpen: widget.state._open),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 32),
-            children: [
-              if (lib.students.isEmpty)
-                Padding(padding: const EdgeInsets.all(16), child: Text(tr('Noch niemand erfasst.', 'Nobody yet.'))),
-              for (final d in days) ...[header(weekdayName(d)), for (final s in studentsOn(active, d)) tile(s)],
-              if (noDay.isNotEmpty) ...[header(tr('Ohne festen Tag', 'No fixed day')), ...noDay.map(tile)],
-              if (archived.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: Icon(_archive ? Icons.expand_less : Icons.expand_more),
-                  title: Text(tr('Archiv (${archived.length})', 'Archive (${archived.length})')),
-                  onTap: () => setState(() => _archive = !_archive),
-                ),
-                if (_archive) ...archived.map(tile),
-              ],
-            ],
-          ),
+        floatingAction(
+          tag: 'student',
+          icon: Icons.add,
+          label: tr('Neue:r Schüler:in', 'New student'),
+          onPressed: widget.state._add,
         ),
       ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TeachingTopBar(
+            title: tr('Schüler:innen', 'Students'),
+            subtitle: tr('${active.length} aktiv', '${active.length} active'),
+            trailing: widget.state.headerActions(),
+          ),
+          const Divider(height: 1),
+          BirthdayBanner(students: lib.students, onOpen: widget.state._open),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 96),
+              children: [
+                if (lib.students.isEmpty)
+                  Padding(padding: const EdgeInsets.all(16), child: Text(tr('Noch niemand erfasst.', 'Nobody yet.'))),
+                for (final d in days) ...[header(weekdayName(d)), for (final s in studentsOn(active, d)) tile(s)],
+                if (noDay.isNotEmpty) ...[header(tr('Ohne festen Tag', 'No fixed day')), ...noDay.map(tile)],
+                if (archived.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  ListTile(
+                    leading: Icon(_archive ? Icons.expand_less : Icons.expand_more),
+                    title: Text(tr('Archiv (${archived.length})', 'Archive (${archived.length})')),
+                    onTap: () => setState(() => _archive = !_archive),
+                  ),
+                  if (_archive) ...archived.map(tile),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -753,47 +765,50 @@ class _TodosSectionState extends State<_TodosSection> {
       if (s != null) widget.state._open(s);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TeachingTopBar(
-          title: tr('To-Dos', 'To-dos'),
-          subtitle: tr('${open.length} offen', '${open.length} open'),
-          trailing: [
-            FilledButton.icon(
-              onPressed: () => showTodoDialog(context, lib, chooseStudent: true),
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(tr('Neues To-Do', 'New to-do')),
-            ),
-            const SizedBox(width: 8),
-            ...widget.state.headerActions(),
-          ],
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 32),
-            children: [
-              if (open.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(tr('Nichts offen. 🎉', 'Nothing open. 🎉'), style: theme.textTheme.bodyLarge),
-                ),
-              for (final t in open) TodoTile(todo: t, library: lib, showStudent: true, onOpenStudent: openStudent),
-              if (done.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: Icon(_showDone ? Icons.expand_less : Icons.expand_more),
-                  title: Text(tr('Erledigt (${done.length})', 'Done (${done.length})')),
-                  onTap: () => setState(() => _showDone = !_showDone),
-                ),
-                if (_showDone)
-                  for (final t in done) TodoTile(todo: t, library: lib, showStudent: true, onOpenStudent: openStudent),
-              ],
-            ],
-          ),
+    return FloatingActions(
+      actions: [
+        floatingAction(
+          tag: 'todo',
+          icon: Icons.add,
+          label: tr('Neues To-Do', 'New to-do'),
+          onPressed: () => showTodoDialog(context, lib, chooseStudent: true),
         ),
       ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TeachingTopBar(
+            title: tr('To-Dos', 'To-dos'),
+            subtitle: tr('${open.length} offen', '${open.length} open'),
+            trailing: widget.state.headerActions(),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+              children: [
+                if (open.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(tr('Nichts offen. 🎉', 'Nothing open. 🎉'), style: theme.textTheme.bodyLarge),
+                  ),
+                for (final t in open) TodoTile(todo: t, library: lib, showStudent: true, onOpenStudent: openStudent),
+                if (done.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  ListTile(
+                    leading: Icon(_showDone ? Icons.expand_less : Icons.expand_more),
+                    title: Text(tr('Erledigt (${done.length})', 'Done (${done.length})')),
+                    onTap: () => setState(() => _showDone = !_showDone),
+                  ),
+                  if (_showDone)
+                    for (final t in done)
+                      TodoTile(todo: t, library: lib, showStudent: true, onOpenStudent: openStudent),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
