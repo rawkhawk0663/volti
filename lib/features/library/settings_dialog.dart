@@ -10,6 +10,8 @@ import '../../app/updater.dart';
 import '../../app/version.dart';
 import '../viewer/tool_controller.dart';
 import '../../core/library/auto_backup.dart';
+import '../../core/teaching/school_calendar.dart';
+import 'library_controller.dart';
 import 'auto_backup_controller.dart';
 import 'help_dialog.dart';
 import 'sync_controller.dart';
@@ -27,6 +29,7 @@ Future<void> showSettingsDialog(
   VoidCallback? onCreateBackup,
   VoidCallback? onRestoreBackup,
   AutoBackupController? autoBackup,
+  LibraryController? library,
 }) {
   final tools = ToolScope.read(context);
   return showDialog<void>(
@@ -41,6 +44,7 @@ Future<void> showSettingsDialog(
       onCreateBackup: onCreateBackup,
       onRestoreBackup: onRestoreBackup,
       autoBackup: autoBackup,
+      library: library,
     ),
   );
 }
@@ -56,9 +60,11 @@ class _SettingsDialog extends StatefulWidget {
     this.onCreateBackup,
     this.onRestoreBackup,
     this.autoBackup,
+    this.library,
   });
 
   final ToolController tools;
+  final LibraryController? library;
   final AutoBackupController? autoBackup;
   final SyncController? sync;
   final VoidCallback? onSetupSync, onStopSync, onOpenDataFolder, onCreateBackup, onRestoreBackup;
@@ -309,7 +315,45 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       value: tools.teaching,
       onChanged: tools.setTeaching,
     ),
+    if (tools.teaching && widget.library != null) ...[
+      const SizedBox(height: 12),
+      Text(tr('Pensum', 'Workload'), style: theme.textTheme.titleSmall),
+      const SizedBox(height: 4),
+      Text(
+        tr(
+          'Damit zeigt der Stundenplan, wie viele Schullektionen du unterrichtest und welches Pensum das ergibt.',
+          'The timetable uses this to show how many school lessons you teach and what workload that is.',
+        ),
+        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      ),
+      _Stepper(
+        label: tr('Minuten einer Schullektion', 'Minutes per school lesson'),
+        value: widget.library!.calendar.lessonMinutes,
+        step: 5,
+        min: 5,
+        max: 120,
+        suffix: tr('Min.', 'min'),
+        onChanged: (v) => _saveCalendar((c) => c.lessonMinutes = v),
+      ),
+      _Stepper(
+        label: tr('Lektionen für 100 % Pensum', 'Lessons for a 100 % workload'),
+        value: widget.library!.calendar.fullLoad,
+        step: 1,
+        min: 1,
+        max: 60,
+        onChanged: (v) => _saveCalendar((c) => c.fullLoad = v),
+      ),
+    ],
   ];
+
+  Future<void> _saveCalendar(void Function(SchoolCalendar c) change) async {
+    final lib = widget.library;
+    if (lib == null) return;
+    final c = SchoolCalendar.fromJson(lib.calendar.toJson());
+    change(c);
+    await lib.saveCalendar(c);
+    if (mounted) setState(() {});
+  }
 
   List<Widget> _backup(BuildContext context, ThemeData theme) => [
     if (onCreateBackup != null) ...[
@@ -914,4 +958,51 @@ void showVoltiLicenses(BuildContext context) {
           'Fonts: Roboto, Roboto Mono and Noto Serif (SIL Open Font License).',
     ),
   );
+}
+
+/// Zahl mit − und + (gut mit dem Finger bedienbar, ohne Tastatur).
+class _Stepper extends StatelessWidget {
+  const _Stepper({
+    required this.label,
+    required this.value,
+    required this.step,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    this.suffix,
+  });
+
+  final String label;
+  final int value, step, min, max;
+  final String? suffix;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: theme.textTheme.bodyLarge)),
+          IconButton.outlined(
+            onPressed: value - step < min ? null : () => onChanged(value - step),
+            icon: const Icon(Icons.remove),
+          ),
+          SizedBox(
+            width: 72,
+            child: Text(
+              suffix == null ? '$value' : '$value $suffix',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium,
+            ),
+          ),
+          IconButton.outlined(
+            onPressed: value + step > max ? null : () => onChanged(value + step),
+            icon: const Icon(Icons.add),
+          ),
+        ],
+      ),
+    );
+  }
 }

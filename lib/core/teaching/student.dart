@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import 'school_level.dart';
+
 /// Unterricht (für Instrumental-Lehrpersonen): eine Schülerin oder ein
 /// Schüler mit Stücken aus der Bibliothek (Repertoire) und dem
 /// Lektions-Tagebuch.
@@ -31,6 +33,10 @@ class Student {
     this.group = '',
     this.notes = '',
     this.archived = false,
+    this.birthday,
+    this.level,
+    this.levelYear,
+    this.track,
     Map<String, String>? grades,
     Map<String, StudentPiece>? pieces,
     Map<String, Lesson>? lessons,
@@ -65,6 +71,20 @@ class Student {
   String group;
   String notes;
   bool archived;
+
+  /// Geburtstag (null = unbekannt).
+  DateTime? birthday;
+
+  /// Klassenstufe beim Eintragen (z. B. „P3“, „S1“) und das Schuljahr dazu.
+  /// Die heutige Stufe berechnet `SchoolLevel.current` (steigt am 15. Juli).
+  String? level;
+  int? levelYear;
+
+  /// Zug der Oberstufe: R, S oder B (null = noch offen).
+  String? track;
+
+  /// Heutige Klassenstufe als Kürzel (null = unbekannt oder nach der Oberstufe).
+  String? currentLevel([DateTime? now]) => SchoolLevel.current(level, levelYear, track, now ?? DateTime.now()).code;
 
   /// Note pro Semester (Semester-ID → Text), Teil der Angaben zur Person.
   final Map<String, String> grades;
@@ -145,6 +165,12 @@ class Student {
     if (notes.isNotEmpty) 'notes': notes,
     if (archived) 'archived': true,
     if (grades.isNotEmpty) 'grades': grades,
+    if (birthday != null)
+      'birthday':
+          '${birthday!.year.toString().padLeft(4, '0')}-${birthday!.month.toString().padLeft(2, '0')}-${birthday!.day.toString().padLeft(2, '0')}',
+    'level': ?level,
+    'levelYear': ?levelYear,
+    'track': ?track,
     'pieces': [for (final x in pieces.values) x.toJson()],
     'lessons': [for (final l in lessons.values) l.toJson()],
     if (memos.isNotEmpty) 'memos': [for (final m in memos.values) m.toJson()],
@@ -164,6 +190,10 @@ class Student {
     group: j['group'] as String? ?? '',
     notes: j['notes'] as String? ?? '',
     archived: j['archived'] as bool? ?? false,
+    birthday: _parseDay(j['birthday']),
+    level: j['level'] as String?,
+    levelYear: (j['levelYear'] as num?)?.toInt(),
+    track: j['track'] as String?,
     grades: {
       for (final e in (j['grades'] as Map<String, dynamic>? ?? const {}).entries)
         if (e.value is String) e.key: e.value as String,
@@ -176,6 +206,16 @@ class Student {
     },
     memos: {for (final m in (j['memos'] as List? ?? const []).map(StudentNote.tryFromJson).nonNulls) m.id: m},
   );
+
+  static DateTime? _parseDay(Object? v) {
+    if (v is! String) return null;
+    try {
+      final x = v.split('-').map(int.parse).toList();
+      return DateTime(x[0], x[1], x[2]);
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Zwei Fassungen derselben Kartei zusammenführen (Sync).
   static Student merge(Student a, Student b) {

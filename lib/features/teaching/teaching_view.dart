@@ -7,6 +7,7 @@ import '../library/library_actions.dart';
 import '../library/library_controller.dart';
 import '../library/sync_controller.dart';
 import 'homework_share.dart' show shortDate;
+import '../../core/teaching/school_level.dart';
 import 'student_dialog.dart';
 import 'student_page.dart';
 import 'timetable.dart';
@@ -114,7 +115,7 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
         switch (_section) {
           case _Section.teach:
             if (current == null) {
-              content = _Empty(actions: headerActions(), onAdd: _add);
+              content = _Empty(actions: headerActions(), onAdd: _add, archivedOnly: library.students.isNotEmpty);
             } else {
               final i = order.indexWhere((x) => x.id == current.id);
               content = Stack(
@@ -126,6 +127,7 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
                       studentId: current.id,
                       actions: headerActions(),
                       onDeleted: () => setState(() => _current = null),
+                      banner: BirthdayBanner(students: library.students, onOpen: _open),
                     ),
                   ),
                   // Schwebende Leiste: suchen, vorige, nächste Person.
@@ -365,6 +367,7 @@ class _StudentsSectionState extends State<_StudentsSection> {
           ],
         ),
         const Divider(height: 1),
+        BirthdayBanner(students: lib.students, onOpen: widget.state._open),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 32),
@@ -454,9 +457,12 @@ class _AbsencesSection extends StatelessWidget {
 
 /// Noch niemand erfasst.
 class _Empty extends StatelessWidget {
-  const _Empty({required this.actions, required this.onAdd});
+  const _Empty({required this.actions, required this.onAdd, this.archivedOnly = false});
   final List<Widget> actions;
   final VoidCallback onAdd;
+
+  /// Es gibt Karteien, aber alle liegen im Archiv.
+  final bool archivedOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -475,10 +481,15 @@ class _Empty extends StatelessWidget {
                   Icon(Icons.co_present_outlined, size: 56, color: theme.colorScheme.primary),
                   const SizedBox(height: 16),
                   Text(
-                    tr(
-                      'Lege für jede Schülerin und jeden Schüler eine Kartei an: Lektionen, Hausaufgaben und Stücke aus deiner Bibliothek an einem Ort.',
-                      'Create a record for each student: lessons, homework and pieces from your library in one place.',
-                    ),
+                    archivedOnly
+                        ? tr(
+                            'Alle Karteien liegen im Archiv. Unter „Schüler:innen“ findest du sie, oder lege eine neue an.',
+                            'All records are archived. You find them under “Students”, or create a new one.',
+                          )
+                        : tr(
+                            'Lege für jede Schülerin und jeden Schüler eine Kartei an: Lektionen, Hausaufgaben und Stücke aus deiner Bibliothek an einem Ort.',
+                            'Create a record for each student: lessons, homework and pieces from your library in one place.',
+                          ),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyLarge,
                   ),
@@ -494,6 +505,78 @@ class _Empty extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Schüler:innen mit Geburtstag heute oder in den nächsten 7 Tagen.
+List<({Student student, int inDays, int age})> upcomingBirthdays(List<Student> students, DateTime now, {int days = 7}) {
+  final out = [
+    for (final s in students)
+      if (!s.archived && s.birthday != null && daysUntilBirthday(s.birthday!, now) <= days)
+        (
+          student: s,
+          inDays: daysUntilBirthday(s.birthday!, now),
+          age: ageOn(s.birthday!, nextBirthday(s.birthday!, now)),
+        ),
+  ]..sort((a, b) => a.inDays.compareTo(b.inDays));
+  return out;
+}
+
+/// Hinweis auf Geburtstage dieser Woche (heute hervorgehoben). Antippen öffnet die Kartei.
+class BirthdayBanner extends StatelessWidget {
+  const BirthdayBanner({super.key, required this.students, required this.onOpen});
+  final List<Student> students;
+  final void Function(Student s) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final list = upcomingBirthdays(students, now);
+    if (list.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    String when(int d) {
+      if (d == 0) return tr('heute', 'today');
+      if (d == 1) return tr('morgen', 'tomorrow');
+      final day = DateTime(now.year, now.month, now.day + d);
+      return weekdayName(day.weekday);
+    }
+
+    return Container(
+      color: scheme.tertiaryContainer.withValues(alpha: 0.45),
+      padding: const EdgeInsets.fromLTRB(20, 6, 12, 6),
+      child: Row(
+        children: [
+          Icon(Icons.cake_outlined, color: scheme.tertiary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final b in list)
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor: b.inDays == 0 ? scheme.tertiaryContainer : null,
+                    label: Text(
+                      b.inDays == 0
+                          ? tr(
+                              'Heute: ${b.student.name} wird ${b.age}! 🎉',
+                              'Today: ${b.student.name} turns ${b.age}! 🎉',
+                            )
+                          : tr(
+                              '${when(b.inDays)}: ${b.student.name} wird ${b.age}',
+                              '${when(b.inDays)}: ${b.student.name} turns ${b.age}',
+                            ),
+                    ),
+                    onPressed: () => onOpen(b.student),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

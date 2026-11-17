@@ -65,6 +65,33 @@ class _LibraryScreenState extends State<LibraryScreen> {
     Future<void>.delayed(const Duration(milliseconds: 600), () {
       if (mounted) showHelpOnFirstStart(context, lib.settings);
     });
+    // Unterricht: an Geburtstage von Schüler:innen erinnern (einmal pro Tag).
+    Future<void>.delayed(const Duration(seconds: 3), _remindBirthdays);
+  }
+
+  Future<void> _remindBirthdays() async {
+    if (!mounted || !ToolScope.read(context).teaching) return;
+    final now = DateTime.now();
+    final today = '${now.year}-${now.month}-${now.day}';
+    if (lib.settings.text('birthdayReminder') == today) return;
+    final list = upcomingBirthdays(lib.students, now, days: 0);
+    if (list.isEmpty) return;
+    await lib.settings.setText('birthdayReminder', today);
+    if (!mounted) return;
+    final names = list.map((b) => tr('${b.student.name} (${b.age})', '${b.student.name} (${b.age})')).join(', ');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 10),
+        content: Row(
+          children: [
+            const Icon(Icons.cake_outlined, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(tr('Heute hat Geburtstag: $names 🎉', 'Birthday today: $names 🎉'))),
+          ],
+        ),
+        action: SnackBarAction(label: tr('Unterricht', 'Teaching'), onPressed: () => _select(2)),
+      ),
+    );
   }
 
   void _select(int i) {

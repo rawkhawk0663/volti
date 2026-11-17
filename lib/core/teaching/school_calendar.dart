@@ -76,9 +76,26 @@ class FreePeriod {
 /// Gespeichert als `Bibliothek/.volti/teaching.json` (Format `volti-teaching`
 /// v1). Beim Sync gewinnt die jüngste Fassung als Ganzes.
 class SchoolCalendar {
-  SchoolCalendar({List<Semester>? semesters, List<FreePeriod>? free, this.modified})
-    : semesters = semesters ?? [],
-      free = free ?? [];
+  SchoolCalendar({
+    List<Semester>? semesters,
+    List<FreePeriod>? free,
+    this.modified,
+    this.lessonMinutes = 45,
+    this.fullLoad = 28,
+  }) : semesters = semesters ?? [],
+       free = free ?? [];
+
+  /// Minuten einer Schullektion (zum Umrechnen des Stundenplans).
+  int lessonMinutes;
+
+  /// Anzahl Schullektionen pro Woche, die einem 100-%-Pensum entsprechen.
+  int fullLoad;
+
+  /// Wie viele Schullektionen [minutes] Unterricht pro Woche ergeben.
+  double schoolLessons(int minutes) => lessonMinutes <= 0 ? 0 : minutes / lessonMinutes;
+
+  /// Pensum in Prozent für [minutes] Unterricht pro Woche.
+  double loadPercent(int minutes) => fullLoad <= 0 ? 0 : schoolLessons(minutes) / fullLoad * 100;
 
   final List<Semester> semesters;
   final List<FreePeriod> free;
@@ -139,12 +156,16 @@ class SchoolCalendar {
     'format': 'volti-teaching',
     'version': 1,
     'modified': ?modified?.toUtc().toIso8601String(),
+    'lessonMinutes': lessonMinutes,
+    'fullLoad': fullLoad,
     'semesters': [for (final s in semesters) s.toJson()],
     'free': [for (final f in free) f.toJson()],
   };
 
   static SchoolCalendar fromJson(Map<String, dynamic> j) => SchoolCalendar(
     modified: j['modified'] == null ? null : DateTime.parse(j['modified'] as String),
+    lessonMinutes: (j['lessonMinutes'] as num?)?.toInt() ?? 45,
+    fullLoad: (j['fullLoad'] as num?)?.toInt() ?? 28,
     semesters: (j['semesters'] as List? ?? const []).map(Semester.tryFromJson).nonNulls.toList(),
     free: (j['free'] as List? ?? const []).map(FreePeriod.tryFromJson).nonNulls.toList(),
   );

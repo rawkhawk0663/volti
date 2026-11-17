@@ -36,6 +36,7 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
         onCreateBackup: createBackup,
         onRestoreBackup: restoreBackup,
         autoBackup: library.autoBackup,
+        library: library,
       ),
     ),
     // Schliessen, Minimieren, Maximieren (statt der Windows-Titelleiste).

@@ -60,8 +60,8 @@ class TimetableView extends StatelessWidget {
                     ),
                     Text(
                       tr(
-                        '$count ${count == 1 ? 'Schüler:in' : 'Schüler:innen'} · ${_hours(minutes)} pro Woche',
-                        '$count ${count == 1 ? 'student' : 'students'} · ${_hours(minutes)} per week',
+                        '$count ${count == 1 ? 'Schüler:in' : 'Schüler:innen'} mit festem Unterrichtstag',
+                        '$count ${count == 1 ? 'student' : 'students'} with a fixed lesson day',
                       ),
                       style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                     ),
@@ -80,6 +80,32 @@ class TimetableView extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               ...actions,
+            ],
+          ),
+        ),
+        // Schullektionen und Pensum (Angaben unter ⚙ → Unterricht).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _Stat(label: tr('Unterricht pro Woche', 'Teaching per week'), value: _hours(minutes)),
+              _Stat(
+                label: tr(
+                  'Schullektionen (à ${library.calendar.lessonMinutes} Min.)',
+                  'School lessons (${library.calendar.lessonMinutes} min each)',
+                ),
+                value: _num(library.calendar.schoolLessons(minutes)),
+              ),
+              _Stat(
+                label: tr(
+                  'Pensum (100 % = ${library.calendar.fullLoad} Lektionen)',
+                  'Workload (100 % = ${library.calendar.fullLoad} lessons)',
+                ),
+                value: '${_num(library.calendar.loadPercent(minutes))} %',
+                highlight: true,
+              ),
             ],
           ),
         ),
@@ -158,6 +184,13 @@ class TimetableView extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// Zahl mit einer Stelle nach dem Komma (deutsch mit Komma), ganze Zahlen ohne.
+  static String _num(double v) {
+    final r = (v * 10).round() / 10;
+    final text = r == r.roundToDouble() ? r.round().toString() : r.toStringAsFixed(1);
+    return L10n.isEnglish ? text : text.replaceAll('.', ',');
   }
 
   static String _hours(int minutes) {
@@ -251,4 +284,34 @@ Future<List<int>> buildTimetablePdf(List<Student> students) async {
     ),
   );
   return doc.save();
+}
+
+/// Kleines Kästchen mit einer Kennzahl (Stundenplan).
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value, this.highlight = false});
+  final String label, value;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 180),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+      decoration: BoxDecoration(
+        color: highlight ? scheme.primaryContainer.withValues(alpha: 0.6) : scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 2),
+          Text(value, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
 }

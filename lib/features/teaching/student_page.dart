@@ -10,6 +10,7 @@ import '../library/open_scores.dart';
 import '../library/setlists_view.dart' show KeyBadge, showScorePicker;
 import '../viewer/viewer_screen.dart';
 import 'homework_share.dart';
+import '../../core/teaching/school_level.dart';
 import 'attendance_table.dart';
 import 'student_dialog.dart';
 
@@ -23,12 +24,22 @@ DateTime schoolYearStart() {
 /// links „Neue Lektion“ (Lektion | Hausaufgaben, Speichern) und darunter
 /// die vergangenen Lektionen, rechts Repertoire und Notizen.
 class StudentPage extends StatefulWidget {
-  const StudentPage({super.key, required this.library, required this.studentId, required this.actions, this.onDeleted});
+  const StudentPage({
+    super.key,
+    required this.library,
+    required this.studentId,
+    required this.actions,
+    this.onDeleted,
+    this.banner,
+  });
 
   final LibraryController library;
   final String studentId;
   final List<Widget> actions;
   final VoidCallback? onDeleted;
+
+  /// Hinweis oben (z. B. Geburtstage dieser Woche).
+  final Widget? banner;
 
   @override
   State<StudentPage> createState() => _StudentPageState();
@@ -470,6 +481,7 @@ class _StudentPageState extends State<StudentPage> {
                     ),
                   ),
                   const Divider(height: 1),
+                  ?widget.banner,
                   _header(context, s),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
@@ -519,6 +531,9 @@ class _StudentPageState extends State<StudentPage> {
         s.time == null ? weekdayName(s.weekday!) : '${weekdayName(s.weekday!)}, ${s.time} – ${s.endTime}',
       if (s.weekday != null || s.time != null) tr('${s.duration} Minuten', '${s.duration} minutes'),
       if (s.instrument.isNotEmpty) s.instrument,
+      ?levelLabel(s.currentLevel()),
+      if (s.birthday != null)
+        tr('${ageOn(s.birthday!, DateTime.now())} Jahre', '${ageOn(s.birthday!, DateTime.now())} years'),
     ].join(' | ');
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 16, 14),

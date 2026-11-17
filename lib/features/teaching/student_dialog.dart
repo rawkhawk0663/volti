@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/l10n.dart';
+import '../../core/teaching/school_level.dart';
 import '../../core/teaching/student.dart';
 
 /// Namen der Wochentage (1 = Montag).
@@ -22,8 +23,51 @@ String studentSummary(Student s) {
     if (s.weekday != null || s.time != null) tr('${s.duration} Minuten', '${s.duration} minutes'),
     if (s.instrument.isNotEmpty) s.instrument,
     if (s.place.isNotEmpty) s.place,
+    ?levelLabel(s.currentLevel()),
+    if (s.birthday != null)
+      tr('${ageOn(s.birthday!, DateTime.now())} Jahre', '${ageOn(s.birthday!, DateTime.now())} years'),
   ];
   return parts.join(' · ');
+}
+
+/// Klassenstufe zum Anzeigen („P4“, „S2“; ohne bekannten Zug „Oberstufe 1“).
+String? levelLabel(String? code) {
+  if (code == null) return null;
+  if (code.startsWith('O')) return tr('Oberstufe ${code.substring(1)}', 'Upper school ${code.substring(1)}');
+  return code;
+}
+
+/// Datum lang, z. B. „9. Dezember 2015“.
+String longDate(DateTime d) {
+  const de = [
+    'Januar',
+    'Februar',
+    'März',
+    'April',
+    'Mai',
+    'Juni',
+    'Juli',
+    'August',
+    'September',
+    'Oktober',
+    'November',
+    'Dezember',
+  ];
+  const en = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return tr('${d.day}. ${de[d.month - 1]} ${d.year}', '${d.day} ${en[d.month - 1]} ${d.year}');
 }
 
 /// Angaben zur Person bearbeiten. Gibt true zurück, wenn gespeichert werden soll.
@@ -53,6 +97,10 @@ class _StudentDialogState extends State<_StudentDialog> {
   late int? _weekday = s.weekday;
   late TimeOfDay? _time = _parse(s.time);
   late int _duration = s.duration;
+  late DateTime? _birthday = s.birthday;
+
+  /// Heutige Klassenstufe (Kürzel), null = keine Angabe.
+  late String? _level = s.currentLevel();
 
   static TimeOfDay? _parse(String? t) {
     if (t == null) return null;
@@ -82,7 +130,17 @@ class _StudentDialogState extends State<_StudentDialog> {
       ..weekday = _weekday
       ..time = _time == null ? null : _fmt(_time!)
       ..duration = _duration
+      ..birthday = _birthday
       ..touch();
+    // Klassenstufe: die heutige mit dem heutigen Schuljahr speichern.
+    final level = _level;
+    if (level != s.currentLevel()) {
+      s
+        ..level = level
+        ..levelYear = level == null ? null : SchoolLevel.schoolYearOf(DateTime.now());
+      if (level != null && SchoolLevel.tracks.contains(level[0])) s.track = level[0];
+      if (level == null) s.track = null;
+    }
     Navigator.of(context).pop(true);
   }
 
@@ -159,6 +217,80 @@ class _StudentDialogState extends State<_StudentDialog> {
                 controller: _place,
                 decoration: deco(tr('Ort', 'Place'), tr('z. B. Musikschule', 'e.g. music school')),
               ),
+              const SizedBox(height: 20),
+              Text(tr('Geburtstag und Klasse', 'Birthday and class'), style: theme.textTheme.labelLarge),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.cake_outlined, size: 18),
+                    label: Text(_birthday == null ? tr('Geburtstag eintragen', 'Add birthday') : longDate(_birthday!)),
+                    onPressed: () async {
+                      final d = await showDatePicker(
+                        context: context,
+                        initialDate: _birthday ?? DateTime(DateTime.now().year - 10, 1, 1),
+                        firstDate: DateTime(1920),
+                        lastDate: DateTime.now(),
+                        initialDatePickerMode: DatePickerMode.year,
+                      );
+                      if (d != null) setState(() => _birthday = d);
+                    },
+                  ),
+                  if (_birthday != null)
+                    IconButton(
+                      tooltip: tr('Entfernen', 'Remove'),
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => setState(() => _birthday = null),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                tr(
+                  'Klasse heute (steigt jedes Jahr Mitte Juli von selbst um eine Stufe)',
+                  'Class today (goes up by one every year in mid-July)',
+                ),
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  ChoiceChip(
+                    label: Text(tr('keine', 'none')),
+                    selected: _level == null,
+                    onSelected: (_) => setState(() => _level = null),
+                  ),
+                  for (var i = 1; i <= 6; i++)
+                    ChoiceChip(
+                      label: Text('P$i'),
+                      selected: _level == 'P$i',
+                      onSelected: (_) => setState(() => _level = 'P$i'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              for (final t in SchoolLevel.tracks)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 120, child: Text(SchoolLevel.trackName(t), style: theme.textTheme.bodySmall)),
+                      Wrap(
+                        spacing: 6,
+                        children: [
+                          for (var i = 1; i <= 3; i++)
+                            ChoiceChip(
+                              label: Text('$t$i'),
+                              selected: _level == '$t$i',
+                              onSelected: (_) => setState(() => _level = '$t$i'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 20),
               Text(tr('Kontakt (für die Hausaufgaben)', 'Contact (for homework)'), style: theme.textTheme.labelLarge),
               TextField(

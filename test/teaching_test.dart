@@ -7,8 +7,10 @@ import 'package:volti/core/library/setlist.dart';
 import 'package:volti/core/sync/sync_engine.dart';
 import 'package:volti/core/sync/sync_store.dart';
 import 'package:volti/core/teaching/school_calendar.dart';
+import 'package:volti/core/teaching/school_level.dart';
 import 'package:volti/core/teaching/student.dart';
 import 'package:volti/features/teaching/homework_share.dart';
+import 'package:volti/features/teaching/teaching_view.dart' show upcomingBirthdays;
 import 'package:volti/features/teaching/timetable.dart';
 import 'package:volti/features/viewer/ink_controller.dart';
 
@@ -176,6 +178,76 @@ void main() {
     // Schweizer Feiertage im Herbstsemester.
     final swiss = swissHolidays(DateTime(2026, 8, 1), DateTime(2027, 1, 31)).map((f) => f.start).toList();
     expect(swiss, containsAll([DateTime(2026, 8, 1), DateTime(2026, 12, 25), DateTime(2027, 1, 2)]));
+  });
+
+  test('Schullektionen und Pensum', () {
+    final cal = SchoolCalendar(lessonMinutes: 45, fullLoad: 28);
+    // 12 Lektionen à 25 Minuten = 300 Minuten = 6,67 Schullektionen.
+    expect(cal.schoolLessons(300), closeTo(6.67, 0.01));
+    expect(cal.loadPercent(300), closeTo(23.8, 0.1));
+    expect(cal.loadPercent(28 * 45), closeTo(100, 0.001));
+    final back = SchoolCalendar.fromJson((cal..lessonMinutes = 50).toJson());
+    expect(back.lessonMinutes, 50);
+    expect(back.fullLoad, 28);
+    // Ältere Datei ohne diese Angaben: Standardwerte.
+    expect(SchoolCalendar.fromJson({'format': 'volti-teaching'}).lessonMinutes, 45);
+  });
+
+  test('Klassenstufe steigt jedes Jahr am 15. Juli', () {
+    expect(SchoolLevel.schoolYearOf(DateTime(2026, 7, 14)), 2025);
+    expect(SchoolLevel.schoolYearOf(DateTime(2026, 7, 15)), 2026);
+    // Im Schuljahr 2026/27 in der P5 eingetragen.
+    final s = anna()
+      ..level = 'P5'
+      ..levelYear = 2026;
+    expect(s.currentLevel(DateTime(2026, 11, 17)), 'P5');
+    expect(s.currentLevel(DateTime(2027, 7, 14)), 'P5');
+    expect(s.currentLevel(DateTime(2027, 7, 15)), 'P6');
+    // Nach der P6 ohne gewählten Zug: Oberstufe 1 (O1), mit Zug: S1 …
+    expect(s.currentLevel(DateTime(2028, 9, 1)), 'O1');
+    s.track = 'S';
+    expect(s.currentLevel(DateTime(2028, 9, 1)), 'S1');
+    expect(s.currentLevel(DateTime(2030, 9, 1)), 'S3');
+    // Nach der Oberstufe keine Stufe mehr.
+    expect(s.currentLevel(DateTime(2031, 9, 1)), isNull);
+    // Direkt in der Oberstufe eingetragen: der Zug kommt aus dem Kürzel.
+    final b = anna()
+      ..level = 'B2'
+      ..levelYear = 2026;
+    expect(b.currentLevel(DateTime(2027, 8, 1)), 'B3');
+    // Bleibt beim Speichern erhalten.
+    final back = Student.fromJson(
+      (s
+            ..birthday = DateTime(2015, 12, 9)
+            ..track = 'R')
+          .toJson(),
+    );
+    expect(back.level, 'P5');
+    expect(back.levelYear, 2026);
+    expect(back.track, 'R');
+    expect(back.birthday, DateTime(2015, 12, 9));
+  });
+
+  test('Geburtstage: Alter und Erinnerung', () {
+    final bday = DateTime(2015, 12, 9);
+    expect(ageOn(bday, DateTime(2026, 12, 8)), 10);
+    expect(ageOn(bday, DateTime(2026, 12, 9)), 11);
+    expect(daysUntilBirthday(bday, DateTime(2026, 12, 9)), 0);
+    expect(daysUntilBirthday(bday, DateTime(2026, 12, 2)), 7);
+    expect(nextBirthday(bday, DateTime(2026, 12, 10)), DateTime(2027, 12, 9));
+    // 29. Februar in einem gewöhnlichen Jahr: am 28.
+    expect(nextBirthday(DateTime(2016, 2, 29), DateTime(2027, 1, 1)), DateTime(2027, 2, 28));
+
+    final students = [
+      anna()..birthday = DateTime(2015, 12, 9),
+      Student.create('Ben')..birthday = DateTime(2016, 12, 12),
+      Student.create('Chloé')..birthday = DateTime(2016, 3, 1),
+    ];
+    final soon = upcomingBirthdays(students, DateTime(2026, 12, 9));
+    expect(soon.map((b) => b.student.name), ['Anna Muster', 'Ben']);
+    expect(soon.first.inDays, 0);
+    expect(soon.first.age, 11);
+    expect(soon.last.age, 10);
   });
 
   test('Noten pro Semester bleiben erhalten', () {
