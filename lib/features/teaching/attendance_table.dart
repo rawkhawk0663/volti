@@ -117,6 +117,9 @@ class _AttendanceTableState extends State<AttendanceTable> {
   final _grades = <String, TextEditingController>{};
   final _scroll = ScrollController();
 
+  /// Semester und Tag, zu denen schon einmal gescrollt wurde.
+  String? _scrolledFor;
+
   static const _cell = 46.0;
   static const _headHeight = 38.0;
   static const _rowHeight = 38.0;
@@ -361,12 +364,17 @@ class _AttendanceTableState extends State<AttendanceTable> {
         totals.add((present: present, absent: absent));
       }
 
-      // Beim ersten Anzeigen zur aktuellen Woche scrollen.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scroll.hasClients && _scroll.offset == 0 && scrollTo > 0) {
+      // Nur beim Öffnen und beim Wechsel des Semesters zur aktuellen Woche
+      // scrollen, nie bei einem Eintrag: Sonst sprang die Tabelle zurück,
+      // wenn man an den Anfang des Semesters gescrollt hatte.
+      final scrollKey = '${sem.id}/$weekday';
+      if (_scrolledFor != scrollKey) {
+        _scrolledFor = scrollKey;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_scroll.hasClients) return;
           _scroll.jumpTo((scrollTo - 3 * _cell).clamp(0, _scroll.position.maxScrollExtent));
-        }
-      });
+        });
+      }
       Widget total(Widget child) => SizedBox(
         width: 58,
         height: _rowHeight,
