@@ -1,8 +1,9 @@
 """Erzeugt feste (nicht variable) Roboto-Schnitte für die PDFs, die Volti
 selbst schreibt (Stundenplan, Absenzenliste, Hausaufgaben).
+Regular, Bold, Italic und BoldItalic.
 
 Variable Schriften zeigen manche PDF-Programme unter Windows gar nicht an
-(leere Seite). Deshalb: Regular und Bold als feste Schnitte, auf Lateinisch
+(leere Seite). Deshalb feste Schnitte, auf Lateinisch
 und gängige Zeichen verkleinert.
 
     python3 tool/make_pdf_fonts.py
@@ -17,8 +18,13 @@ UNICODES = (
     + [0x20AC, 0x2190, 0x2192, 0x2022, 0x25E6, 0x2713, 0x00D7]
 )
 
-for name, weight in [('Regular', 400), ('Bold', 700)]:
-    font = instantiateVariableFont(TTFont(SRC), {'wght': weight, 'wdth': 100}, updateFontNames=True)
+for src, name, weight in [
+    (SRC, 'Regular', 400),
+    (SRC, 'Bold', 700),
+    ('assets/fonts/Roboto-Italic.ttf', 'Italic', 400),
+    ('assets/fonts/Roboto-Italic.ttf', 'BoldItalic', 700),
+]:
+    font = instantiateVariableFont(TTFont(src), {'wght': weight, 'wdth': 100}, updateFontNames=True)
     opts = subset.Options()
     opts.layout_features = ['kern', 'liga']
     opts.name_IDs = ['*']

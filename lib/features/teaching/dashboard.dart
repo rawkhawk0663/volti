@@ -65,8 +65,8 @@ List<String> get _tips => [
     'In “Teach”, the arrow keys ← → switch to the previous or next person.',
   ),
   tr(
-    'Strg+S speichert die Lektion. Zeilen, die mit „- “ beginnen, werden zu Aufzählungspunkten.',
-    'Ctrl+S saves the lesson. Lines starting with “- ” become bullet points.',
+    'Strg+S speichert die Lektion. Über den Feldern formatierst du den Text: fett, Farbe, Listen, Links, Emojis.',
+    'Ctrl+S saves the lesson. Above the fields you can format text: bold, colour, lists, links, emojis.',
   ),
   tr(
     'Was du in den Noten einer Kartei notierst, sieht nur diese Person. Bibliothek und Setlists bleiben sauber.',

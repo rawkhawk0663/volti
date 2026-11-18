@@ -10,9 +10,11 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../app/l10n.dart';
 import '../../app/open_url.dart';
+import '../../core/ink/text_marks.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_controller.dart';
 import '../viewer/page_export.dart';
+import 'rich_editor.dart' show plainTextWithLinks, whatsAppText;
 
 /// Datum kurz, z. B. „17.11.2026“.
 String shortDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
@@ -25,13 +27,16 @@ String greetingNames(List<String> names) {
 }
 
 /// Text der Hausaufgaben zum Verschicken. Bei einer Gruppe ([members])
-/// werden alle Mitglieder angesprochen.
-String homeworkText(Student s, Lesson l, {List<Student> members = const []}) {
+/// werden alle Mitglieder angesprochen. Für WhatsApp ([whatsApp]) mit
+/// *fett*, _kursiv_ und ~durchgestrichen~, sonst ohne Formatierung.
+String homeworkText(Student s, Lesson l, {List<Student> members = const [], bool whatsApp = false}) {
   final group = members.length > 1;
   final names = greetingNames(members.isEmpty ? [s.name] : [for (final m in members) m.name]);
+  final text = l.homework.trimRight();
+  final body = (whatsApp ? whatsAppText(text, l.homeworkMarks) : plainTextWithLinks(text, l.homeworkMarks)).trim();
   return tr(
-    'Hoi $names\n\nHier ${group ? 'eure' : 'deine'} Hausaufgaben vom ${shortDate(l.date)}:\n\n${l.homework.trim()}\n\nViel Spass beim Üben!',
-    'Hi $names\n\nHere is your homework from ${shortDate(l.date)}:\n\n${l.homework.trim()}\n\nHappy practising!',
+    'Hoi $names\n\nHier ${group ? 'eure' : 'deine'} Hausaufgaben vom ${shortDate(l.date)}:\n\n$body\n\nViel Spass beim Üben!',
+    'Hi $names\n\nHere is your homework from ${shortDate(l.date)}:\n\n$body\n\nHappy practising!',
   );
 }
 
@@ -58,7 +63,11 @@ Future<void> sendHomeworkByEmail(Student s, Lesson l, {List<Student> members = c
 /// Nummer, sonst wählt man den Kontakt in WhatsApp).
 Future<void> sendHomeworkByWhatsApp(Student s, Lesson l, {List<Student> members = const [], String? phone}) {
   final digits = whatsAppNumber(phone ?? s.phone);
-  return openUrl(Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(homeworkText(s, l, members: members))}'));
+  return openUrl(
+    Uri.parse(
+      'https://wa.me/$digits?text=${Uri.encodeComponent(homeworkText(s, l, members: members, whatsApp: true))}',
+    ),
+  );
 }
 
 /// Telefonnummer schön geschrieben: „+41 78 876 54 32“ (mit Ländervorwahl)
@@ -170,7 +179,9 @@ Future<pw.ThemeData?> voltiPdfTheme() async {
     // Feste Schnitte: Variable Schriften zeigen manche PDF-Programme nicht an.
     final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/pdf/RobotoPdf-Regular.ttf'));
     final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/pdf/RobotoPdf-Bold.ttf'));
-    return pw.ThemeData.withFont(base: regular, bold: bold);
+    final italic = pw.Font.ttf(await rootBundle.load('assets/fonts/pdf/RobotoPdf-Italic.ttf'));
+    final boldItalic = pw.Font.ttf(await rootBundle.load('assets/fonts/pdf/RobotoPdf-BoldItalic.ttf'));
+    return pw.ThemeData.withFont(base: regular, bold: bold, italic: italic, boldItalic: boldItalic);
   } catch (_) {
     return null;
   }
@@ -178,22 +189,86 @@ Future<pw.ThemeData?> voltiPdfTheme() async {
 
 Future<pw.Page> _homeworkPage(Student s, Lesson l) async {
   final theme = await voltiPdfTheme();
-  return pw.Page(
+  // Mehrere Seiten, falls die Hausaufgaben lang sind (eine einzelne Seite
+  // bliebe sonst leer).
+  return pw.MultiPage(
     pageFormat: PdfPageFormat.a4,
     margin: const pw.EdgeInsets.fromLTRB(56, 64, 56, 56),
     theme: theme,
-    build: (_) => pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(tr('Hausaufgaben', 'Homework'), style: const pw.TextStyle(fontSize: 26)),
-        pw.SizedBox(height: 6),
-        pw.Text(
-          '${s.name} · ${shortDate(l.date)}',
-          style: const pw.TextStyle(fontSize: 13, color: PdfColor.fromInt(0xFF555555)),
-        ),
-        pw.SizedBox(height: 24),
-        pw.Text(l.homework.trim(), style: const pw.TextStyle(fontSize: 14, lineSpacing: 4)),
-      ],
-    ),
+    build: (_) => [
+      pw.Text(tr('Hausaufgaben', 'Homework'), style: const pw.TextStyle(fontSize: 26)),
+      pw.SizedBox(height: 6),
+      pw.Text(
+        '${s.name} · ${shortDate(l.date)}',
+        style: const pw.TextStyle(fontSize: 13, color: PdfColor.fromInt(0xFF555555)),
+      ),
+      pw.SizedBox(height: 24),
+      ...pdfRichLines(l.homework.trimRight(), l.homeworkMarks, const pw.TextStyle(fontSize: 14, lineSpacing: 4)),
+    ],
   );
+}
+
+/// Formatierter Text als PDF-Zeilen (fett, kursiv, unterstrichen,
+/// durchgestrichen, Farbe, Hervorheben; Aufzählungen mit Punkt).
+List<pw.Widget> pdfRichLines(String text, List<TextMark> marks, pw.TextStyle base) {
+  final chars = charsFromMarks(marks, text.length);
+  pw.TextSpan span(String t, List<CharStyle> cs) {
+    final children = <pw.InlineSpan>[];
+    var i = 0;
+    while (i < t.length) {
+      final st = cs[i];
+      var j = i + 1;
+      while (j < t.length && cs[j] == st) {
+        j++;
+      }
+      final lines = [
+        if (st.underline == true || st.link != null) pw.TextDecoration.underline,
+        if (st.strike == true) pw.TextDecoration.lineThrough,
+      ];
+      final color = st.color ?? (st.link != null ? 0xFF1A73C8 : null);
+      children.add(
+        pw.TextSpan(
+          text: t.substring(i, j),
+          style: pw.TextStyle(
+            fontWeight: st.bold == true ? pw.FontWeight.bold : null,
+            fontStyle: st.italic == true ? pw.FontStyle.italic : null,
+            decoration: lines.isEmpty ? null : pw.TextDecoration.combine(lines),
+            color: color == null ? null : PdfColor.fromInt(color),
+            background: st.highlight == null ? null : pw.BoxDecoration(color: PdfColor.fromInt(st.highlight!)),
+          ),
+        ),
+      );
+      i = j;
+    }
+    return pw.TextSpan(style: base, children: children);
+  }
+
+  final out = <pw.Widget>[];
+  final bullet = RegExp(r'^(\s*)([-•*]|\d+[.)]) ');
+  var offset = 0;
+  for (final raw in text.split('\n')) {
+    final cs = chars.sublist(offset, offset + raw.length);
+    offset += raw.length + 1;
+    final m = bullet.firstMatch(raw);
+    if (m == null) {
+      // Leere Zeile: Abstand wie eine Textzeile.
+      out.add(raw.isEmpty ? pw.Text(' ', style: base) : pw.RichText(text: span(raw, cs)));
+      continue;
+    }
+    final marker = m.group(2)!;
+    final indent = m.group(1)!.length >= 2 ? 18.0 : 0.0;
+    out.add(
+      pw.Padding(
+        padding: pw.EdgeInsets.only(left: indent, bottom: 2),
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.SizedBox(width: 20, child: pw.Text(RegExp(r'\d').hasMatch(marker) ? marker : '•', style: base)),
+            pw.Expanded(child: pw.RichText(text: span(raw.substring(m.end), cs.sublist(m.end)))),
+          ],
+        ),
+      ),
+    );
+  }
+  return out;
 }

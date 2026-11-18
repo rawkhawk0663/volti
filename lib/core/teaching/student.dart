@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../ink/text_marks.dart';
 import 'school_level.dart';
 
 /// Unterricht (für Instrumental-Lehrpersonen): eine Schülerin oder ein
@@ -356,6 +357,8 @@ class Lesson {
     this.reason = '',
     this.content = '',
     this.homework = '',
+    this.contentMarks = const [],
+    this.homeworkMarks = const [],
     List<String>? pieces,
     this.deleted = false,
   }) : pieces = pieces ?? [];
@@ -378,6 +381,10 @@ class Lesson {
   String content;
   String homework;
 
+  /// Formatierung von [content] und [homework] (fett, Farbe, Link …).
+  List<TextMark> contentMarks;
+  List<TextMark> homeworkMarks;
+
   /// IDs der Stücke ([StudentPiece.id]), die drankamen.
   final List<String> pieces;
   final DateTime created;
@@ -398,6 +405,8 @@ class Lesson {
     if (reason.isNotEmpty) 'reason': reason,
     if (content.isNotEmpty) 'content': content,
     if (homework.isNotEmpty) 'homework': homework,
+    if (contentMarks.isNotEmpty) 'contentMarks': TextMark.listToJson(contentMarks),
+    if (homeworkMarks.isNotEmpty) 'homeworkMarks': TextMark.listToJson(homeworkMarks),
     if (pieces.isNotEmpty) 'pieces': pieces,
     'created': created.toUtc().toIso8601String(),
     'modified': modified.toUtc().toIso8601String(),
@@ -415,6 +424,8 @@ class Lesson {
         reason: j['reason'] as String? ?? '',
         content: j['content'] as String? ?? '',
         homework: j['homework'] as String? ?? '',
+        contentMarks: TextMark.listFromJson(j['contentMarks']),
+        homeworkMarks: TextMark.listFromJson(j['homeworkMarks']),
         pieces: [for (final x in j['pieces'] as List? ?? const []) x as String],
         created: DateTime.parse(j['created'] as String),
         modified: DateTime.parse(j['modified'] as String),
@@ -434,6 +445,7 @@ class StudentNote {
     required this.modified,
     this.title = '',
     this.text = '',
+    this.marks = const [],
     this.deleted = false,
   });
 
@@ -445,6 +457,9 @@ class StudentNote {
   final String id;
   String title;
   String text;
+
+  /// Formatierung von [text].
+  List<TextMark> marks;
   final DateTime created;
   DateTime modified;
   bool deleted;
@@ -455,6 +470,7 @@ class StudentNote {
     'id': id,
     if (title.isNotEmpty) 'title': title,
     if (text.isNotEmpty) 'text': text,
+    if (marks.isNotEmpty) 'marks': TextMark.listToJson(marks),
     'created': created.toUtc().toIso8601String(),
     'modified': modified.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
@@ -467,6 +483,7 @@ class StudentNote {
         id: j['id'] as String,
         title: j['title'] as String? ?? '',
         text: j['text'] as String? ?? '',
+        marks: TextMark.listFromJson(j['marks']),
         created: DateTime.parse(j['created'] as String),
         modified: DateTime.parse(j['modified'] as String),
         deleted: j['deleted'] as bool? ?? false,

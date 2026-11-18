@@ -42,7 +42,12 @@ class TimetableView extends StatelessWidget {
     final days = timetableDays(students);
     final today = DateTime.now().weekday;
     final minutes = students.where((s) => s.weekday != null).fold<int>(0, (n, s) => n + s.duration);
-    final count = students.where((s) => s.weekday != null).length;
+    // Jedes Kind einzeln (auch in Gruppen), dazu die Zahl der Gruppen.
+    final people = library.students.where((s) {
+      if (s.archived || s.isGroup) return false;
+      return (s.weekday ?? library.groupOf(s.id)?.weekday) != null;
+    }).length;
+    final groups = students.where((s) => s.isGroup && s.weekday != null).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -62,8 +67,10 @@ class TimetableView extends StatelessWidget {
                     ),
                     Text(
                       tr(
-                        '$count ${count == 1 ? 'Schüler:in' : 'Schüler:innen'} mit festem Unterrichtstag',
-                        '$count ${count == 1 ? 'student' : 'students'} with a fixed lesson day',
+                        '$people ${people == 1 ? 'Schüler:in' : 'Schüler:innen'} mit festem Unterrichtstag'
+                            '${groups == 0 ? '' : ' · $groups ${groups == 1 ? 'Gruppe' : 'Gruppen'}'}',
+                        '$people ${people == 1 ? 'student' : 'students'} with a fixed lesson day'
+                            '${groups == 0 ? '' : ' · $groups ${groups == 1 ? 'group' : 'groups'}'}',
                       ),
                       style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                     ),

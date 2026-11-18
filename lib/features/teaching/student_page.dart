@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/l10n.dart';
+import '../../core/ink/text_marks.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_controller.dart';
 import '../library/open_scores.dart';
@@ -12,6 +13,7 @@ import '../viewer/viewer_screen.dart';
 import 'homework_share.dart';
 import '../../core/teaching/school_level.dart';
 import 'attendance_table.dart';
+import 'rich_editor.dart';
 import 'student_dialog.dart';
 import 'todo_widgets.dart';
 
@@ -57,8 +59,18 @@ class _StudentPageState extends State<StudentPage> {
   /// Wird gerade eine vergangene Lektion bearbeitet? (sonst: neue Lektion)
   String? _editing;
   DateTime _date = _today();
-  final _content = TextEditingController();
-  final _homework = TextEditingController();
+  final _content = RichEditController();
+  final _homework = RichEditController();
+
+  /// Textfeld, auf das die Werkzeugleiste wirkt (zuletzt angetippt).
+  late final _active = ValueNotifier<RichEditController?>(_content);
+  late final FocusNode _contentFocus = FocusNode()..addListener(() => _focusChanged(_contentFocus, _content));
+  late final FocusNode _homeworkFocus = FocusNode()..addListener(() => _focusChanged(_homeworkFocus, _homework));
+
+  void _focusChanged(FocusNode node, RichEditController c) {
+    if (node.hasFocus) _active.value = c;
+  }
+
   bool _allLessons = false;
   bool _doneTodos = false;
 
@@ -97,6 +109,9 @@ class _StudentPageState extends State<StudentPage> {
     if (_hasText && _editing == null) _save(quiet: true);
     _content.dispose();
     _homework.dispose();
+    _contentFocus.dispose();
+    _homeworkFocus.dispose();
+    _active.dispose();
     super.dispose();
   }
 
@@ -119,6 +134,9 @@ class _StudentPageState extends State<StudentPage> {
       ..content = _content.text.trimRight()
       ..homework = _homework.text.trimRight()
       ..touch();
+    l
+      ..contentMarks = _content.marksFor(l.content)
+      ..homeworkMarks = _homework.marksFor(l.homework);
     s.putLesson(l);
     await library.saveStudent(s);
     if (!quiet && mounted) {
@@ -132,15 +150,15 @@ class _StudentPageState extends State<StudentPage> {
   void _clear() {
     _editing = null;
     _date = _today();
-    _content.clear();
-    _homework.clear();
+    _content.load('', const []);
+    _homework.load('', const []);
   }
 
   void _edit(Lesson l) => setState(() {
     _editing = l.id;
     _date = l.date;
-    _content.text = l.content;
-    _homework.text = l.homework;
+    _content.load(l.content, l.contentMarks);
+    _homework.load(l.homework, l.homeworkMarks);
   });
 
   Future<void> _pickDate() async {
@@ -389,15 +407,17 @@ class _StudentPageState extends State<StudentPage> {
     final s = _student;
     if (s == null) return;
     final title = TextEditingController(text: memo?.title ?? '');
-    final text = TextEditingController(text: memo?.text ?? '');
+    final text = RichEditController(text: memo?.text ?? '', marks: memo?.marks ?? const []);
+    final target = ValueNotifier<RichEditController?>(text);
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(memo == null ? tr('Neue Notiz', 'New note') : tr('Notiz', 'Note')),
         content: SizedBox(
-          width: 440,
+          width: 580,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextField(
                 controller: title,
@@ -405,14 +425,14 @@ class _StudentPageState extends State<StudentPage> {
                 decoration: InputDecoration(labelText: tr('Titel', 'Title'), hintText: tr('z. B. Infos', 'e.g. Info')),
               ),
               const SizedBox(height: 12),
-              TextField(
+              RichToolbar(target: target),
+              const SizedBox(height: 6),
+              RichEditorField(
                 controller: text,
                 minLines: 5,
                 maxLines: 14,
-                decoration: InputDecoration(
-                  hintText: tr('z. B. Geburtstag, Klasse, Eltern, Ziele …', 'e.g. birthday, class, parents, goals …'),
-                  border: const OutlineInputBorder(),
-                ),
+                hint: tr('z. B. Eltern, Ziele, Abmachungen …', 'e.g. parents, goals, agreements …'),
+                onLink: () => editLink(c, text),
               ),
             ],
           ),
@@ -424,13 +444,17 @@ class _StudentPageState extends State<StudentPage> {
       ),
     );
     final t = title.text.trim(), body = text.text.trimRight();
+    final marks = text.marksFor(body);
     title.dispose();
-    text.dispose();
+    target.dispose();
+    // Erst nach dem Schliessen-Übergang freigeben (das Feld ist noch sichtbar).
+    Future.delayed(const Duration(seconds: 1), text.dispose);
     if (ok != true || (t.isEmpty && body.isEmpty)) return;
     final m = memo ?? StudentNote.create();
     m
       ..title = t
       ..text = body
+      ..marks = marks
       ..touch();
     s.putMemo(m);
     await library.saveStudent(s);
@@ -498,8 +522,8 @@ class _StudentPageState extends State<StudentPage> {
       ),
     );
     if (ok != true) return;
-    _content.clear();
-    _homework.clear();
+    _content.load('', const []);
+    _homework.load('', const []);
     await library.deleteStudent(s);
     widget.onDeleted?.call();
   }
@@ -706,20 +730,23 @@ class _StudentPageState extends State<StudentPage> {
   Widget _newLesson(BuildContext context, Student s) {
     final theme = Theme.of(context);
     final editing = _editing != null;
-    InputDecoration box(String hint) =>
-        InputDecoration(hintText: hint, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.all(12));
-    Widget field(String label, TextEditingController c, String hint) => Column(
+    Widget field(String label, RichEditController c, FocusNode focus, String hint) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Text(label, style: theme.textTheme.titleSmall),
         ),
-        TextField(controller: c, minLines: 7, maxLines: 16, decoration: box(hint)),
+        RichEditorField(controller: c, focusNode: focus, hint: hint, onLink: () => editLink(context, c)),
       ],
     );
-    final lesson = field(tr('Lektion', 'Lesson'), _content, tr('Lektion …', 'Lesson …'));
-    final homework = field(tr('Hausaufgaben', 'Homework'), _homework, tr('Hausaufgaben …', 'Homework …'));
+    final lesson = field(tr('Lektion', 'Lesson'), _content, _contentFocus, tr('Lektion …', 'Lesson …'));
+    final homework = field(
+      tr('Hausaufgaben', 'Homework'),
+      _homework,
+      _homeworkFocus,
+      tr('Hausaufgaben …', 'Homework …'),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -735,7 +762,10 @@ class _StudentPageState extends State<StudentPage> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
+        // Werkzeugleiste für das zuletzt angetippte Feld (Lektion oder Hausaufgaben).
+        RichToolbar(target: _active),
+        const SizedBox(height: 6),
         LayoutBuilder(
           builder: (context, c) => c.maxWidth >= 520
               ? Row(
@@ -907,8 +937,8 @@ class _StudentPageState extends State<StudentPage> {
                         else
                           LayoutBuilder(
                             builder: (context, c) {
-                              final a = _cell(context, tr('Lektion', 'Lesson'), l.content);
-                              final b = _cell(context, tr('Hausaufgaben', 'Homework'), l.homework);
+                              final a = _cell(context, tr('Lektion', 'Lesson'), l.content, l.contentMarks);
+                              final b = _cell(context, tr('Hausaufgaben', 'Homework'), l.homework, l.homeworkMarks);
                               return c.maxWidth >= 480
                                   ? Row(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -935,40 +965,16 @@ class _StudentPageState extends State<StudentPage> {
     );
   }
 
-  /// Text mit Aufzählungen: Zeilen mit „-“, „•“ oder „*“ werden zu Punkten,
-  /// eingerückte Zeilen zu Unterpunkten.
-  Widget _cell(BuildContext context, String label, String text) {
+  /// Text mit Formatierung und Aufzählungen (Zeilen mit „- “, „• “ oder
+  /// Nummern), eingerückte Zeilen als Unterpunkte.
+  Widget _cell(BuildContext context, String label, String text, List<TextMark> marks) {
     final theme = Theme.of(context);
-    final lines = text.trim().isEmpty ? <String>['—'] : text.trimRight().split('\n');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: theme.textTheme.labelLarge),
         const SizedBox(height: 4),
-        for (final raw in lines)
-          Builder(
-            builder: (_) {
-              final indent = raw.length - raw.trimLeft().length;
-              final t = raw.trim();
-              final bullet = t.startsWith('- ') || t.startsWith('• ') || t.startsWith('* ');
-              if (!bullet) {
-                return Padding(
-                  padding: EdgeInsets.only(left: indent * 6.0),
-                  child: Text(t),
-                );
-              }
-              return Padding(
-                padding: EdgeInsets.only(left: indent >= 2 ? 18 : 0, bottom: 2),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 16, child: Text(indent >= 2 ? '◦' : '•')),
-                    Expanded(child: Text(t.substring(2))),
-                  ],
-                ),
-              );
-            },
-          ),
+        RichTextView(text: text, marks: marks, style: theme.textTheme.bodyMedium),
       ],
     );
   }
@@ -1182,7 +1188,7 @@ class _StudentPageState extends State<StudentPage> {
                         ),
                       ],
                     ),
-                    if (m.text.isNotEmpty) Text(m.text),
+                    if (m.text.isNotEmpty) RichTextView(text: m.text, marks: m.marks),
                   ],
                 ),
               ),

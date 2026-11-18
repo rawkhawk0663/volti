@@ -414,6 +414,9 @@ class _StudentsSectionState extends State<_StudentsSection> {
     final lib = widget.state.library;
     final active = teachingUnits(lib).toList();
     final archived = lib.students.where((s) => s.archived).toList();
+    // Jedes Kind einzeln zählen (auch in Gruppen), Gruppen extra.
+    final people = lib.students.where((s) => !s.archived && !s.isGroup).length;
+    final groups = active.where((s) => s.isGroup).length;
     final days = [
       for (var d = 1; d <= 7; d++)
         if (active.any((s) => s.weekday == d)) d,
@@ -469,7 +472,10 @@ class _StudentsSectionState extends State<_StudentsSection> {
         children: [
           TeachingTopBar(
             title: tr('Schüler:innen', 'Students'),
-            subtitle: tr('${active.length} aktiv', '${active.length} active'),
+            subtitle: tr(
+              '$people aktiv${groups == 0 ? '' : ' · $groups ${groups == 1 ? 'Gruppe' : 'Gruppen'}'}',
+              '$people active${groups == 0 ? '' : ' · $groups ${groups == 1 ? 'group' : 'groups'}'}',
+            ),
             trailing: widget.state.headerActions(),
           ),
           const Divider(height: 1),

@@ -13,8 +13,17 @@ TextStyle styleWithMark(TextStyle base, CharStyle m) {
     );
   }
   if (m.italic != null) s = s.copyWith(fontStyle: m.italic! ? FontStyle.italic : FontStyle.normal);
-  if (m.underline == true) s = s.copyWith(decoration: TextDecoration.underline, decorationColor: s.color);
-  if (m.color != null) s = s.copyWith(color: Color(m.color!), decorationColor: Color(m.color!));
+  if (m.color != null) s = s.copyWith(color: Color(m.color!));
+  if (m.link != null && m.color == null) s = s.copyWith(color: const Color(0xFF1A73C8));
+  final lines = [
+    if (m.underline == true || m.link != null) TextDecoration.underline,
+    if (m.strike == true) TextDecoration.lineThrough,
+  ];
+  if (lines.isNotEmpty) s = s.copyWith(decoration: TextDecoration.combine(lines), decorationColor: s.color);
+  if (m.highlight != null) {
+    // Hervorhebungen sind hell: darauf dunkle Schrift, auch im Dunkelmodus.
+    s = s.copyWith(backgroundColor: Color(m.highlight!), color: m.color == null ? const Color(0xDD000000) : null);
+  }
   return s;
 }
 
