@@ -459,4 +459,21 @@ void main() {
     final bytes = await buildAbsencePdf(rows, cal, cal.semesterFor(DateTime(2026, 11, 17)), options: back);
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
   });
+
+  test('Absenzenliste nach Nachnamen', () async {
+    expect(splitName('Levin Sägesser'), (first: 'Levin', last: 'Sägesser'));
+    expect(splitName('Joël Jonas Baumgaertner'), (first: 'Joël Jonas', last: 'Baumgaertner'));
+    expect(splitName('von Arx, Anna'), (first: 'Anna', last: 'von Arx'));
+    expect(splitName('Mia'), (first: '', last: 'Mia'));
+    expect(surnameFirst('Levin Sägesser'), 'Sägesser Levin');
+    final names = ['Levin Sägesser', 'Paul Damm', 'Anna Bellwald'];
+    names.sort((a, b) => surnameKey(a).compareTo(surnameKey(b)));
+    expect(names, ['Anna Bellwald', 'Paul Damm', 'Levin Sägesser']);
+    final rows = absenceRows([anna(), Student.create('Ben Zürcher')..weekday = 1], (_) => null);
+    final cal = SchoolCalendar();
+    final opt = AbsenceExportOptions(byName: true, time: true);
+    expect(AbsenceExportOptions.decode(opt.encode()).byName, isTrue);
+    final bytes = await buildAbsencePdf(rows, cal, cal.semesterFor(DateTime(2026, 11, 17)), options: opt);
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+  });
 }

@@ -24,7 +24,12 @@ class AbsenceExportOptions {
     this.grade = true,
     this.instrument = false,
     this.time = false,
+    this.byName = false,
   }) : excludedPlaces = excludedPlaces ?? {};
+
+  /// Eine Liste alphabetisch nach Nachnamen statt einer Tabelle pro
+  /// Unterrichtstag.
+  bool byName;
 
   /// Orte, die *nicht* auf die Liste kommen ('' = ohne Ort). So sind neue
   /// Orte von selbst dabei.
@@ -44,6 +49,7 @@ class AbsenceExportOptions {
     'grade': grade,
     'instrument': instrument,
     'time': time,
+    'byName': byName,
   });
 
   static AbsenceExportOptions decode(String? s) {
@@ -55,6 +61,7 @@ class AbsenceExportOptions {
         grade: j['grade'] as bool? ?? true,
         instrument: j['instrument'] as bool? ?? false,
         time: j['time'] as bool? ?? false,
+        byName: j['byName'] as bool? ?? false,
       );
     } catch (_) {
       return AbsenceExportOptions();
@@ -86,6 +93,27 @@ List<AbsenceRow> absenceRows(List<Student> students, Student? Function(String id
   return rows;
 }
 
+/// Vor- und Nachname aus dem Namen der Kartei: Steht ein Komma drin, ist
+/// der Teil davor der Nachname („von Arx, Anna“), sonst das letzte Wort
+/// („Levin Sägesser“ → Sägesser).
+({String first, String last}) splitName(String name) {
+  final n = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+  final comma = n.indexOf(',');
+  if (comma > 0) return (first: n.substring(comma + 1).trim(), last: n.substring(0, comma).trim());
+  final space = n.lastIndexOf(' ');
+  if (space < 0) return (first: '', last: n);
+  return (first: n.substring(0, space), last: n.substring(space + 1));
+}
+
+/// „Sägesser Levin“: Nachname zuerst (für die alphabetische Liste).
+String surnameFirst(String name) {
+  final p = splitName(name);
+  return p.first.isEmpty ? p.last : '${p.last} ${p.first}';
+}
+
+/// Zum Sortieren nach Nachnamen, dann Vornamen.
+String surnameKey(String name) => surnameFirst(name).toLowerCase();
+
 /// Zeilenhöhen der Tabelle (Punkte).
 const _row = 11.5;
 const _head = 19.0;
@@ -94,7 +122,8 @@ String _dm(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toStrin
 
 /// Absenzenliste eines Semesters als PDF (A4 quer): pro Unterrichtstag eine
 /// Tabelle mit vollem Namen, einer Spalte pro Woche (Kalenderwoche und Datum)
-/// und den Summen, danach alle Absenzen und Ausfälle mit Grund.
+/// und den Summen, danach alle Absenzen und Ausfälle mit Grund. Mit
+/// [AbsenceExportOptions.byName] eine einzige Tabelle nach Nachnamen.
 ///
 /// Kompakt, damit eine ganze Klasse auf eine Seite passt: schmale Zeilen,
 /// kleine Schrift. [options] bestimmt Orte, Spalten und die Liste der Gründe.
@@ -139,21 +168,29 @@ Future<List<int>> buildAbsencePdf(
     ),
   );
 
-  pw.Widget table(int weekday) {
-    final dates = lessonDates(sem, weekday);
-    final people = rows.where((r) => r.weekday == weekday).toList();
+  /// Eine Tabelle: [title] oben links, eine Spalte pro Woche ([heads]:
+  /// Datum im Kopf), [dateOf] liefert den Unterrichtstag einer Person in
+  /// Woche i. [freeHead] färbt den Kopf einer Woche blau.
+  pw.Widget table(
+    String title,
+    List<AbsenceRow> people,
+    List<DateTime> heads,
+    DateTime Function(AbsenceRow r, int i) dateOf,
+    bool Function(int i) freeHead, {
+    bool surname = false,
+  }) {
     // Spalten: Name, [Instrument], [Zeit], Wochen, Anw., Abs., [Note].
     final lead = 1 + (opt.instrument ? 1 : 0) + (opt.time ? 1 : 0);
     final widths = <int, pw.TableColumnWidth>{0: const pw.FixedColumnWidth(104)};
     var col = 1;
     if (opt.instrument) widths[col++] = const pw.FixedColumnWidth(58);
-    if (opt.time) widths[col++] = const pw.FixedColumnWidth(48);
-    for (var i = 0; i < dates.length; i++) {
+    if (opt.time) widths[col++] = pw.FixedColumnWidth(surname ? 58 : 48);
+    for (var i = 0; i < heads.length; i++) {
       widths[lead + i] = const pw.FlexColumnWidth();
     }
-    widths[lead + dates.length] = const pw.FixedColumnWidth(22);
-    widths[lead + dates.length + 1] = const pw.FixedColumnWidth(22);
-    if (opt.grade) widths[lead + dates.length + 2] = const pw.FixedColumnWidth(26);
+    widths[lead + heads.length] = const pw.FixedColumnWidth(22);
+    widths[lead + heads.length + 1] = const pw.FixedColumnWidth(22);
+    if (opt.grade) widths[lead + heads.length + 2] = const pw.FixedColumnWidth(26);
     return pw.Table(
       border: pw.TableBorder.all(color: border, width: 0.5),
       columnWidths: widths,
@@ -161,30 +198,17 @@ Future<List<int>> buildAbsencePdf(
         pw.TableRow(
           repeat: true,
           children: [
-            pw.Container(
-              height: _head,
-              padding: const pw.EdgeInsets.symmetric(horizontal: 2),
-              child: pw.Row(
-                children: [
-                  pw.Text(weekdayName(weekday), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                  pw.Spacer(),
-                  pw.Text(
-                    tr('KW\nDatum', 'Wk\ndate'),
-                    textAlign: pw.TextAlign.right,
-                    style: const pw.TextStyle(fontSize: 5, color: grey),
-                  ),
-                ],
-              ),
-            ),
+            cell(title, bold: true, size: 8, align: pw.Alignment.centerLeft, height: _head),
             if (opt.instrument) cell(tr('Instrument', 'Instrument'), size: 5.5, bold: true, height: _head),
-            if (opt.time) cell(tr('Zeit', 'Time'), size: 5.5, bold: true, height: _head),
-            for (final d in dates)
+            if (opt.time)
+              cell(surname ? tr('Tag & Zeit', 'Day & time') : tr('Zeit', 'Time'), size: 5.5, bold: true, height: _head),
+            for (var i = 0; i < heads.length; i++)
               cell(
                 // Nur die Nummer, sonst bricht „KW 34“ in schmalen Spalten um.
-                '${isoWeek(d)}\n${_dm(d)}',
+                '${isoWeek(heads[i])}\n${_dm(heads[i]).substring(0, 5)}',
                 size: 5.5,
                 height: _head,
-                color: cal.freeOn(d) == null ? null : free,
+                color: freeHead(i) ? free : null,
               ),
             cell(tr('Anw.', 'Pres.'), size: 5.5, bold: true, height: _head),
             cell(tr('Abs.', 'Abs.'), size: 5.5, bold: true, height: _head),
@@ -195,7 +219,12 @@ Future<List<int>> buildAbsencePdf(
           () {
             var present = 0, absent = 0;
             final cells = <pw.Widget>[];
-            for (final d in dates) {
+            for (var i = 0; i < heads.length; i++) {
+              final d = dateOf(r, i);
+              if (!sem.contains(d)) {
+                cells.add(cell('', height: _row));
+                continue;
+              }
               final f = cal.freeOn(d);
               if (f != null) {
                 cells.add(cell(f.holiday ? 'F' : '', size: 6.5, color: free, height: _row));
@@ -223,11 +252,17 @@ Future<List<int>> buildAbsencePdf(
                 ),
               );
             }
+            final day = weekdayName(r.weekday).substring(0, 2);
             return pw.TableRow(
               children: [
-                cell(r.student.name, size: 6.5, align: pw.Alignment.centerLeft, height: _row),
+                cell(
+                  surname ? surnameFirst(r.student.name) : r.student.name,
+                  size: 6.5,
+                  align: pw.Alignment.centerLeft,
+                  height: _row,
+                ),
                 if (opt.instrument) cell(r.student.instrument, size: 6, align: pw.Alignment.centerLeft, height: _row),
-                if (opt.time) cell(r.time, size: 6, height: _row),
+                if (opt.time) cell(surname ? '$day ${r.time}'.trim() : r.time, size: 6, height: _row),
                 ...cells,
                 cell('$present', size: 6.5, height: _row),
                 cell('$absent', size: 6.5, height: _row),
@@ -236,6 +271,47 @@ Future<List<int>> buildAbsencePdf(
             );
           }(),
       ],
+    );
+  }
+
+  /// Pro Unterrichtstag eine Tabelle mit den Daten dieses Tages.
+  List<pw.Widget> byDay() => [
+    for (final d in days) ...[
+      () {
+        final dates = lessonDates(sem, d);
+        return table(
+          weekdayName(d),
+          rows.where((r) => r.weekday == d).toList(),
+          dates,
+          (r, i) => dates[i],
+          (i) => cal.freeOn(dates[i]) != null,
+        );
+      }(),
+      pw.SizedBox(height: 7),
+    ],
+  ];
+
+  /// Eine Tabelle für alle, alphabetisch nach Nachnamen. Die Spalten sind
+  /// die Wochen (Kopf: Montag), jede Person an ihrem Unterrichtstag.
+  pw.Widget byName() {
+    final mondays = <DateTime>[];
+    var m = DateTime(sem.start.year, sem.start.month, sem.start.day - (sem.start.weekday - 1));
+    final weekdays = {for (final r in rows) r.weekday};
+    while (!m.isAfter(sem.end)) {
+      // Nur Wochen, in denen jemand im Semester Unterricht hätte.
+      final week = m;
+      if (weekdays.any((d) => sem.contains(DateTime(week.year, week.month, week.day + d - 1)))) mondays.add(week);
+      m = DateTime(m.year, m.month, m.day + 7);
+    }
+    final people = [...rows]..sort((a, b) => surnameKey(a.student.name).compareTo(surnameKey(b.student.name)));
+    return table(
+      tr('Name', 'Name'),
+      people,
+      mondays,
+      (r, i) => DateTime(mondays[i].year, mondays[i].month, mondays[i].day + r.weekday - 1),
+      // Ganze Woche frei (Montag bis Freitag): Kopf blau.
+      (i) => cal.freeOn(mondays[i]) != null && cal.freeOn(mondays[i].add(const Duration(days: 4))) != null,
+      surname: true,
     );
   }
 
@@ -250,7 +326,7 @@ Future<List<int>> buildAbsencePdf(
                 cal.freeOn(l.date) == null)
               (student: r.student, lesson: l),
       ]..sort((a, b) {
-        final c = a.student.name.toLowerCase().compareTo(b.student.name.toLowerCase());
+        final c = surnameKey(a.student.name).compareTo(surnameKey(b.student.name));
         return c != 0 ? c : a.lesson.date.compareTo(b.lesson.date);
       });
   String kind(LessonStatus s) => switch (s) {
@@ -288,7 +364,7 @@ Future<List<int>> buildAbsencePdf(
       ),
       build: (_) => [
         if (rows.isEmpty) pw.Text(tr('Noch niemand mit festem Unterrichtstag.', 'Nobody with a fixed lesson day yet.')),
-        for (final d in days) ...[table(d), pw.SizedBox(height: 7)],
+        if (opt.byName) ...[byName(), pw.SizedBox(height: 7)] else ...byDay(),
         if (rows.isNotEmpty)
           pw.Text(
             tr(
@@ -317,7 +393,12 @@ Future<List<int>> buildAbsencePdf(
               for (final e in reasons)
                 pw.TableRow(
                   children: [
-                    cell(e.student.name, size: 7, height: 13, align: pw.Alignment.centerLeft),
+                    cell(
+                      opt.byName ? surnameFirst(e.student.name) : e.student.name,
+                      size: 7,
+                      height: 13,
+                      align: pw.Alignment.centerLeft,
+                    ),
                     cell(
                       '${tr('KW', 'Wk')} ${isoWeek(e.lesson.date)} · ${shortDate(e.lesson.date)}',
                       size: 7,
@@ -391,6 +472,23 @@ Future<({Semester semester, AbsenceExportOptions options})?> showAbsenceExportDi
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  heading(tr('Ordnen nach', 'Order by')),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ChoiceChip(
+                        label: Text(tr('Unterrichtstag', 'Lesson day')),
+                        selected: !opt.byName,
+                        onSelected: (_) => setDialog(() => opt.byName = false),
+                      ),
+                      ChoiceChip(
+                        label: Text(tr('Nachname (alphabetisch)', 'Surname (alphabetical)')),
+                        selected: opt.byName,
+                        onSelected: (_) => setDialog(() => opt.byName = true),
+                      ),
+                    ],
+                  ),
                   heading(tr('Semester', 'Term')),
                   Wrap(
                     spacing: 6,
@@ -432,7 +530,7 @@ Future<({Semester semester, AbsenceExportOptions options})?> showAbsenceExportDi
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     value: opt.time,
-                    title: Text(tr('Zeit', 'Time')),
+                    title: Text(opt.byName ? tr('Tag & Zeit', 'Day & time') : tr('Zeit', 'Time')),
                     onChanged: (v) => setDialog(() => opt.time = v ?? false),
                   ),
                   CheckboxListTile(
