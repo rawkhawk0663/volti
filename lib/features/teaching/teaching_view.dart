@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 
 import '../../app/floating_actions.dart';
 import '../../app/l10n.dart';
-import '../../core/teaching/school_calendar.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_actions.dart';
 import '../library/library_controller.dart';
@@ -511,38 +510,16 @@ class _AbsencesSection extends StatelessWidget {
   const _AbsencesSection({required this.state});
   final _TeachingViewState state;
 
-  /// Semester wählen (das aktuelle ist vorgewählt), dann das PDF öffnen.
+  /// Semester, Orte und Spalten wählen, dann das PDF öffnen.
   Future<void> _exportPdf(BuildContext anchor) async {
     final lib = state.library;
-    final cal = lib.calendar;
-    final list = cal.effectiveSemesters;
-    final current = cal.semesterFor(DateTime.now());
-    var sem = current;
-    if (list.length > 1) {
-      final box = anchor.findRenderObject() as RenderBox;
-      final pos = box.localToGlobal(Offset(0, box.size.height));
-      final picked = await showMenu<Semester>(
-        context: anchor,
-        position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
-        items: [
-          for (final x in list.reversed)
-            PopupMenuItem(
-              value: x,
-              child: Text(
-                '${x.name}${x.id == current.id ? tr('  (aktuell)', '  (current)') : ''}',
-                style: TextStyle(fontWeight: x.id == current.id ? FontWeight.w600 : null),
-              ),
-            ),
-        ],
-      );
-      if (picked == null) return;
-      sem = picked;
-    }
-    if (!anchor.mounted) return;
+    final choice = await showAbsenceExportDialog(anchor, lib);
+    if (choice == null || !anchor.mounted) return;
+    final sem = choice.semester;
     final rows = absenceRows(lib.students, lib.groupOf);
     await openPdfBytes(
       anchor,
-      () => buildAbsencePdf(rows, cal, sem),
+      () => buildAbsencePdf(rows, lib.calendar, sem, options: choice.options),
       tr('Absenzenliste ${sem.name}.pdf', 'Attendance ${sem.name}.pdf').replaceAll(RegExp(r'[\\/:*?"<>|]'), ''),
     );
   }

@@ -392,10 +392,7 @@ void main() {
     expect(later.student.name, 'Cleo');
     expect(later.day, DateTime(2026, 11, 19));
     // Heute frei: dann gar nicht heute.
-    expect(
-      nextLesson([a, b, c], DateTime(2026, 11, 17, 9), isFree: (d) => d.day == 17)!.student.name,
-      'Cleo',
-    );
+    expect(nextLesson([a, b, c], DateTime(2026, 11, 17, 9), isFree: (d) => d.day == 17)!.student.name, 'Cleo');
   });
 
   test('Telefonnummern schön geschrieben', () {
@@ -438,6 +435,28 @@ void main() {
     expect(rows.last.weekday, 4);
     final cal = SchoolCalendar();
     final bytes = await buildAbsencePdf(rows, cal, cal.semesterFor(DateTime(2026, 11, 17)));
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+  });
+
+  test('Absenzenliste: Orte und Spalten wählbar, Wahl bleibt gespeichert', () async {
+    final a = anna()..place = 'Zofingen';
+    final b = Student.create('Ben')
+      ..weekday = 3
+      ..time = '14:00'
+      ..place = 'Aarburg';
+    final c = Student.create('Cleo')..weekday = 4;
+    final rows = absenceRows([a, b, c], (_) => null);
+    expect(rows.map((r) => r.place), ['Zofingen', 'Aarburg', '']);
+    expect(rows.first.time, '11:25–11:50');
+    final opt = AbsenceExportOptions(excludedPlaces: {'Aarburg', ''}, reasons: false, instrument: true);
+    final back = AbsenceExportOptions.decode(opt.encode());
+    expect(back.excludedPlaces, {'Aarburg', ''});
+    expect(back.reasons, isFalse);
+    expect(back.instrument, isTrue);
+    expect(back.grade, isTrue);
+    expect(AbsenceExportOptions.decode(null).reasons, isTrue);
+    final cal = SchoolCalendar();
+    final bytes = await buildAbsencePdf(rows, cal, cal.semesterFor(DateTime(2026, 11, 17)), options: back);
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
   });
 }

@@ -1,16 +1,66 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../app/l10n.dart';
 import '../../core/teaching/school_calendar.dart';
 import '../../core/teaching/student.dart';
+import '../library/library_controller.dart';
 import 'attendance_table.dart' show attendanceLetter;
 import 'homework_share.dart' show shortDate, voltiPdfTheme;
 import 'student_dialog.dart' show weekdayName;
 
-/// Eine Zeile der Absenzenliste: Person mit ihrem Unterrichtstag und ihrer
-/// Zeit (bei Mitgliedern einer Gruppe die der Gruppe).
-typedef AbsenceRow = ({Student student, int weekday, int minutes});
+/// Eine Zeile der Absenzenliste: Person mit ihrem Unterrichtstag, ihrer
+/// Zeit und ihrem Ort (bei Mitgliedern einer Gruppe die der Gruppe).
+typedef AbsenceRow = ({Student student, int weekday, int minutes, String time, String place});
+
+/// Was auf die Absenzenliste kommt (Gerätevorliebe `absenceExport`).
+class AbsenceExportOptions {
+  AbsenceExportOptions({
+    Set<String>? excludedPlaces,
+    this.reasons = true,
+    this.grade = true,
+    this.instrument = false,
+    this.time = false,
+  }) : excludedPlaces = excludedPlaces ?? {};
+
+  /// Orte, die *nicht* auf die Liste kommen ('' = ohne Ort). So sind neue
+  /// Orte von selbst dabei.
+  final Set<String> excludedPlaces;
+
+  /// Absenzen und Ausfälle mit Grund unter den Tabellen auflisten.
+  bool reasons;
+
+  /// Spalten Note, Instrument, Zeit.
+  bool grade;
+  bool instrument;
+  bool time;
+
+  String encode() => jsonEncode({
+    'excluded': excludedPlaces.toList(),
+    'reasons': reasons,
+    'grade': grade,
+    'instrument': instrument,
+    'time': time,
+  });
+
+  static AbsenceExportOptions decode(String? s) {
+    try {
+      final j = jsonDecode(s!) as Map<String, dynamic>;
+      return AbsenceExportOptions(
+        excludedPlaces: {for (final x in j['excluded'] as List? ?? const []) x as String},
+        reasons: j['reasons'] as bool? ?? true,
+        grade: j['grade'] as bool? ?? true,
+        instrument: j['instrument'] as bool? ?? false,
+        time: j['time'] as bool? ?? false,
+      );
+    } catch (_) {
+      return AbsenceExportOptions();
+    }
+  }
+}
 
 /// Zeilen für die Absenzenliste: alle aktiven Personen (keine Gruppen) mit
 /// Unterrichtstag, nach Tag, Zeit und Name.
@@ -21,7 +71,11 @@ List<AbsenceRow> absenceRows(List<Student> students, Student? Function(String id
     final g = groupOf(s.id);
     final day = s.weekday ?? g?.weekday;
     if (day == null) continue;
-    rows.add((student: s, weekday: day, minutes: s.weekday != null ? s.minutes : g!.minutes));
+    // Zeit und Ort: eigene Angaben, sonst die der Gruppe.
+    final src = s.weekday != null ? s : g!;
+    final time = src.time == null ? '' : '${src.time}–${src.endTime}';
+    final place = s.place.trim().isNotEmpty ? s.place.trim() : (g?.place.trim() ?? '');
+    rows.add((student: s, weekday: day, minutes: src.minutes, time: time, place: place));
   }
   rows.sort((a, b) {
     var c = a.weekday.compareTo(b.weekday);
@@ -32,12 +86,30 @@ List<AbsenceRow> absenceRows(List<Student> students, Student? Function(String id
   return rows;
 }
 
+/// Zeilenhöhen der Tabelle (Punkte).
+const _row = 11.5;
+const _head = 19.0;
+
 String _dm(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.';
 
 /// Absenzenliste eines Semesters als PDF (A4 quer): pro Unterrichtstag eine
 /// Tabelle mit vollem Namen, einer Spalte pro Woche (Kalenderwoche und Datum)
 /// und den Summen, danach alle Absenzen und Ausfälle mit Grund.
-Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Semester sem) async {
+///
+/// Kompakt, damit eine ganze Klasse auf eine Seite passt: schmale Zeilen,
+/// kleine Schrift. [options] bestimmt Orte, Spalten und die Liste der Gründe.
+Future<List<int>> buildAbsencePdf(
+  List<AbsenceRow> allRows,
+  SchoolCalendar cal,
+  Semester sem, {
+  AbsenceExportOptions? options,
+}) async {
+  final opt = options ?? AbsenceExportOptions();
+  final rows = [
+    for (final r in allRows)
+      if (!opt.excludedPlaces.contains(r.place)) r,
+  ];
+  final places = {for (final r in rows) r.place}.where((p) => p.isNotEmpty).toList()..sort();
   final doc = pw.Document(title: tr('Absenzenliste', 'Attendance list'), creator: 'Volti');
   final theme = await voltiPdfTheme();
   const grey = PdfColor.fromInt(0xFF666666);
@@ -59,7 +131,7 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
     color: color,
     height: height,
     alignment: align ?? pw.Alignment.center,
-    padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+    padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 1),
     child: pw.Text(
       text,
       textAlign: pw.TextAlign.center,
@@ -70,30 +142,53 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
   pw.Widget table(int weekday) {
     final dates = lessonDates(sem, weekday);
     final people = rows.where((r) => r.weekday == weekday).toList();
+    // Spalten: Name, [Instrument], [Zeit], Wochen, Anw., Abs., [Note].
+    final lead = 1 + (opt.instrument ? 1 : 0) + (opt.time ? 1 : 0);
+    final widths = <int, pw.TableColumnWidth>{0: const pw.FixedColumnWidth(104)};
+    var col = 1;
+    if (opt.instrument) widths[col++] = const pw.FixedColumnWidth(58);
+    if (opt.time) widths[col++] = const pw.FixedColumnWidth(48);
+    for (var i = 0; i < dates.length; i++) {
+      widths[lead + i] = const pw.FlexColumnWidth();
+    }
+    widths[lead + dates.length] = const pw.FixedColumnWidth(22);
+    widths[lead + dates.length + 1] = const pw.FixedColumnWidth(22);
+    if (opt.grade) widths[lead + dates.length + 2] = const pw.FixedColumnWidth(26);
     return pw.Table(
       border: pw.TableBorder.all(color: border, width: 0.5),
-      columnWidths: {
-        0: const pw.FixedColumnWidth(120),
-        for (var i = 0; i < dates.length; i++) i + 1: const pw.FlexColumnWidth(),
-        dates.length + 1: const pw.FixedColumnWidth(26),
-        dates.length + 2: const pw.FixedColumnWidth(26),
-        dates.length + 3: const pw.FixedColumnWidth(30),
-      },
+      columnWidths: widths,
       children: [
         pw.TableRow(
           repeat: true,
           children: [
-            cell(weekdayName(weekday), bold: true, size: 9, align: pw.Alignment.centerLeft),
+            pw.Container(
+              height: _head,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 2),
+              child: pw.Row(
+                children: [
+                  pw.Text(weekdayName(weekday), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  pw.Spacer(),
+                  pw.Text(
+                    tr('KW\nDatum', 'Wk\ndate'),
+                    textAlign: pw.TextAlign.right,
+                    style: const pw.TextStyle(fontSize: 5, color: grey),
+                  ),
+                ],
+              ),
+            ),
+            if (opt.instrument) cell(tr('Instrument', 'Instrument'), size: 5.5, bold: true, height: _head),
+            if (opt.time) cell(tr('Zeit', 'Time'), size: 5.5, bold: true, height: _head),
             for (final d in dates)
               cell(
-                '${tr('KW', 'Wk')} ${isoWeek(d)}\n${_dm(d)}',
-                size: 6,
-                height: 24,
+                // Nur die Nummer, sonst bricht „KW 34“ in schmalen Spalten um.
+                '${isoWeek(d)}\n${_dm(d)}',
+                size: 5.5,
+                height: _head,
                 color: cal.freeOn(d) == null ? null : free,
               ),
-            cell(tr('Anw.', 'Pres.'), size: 6.5, bold: true),
-            cell(tr('Abs.', 'Abs.'), size: 6.5, bold: true),
-            cell(tr('Note', 'Grade'), size: 6.5, bold: true),
+            cell(tr('Anw.', 'Pres.'), size: 5.5, bold: true, height: _head),
+            cell(tr('Abs.', 'Abs.'), size: 5.5, bold: true, height: _head),
+            if (opt.grade) cell(tr('Note', 'Grade'), size: 5.5, bold: true, height: _head),
           ],
         ),
         for (final r in people)
@@ -103,12 +198,12 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
             for (final d in dates) {
               final f = cal.freeOn(d);
               if (f != null) {
-                cells.add(cell(f.holiday ? 'F' : '', color: free, height: 18));
+                cells.add(cell(f.holiday ? 'F' : '', size: 6.5, color: free, height: _row));
                 continue;
               }
               final l = r.student.lessonOn(d);
               if (l == null) {
-                cells.add(cell('', height: 18));
+                cells.add(cell('', height: _row));
                 continue;
               }
               if (l.status == LessonStatus.held || l.status == LessonStatus.makeUp) present++;
@@ -117,7 +212,8 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
                 cell(
                   attendanceLetter(l.status),
                   bold: true,
-                  height: 18,
+                  size: 6.5,
+                  height: _row,
                   color: switch (l.status) {
                     LessonStatus.excused => excused,
                     LessonStatus.missed => missed,
@@ -129,11 +225,13 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
             }
             return pw.TableRow(
               children: [
-                cell(r.student.name, size: 8, align: pw.Alignment.centerLeft, height: 18),
+                cell(r.student.name, size: 6.5, align: pw.Alignment.centerLeft, height: _row),
+                if (opt.instrument) cell(r.student.instrument, size: 6, align: pw.Alignment.centerLeft, height: _row),
+                if (opt.time) cell(r.time, size: 6, height: _row),
                 ...cells,
-                cell('$present', size: 8),
-                cell('$absent', size: 8),
-                cell(r.student.grades[sem.id] ?? '', size: 8),
+                cell('$present', size: 6.5, height: _row),
+                cell('$absent', size: 6.5, height: _row),
+                if (opt.grade) cell(r.student.grades[sem.id] ?? '', size: 6.5, height: _row),
               ],
             );
           }(),
@@ -167,7 +265,7 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
       pageFormat: PdfPageFormat.a4.landscape,
       margin: const pw.EdgeInsets.all(28),
       header: (context) => pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 10),
+        padding: const pw.EdgeInsets.only(bottom: 8),
         child: pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
@@ -177,7 +275,10 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
             ),
             pw.SizedBox(width: 12),
             pw.Text(
-              '${sem.name} · ${shortDate(sem.start)} – ${shortDate(sem.end)}',
+              [
+                '${sem.name} · ${shortDate(sem.start)} – ${shortDate(sem.end)}',
+                if (opt.excludedPlaces.isNotEmpty && places.isNotEmpty) places.join(', '),
+              ].join(' · '),
               style: const pw.TextStyle(fontSize: 10, color: grey),
             ),
             pw.Spacer(),
@@ -187,7 +288,7 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
       ),
       build: (_) => [
         if (rows.isEmpty) pw.Text(tr('Noch niemand mit festem Unterrichtstag.', 'Nobody with a fixed lesson day yet.')),
-        for (final d in days) ...[table(d), pw.SizedBox(height: 14)],
+        for (final d in days) ...[table(d), pw.SizedBox(height: 7)],
         if (rows.isNotEmpty)
           pw.Text(
             tr(
@@ -196,8 +297,9 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
             ),
             style: const pw.TextStyle(fontSize: 7, color: grey),
           ),
-        if (reasons.isNotEmpty) ...[
-          pw.SizedBox(height: 16),
+        // Die Gründe auf einer eigenen Seite (die Überschrift hing sonst allein unten).
+        if (opt.reasons && reasons.isNotEmpty) ...[
+          pw.NewPage(),
           pw.Text(
             tr('Absenzen und Ausfälle', 'Absences and cancellations'),
             style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
@@ -215,15 +317,17 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
               for (final e in reasons)
                 pw.TableRow(
                   children: [
-                    cell(e.student.name, size: 8, align: pw.Alignment.centerLeft),
+                    cell(e.student.name, size: 7, height: 13, align: pw.Alignment.centerLeft),
                     cell(
                       '${tr('KW', 'Wk')} ${isoWeek(e.lesson.date)} · ${shortDate(e.lesson.date)}',
-                      size: 8,
+                      size: 7,
+                      height: 13,
                       align: pw.Alignment.centerLeft,
                     ),
                     cell(
                       kind(e.lesson.status),
-                      size: 8,
+                      size: 7,
+                      height: 13,
                       align: pw.Alignment.centerLeft,
                       color: switch (e.lesson.status) {
                         LessonStatus.excused => excused,
@@ -231,7 +335,12 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
                         _ => cancelled,
                       },
                     ),
-                    cell(e.lesson.reason.isEmpty ? '–' : e.lesson.reason, size: 8, align: pw.Alignment.centerLeft),
+                    cell(
+                      e.lesson.reason.isEmpty ? '–' : e.lesson.reason,
+                      size: 7,
+                      height: 13,
+                      align: pw.Alignment.centerLeft,
+                    ),
                   ],
                 ),
             ],
@@ -241,4 +350,125 @@ Future<List<int>> buildAbsencePdf(List<AbsenceRow> rows, SchoolCalendar cal, Sem
     ),
   );
   return doc.save();
+}
+
+/// Fenster vor dem Export: Semester, Unterrichtsorte, Spalten und ob die
+/// Gründe aufgelistet werden. Die Wahl merkt sich das Gerät.
+Future<({Semester semester, AbsenceExportOptions options})?> showAbsenceExportDialog(
+  BuildContext context,
+  LibraryController library,
+) async {
+  final cal = library.calendar;
+  final semesters = cal.effectiveSemesters.reversed.toList();
+  final current = cal.semesterFor(DateTime.now());
+  final rows = absenceRows(library.students, library.groupOf);
+  final places = {for (final r in rows) r.place}.toList()
+    ..sort((a, b) {
+      // „Ohne Ort“ zuletzt.
+      if (a.isEmpty != b.isEmpty) return a.isEmpty ? 1 : -1;
+      return a.toLowerCase().compareTo(b.toLowerCase());
+    });
+  final opt = AbsenceExportOptions.decode(library.settings.text('absenceExport'));
+  var sem = semesters.firstWhere((s) => s.id == current.id, orElse: () => semesters.first);
+  int countAt(String place) => rows.where((r) => r.place == place).length;
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setDialog) {
+        final theme = Theme.of(c);
+        Widget heading(String t) => Padding(
+          padding: const EdgeInsets.only(top: 14, bottom: 6),
+          child: Text(t, style: theme.textTheme.labelLarge),
+        );
+        final none = places.every(opt.excludedPlaces.contains);
+        return AlertDialog(
+          title: Text(tr('Absenzenliste als PDF', 'Attendance list as PDF')),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  heading(tr('Semester', 'Term')),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final x in semesters)
+                        ChoiceChip(
+                          label: Text(x.name),
+                          selected: x.id == sem.id,
+                          onSelected: (_) => setDialog(() => sem = x),
+                        ),
+                    ],
+                  ),
+                  if (places.length > 1) ...[
+                    heading(tr('Unterrichtsort', 'Place')),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final p in places)
+                          FilterChip(
+                            label: Text('${p.isEmpty ? tr('ohne Ort', 'no place') : p} (${countAt(p)})'),
+                            selected: !opt.excludedPlaces.contains(p),
+                            onSelected: (on) =>
+                                setDialog(() => on ? opt.excludedPlaces.remove(p) : opt.excludedPlaces.add(p)),
+                          ),
+                      ],
+                    ),
+                  ],
+                  heading(tr('Spalten', 'Columns')),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: opt.instrument,
+                    title: Text(tr('Instrument', 'Instrument')),
+                    onChanged: (v) => setDialog(() => opt.instrument = v ?? false),
+                  ),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: opt.time,
+                    title: Text(tr('Zeit', 'Time')),
+                    onChanged: (v) => setDialog(() => opt.time = v ?? false),
+                  ),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: opt.grade,
+                    title: Text(tr('Note', 'Grade')),
+                    onChanged: (v) => setDialog(() => opt.grade = v ?? false),
+                  ),
+                  heading(tr('Darunter', 'Below')),
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: opt.reasons,
+                    title: Text(tr('Absenzen mit Grund auflisten', 'List absences with reason')),
+                    onChanged: (v) => setDialog(() => opt.reasons = v),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(c).pop(false), child: Text(tr('Abbrechen', 'Cancel'))),
+            FilledButton.icon(
+              onPressed: places.isNotEmpty && none ? null : () => Navigator.of(c).pop(true),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: Text(tr('PDF erstellen', 'Create PDF')),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+  if (ok != true) return null;
+  // Nur Orte merken, die es gibt (gelöschte Orte fallen weg).
+  opt.excludedPlaces.retainAll(places);
+  await library.settings.setText('absenceExport', opt.encode());
+  return (semester: sem, options: opt);
 }
