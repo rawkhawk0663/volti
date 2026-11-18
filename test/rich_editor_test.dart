@@ -123,4 +123,41 @@ void main() {
     final bytes = await doc.save();
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
   });
+
+  test('Unterpunkte: Einzug, Zeichen je Stufe, Nummern pro Stufe', () {
+    final c = RichEditController(text: '• Tonleiter\n• G-Dur\n• Etüde');
+    c.selection = const TextSelection.collapsed(offset: 15); // in „G-Dur“
+    expect(c.inList, isTrue);
+    c.indent(more: true);
+    expect(c.text, '• Tonleiter\n    ◦ G-Dur\n• Etüde');
+    expect(c.selection.baseOffset, 19);
+    c.indent(more: true);
+    expect(c.text, '• Tonleiter\n        ▪ G-Dur\n• Etüde');
+    c.indent(more: false);
+    c.indent(more: false);
+    expect(c.text, '• Tonleiter\n• G-Dur\n• Etüde');
+    c.dispose();
+
+    final n = RichEditController(text: '1. A\n2. B\n3. C');
+    n.selection = const TextSelection.collapsed(offset: 7); // in „B“
+    n.indent(more: true);
+    expect(n.text, '1. A\n    1. B\n2. C');
+    n.indent(more: false);
+    expect(n.text, '1. A\n2. B\n3. C');
+    n.dispose();
+  });
+
+  test('Enter im leeren Unterpunkt geht eine Stufe zurück', () {
+    final f = ListContinuation();
+    var r = f.formatEditUpdate(_v('• A\n    ◦ ', 10), _v('• A\n    ◦ \n', 11));
+    expect(r.text, '• A\n• ');
+    r = f.formatEditUpdate(_v('    ◦ B', 7), _v('    ◦ B\n', 8));
+    expect(r.text, '    ◦ B\n    ◦ ');
+  });
+
+  test('Ohne Liste macht Tab keinen Einzug (Feldwechsel bleibt)', () {
+    final c = RichEditController(text: 'Normaler Text');
+    expect(c.inList, isFalse);
+    c.dispose();
+  });
 }

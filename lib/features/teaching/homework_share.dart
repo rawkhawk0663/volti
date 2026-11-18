@@ -14,7 +14,7 @@ import '../../core/ink/text_marks.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_controller.dart';
 import '../viewer/page_export.dart';
-import 'rich_editor.dart' show plainTextWithLinks, whatsAppText;
+import 'rich_editor.dart' show listLevel, plainTextWithLinks, whatsAppText;
 
 /// Datum kurz, z. B. „17.11.2026“.
 String shortDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
@@ -244,7 +244,7 @@ List<pw.Widget> pdfRichLines(String text, List<TextMark> marks, pw.TextStyle bas
   }
 
   final out = <pw.Widget>[];
-  final bullet = RegExp(r'^(\s*)([-•*]|\d+[.)]) ');
+  final bullet = RegExp(r'^(\s*)([-•*◦▪]|\d+[.)]) ');
   var offset = 0;
   for (final raw in text.split('\n')) {
     final cs = chars.sublist(offset, offset + raw.length);
@@ -256,14 +256,18 @@ List<pw.Widget> pdfRichLines(String text, List<TextMark> marks, pw.TextStyle bas
       continue;
     }
     final marker = m.group(2)!;
-    final indent = m.group(1)!.length >= 2 ? 18.0 : 0.0;
+    final level = listLevel(m.group(1)!.length);
+    final indent = level * 20.0;
     out.add(
       pw.Padding(
         padding: pw.EdgeInsets.only(left: indent, bottom: 2),
         child: pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.SizedBox(width: 20, child: pw.Text(RegExp(r'\d').hasMatch(marker) ? marker : '•', style: base)),
+            pw.SizedBox(
+              width: 20,
+              child: RegExp(r'\d').hasMatch(marker) ? pw.Text(marker, style: base) : _pdfBullet(level, base),
+            ),
             pw.Expanded(child: pw.RichText(text: span(raw.substring(m.end), cs.sublist(m.end)))),
           ],
         ),
@@ -271,4 +275,23 @@ List<pw.Widget> pdfRichLines(String text, List<TextMark> marks, pw.TextStyle bas
     );
   }
   return out;
+}
+
+/// Aufzählungszeichen im PDF, selbst gezeichnet (die PDF-Schrift kennt nicht
+/// alle Zeichen): Punkt, Kreis, Quadrat je nach Stufe.
+pw.Widget _pdfBullet(int level, pw.TextStyle base) {
+  final size = (base.fontSize ?? 12) * 0.36;
+  final kind = level % 3;
+  return pw.Padding(
+    padding: pw.EdgeInsets.only(top: (base.fontSize ?? 12) * 0.42, left: 2),
+    child: pw.Container(
+      width: size,
+      height: size,
+      decoration: pw.BoxDecoration(
+        shape: kind == 2 ? pw.BoxShape.rectangle : pw.BoxShape.circle,
+        color: kind == 1 ? null : PdfColors.black,
+        border: kind == 1 ? pw.Border.all(width: 0.8) : null,
+      ),
+    ),
+  );
 }

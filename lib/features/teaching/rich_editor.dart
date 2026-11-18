@@ -10,11 +10,21 @@ import '../viewer/rich_text.dart';
 
 // ---------------------------------------------------------------- Listen
 
-/// Aufzählungszeichen am Zeilenanfang („- “, „• “, „* “), mit Einrückung.
-final _bulletLine = RegExp(r'^(\s*)([-•*]) ');
+/// Aufzählungszeichen am Zeilenanfang („- “, „• “, „* “, für Unterpunkte „◦ “, „▪ “), mit Einrückung.
+final _bulletLine = RegExp(r'^(\s*)([-•*◦▪]) ');
 
 /// Nummer am Zeilenanfang („1. “, „2) “), mit Einrückung.
 final _numberLine = RegExp(r'^(\s*)(\d+)[.)] ');
+
+/// Ein Einzug (Unterpunkt) = vier Leerzeichen vor dem Aufzählungszeichen.
+const indentUnit = '    ';
+
+/// Stufe eines Listenpunkts aus seinem Einzug (0 = oberste Stufe). Ältere
+/// Einträge mit zwei Leerzeichen gelten auch als Unterpunkt.
+int listLevel(int indent) => (indent + 2) ~/ indentUnit.length;
+
+/// Aufzählungszeichen je Stufe.
+String bulletFor(int level) => const ['•', '◦', '▪'][level % 3];
 
 /// Neue Zeile in einer Liste: das nächste Aufzählungszeichen bzw. die nächste
 /// Nummer kommt von selbst. Enter in einem leeren Listenpunkt beendet die Liste.
@@ -44,8 +54,19 @@ class ListContinuation extends TextInputFormatter {
       prefixLength = n.end;
     }
     if (prefix == null) return newValue;
+    final indent = (b ?? n)!.group(1)!;
+    // Leerer Unterpunkt: eine Stufe zurück statt einer neuen Zeile.
+    if (line.substring(prefixLength!).trim().isEmpty && indent.isNotEmpty) {
+      final less = indent.length > indentUnit.length ? indent.substring(indentUnit.length) : '';
+      final marker = b != null ? '${bulletFor(listLevel(less.length))} ' : line.substring(indent.length, prefixLength);
+      final text = oldValue.text.replaceRange(lineStart, at, '$less$marker');
+      return TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: lineStart + less.length + marker.length),
+      );
+    }
     // Leerer Listenpunkt: Aufzählung beenden (Zeichen entfernen, keine neue Zeile).
-    if (line.substring(prefixLength!).trim().isEmpty) {
+    if (line.substring(prefixLength).trim().isEmpty) {
       final text = oldValue.text.replaceRange(lineStart, at, '');
       return TextEditingValue(
         text: text,
@@ -281,9 +302,10 @@ class RichEditController extends TextEditingController {
       } else {
         if (own != null) cut = own.end - own.group(1)!.length;
         if (other != null) cut = other.end - other.group(1)!.length;
-        add = numbered ? '${i + 1}. ' : '• ';
+        final lead = (own ?? other)?.group(1)?.length ?? (line.length - line.trimLeft().length);
+        add = numbered ? '${i + 1}. ' : '${bulletFor(listLevel(lead))} ';
       }
-      final indent = (own ?? other)?.group(1)?.length ?? 0;
+      final indent = (own ?? other)?.group(1)?.length ?? (line.length - line.trimLeft().length);
       final at = start + indent;
       value = value.copyWith(
         text: text.replaceRange(at, at + cut, add),
@@ -293,7 +315,110 @@ class RichEditController extends TextEditingController {
     }
     // Schreibmarke ans Ende der letzten Zeile.
     value = value.copyWith(selection: TextSelection.collapsed(offset: (blockEnd + shift).clamp(0, text.length)));
+    renumber();
     notifyListeners();
+  }
+
+  /// Steht die Schreibmarke (bzw. Markierung) in einer Liste?
+  bool get inList {
+    final t = text;
+    for (final start in _selectedLineStarts()) {
+      final end = t.indexOf('\n', start);
+      final line = t.substring(start, end < 0 ? t.length : end);
+      if (_bulletLine.hasMatch(line) || _numberLine.hasMatch(line)) return true;
+    }
+    return false;
+  }
+
+  /// Einzug der gewählten Zeilen vergrössern ([more]) oder verkleinern:
+  /// Listenpunkte werden zu Unterpunkten und zurück.
+  void indent({required bool more}) {
+    final starts = _selectedLineStarts();
+    final sel = selection;
+    var shiftBefore = 0, shiftTotal = 0;
+    for (var i = starts.length - 1; i >= 0; i--) {
+      final start = starts[i];
+      final end = text.indexOf('\n', start);
+      final line = text.substring(start, end < 0 ? text.length : end);
+      final lead = line.length - line.trimLeft().length;
+      final b = _bulletLine.firstMatch(line);
+      int change;
+      if (more) {
+        value = value.copyWith(text: text.replaceRange(start, start, indentUnit));
+        change = indentUnit.length;
+      } else {
+        final cut = lead < indentUnit.length ? lead : indentUnit.length;
+        if (cut == 0) continue;
+        value = value.copyWith(text: text.replaceRange(start, start + cut, ''));
+        change = -cut;
+      }
+      // Aufzählungszeichen passend zur neuen Stufe.
+      if (b != null) {
+        final newIndent = b.group(1)!.length + change;
+        final at = start + newIndent;
+        final marker = bulletFor(listLevel(newIndent));
+        if (text.substring(at, at + 1) != marker) {
+          value = value.copyWith(text: text.replaceRange(at, at + 1, marker));
+        }
+      }
+      shiftTotal += change;
+      if (i == 0) shiftBefore = change;
+    }
+    // Markierung bzw. Schreibmarke mitschieben.
+    if (sel.isValid) {
+      value = value.copyWith(
+        selection: TextSelection(
+          baseOffset: (sel.start + shiftBefore).clamp(starts.first, text.length),
+          extentOffset: (sel.end + shiftTotal).clamp(0, text.length),
+        ),
+      );
+    }
+    renumber();
+    notifyListeners();
+  }
+
+  /// Nummerierte Listen neu durchzählen (pro Stufe ab 1, eine Zeile ohne
+  /// Liste beginnt neu).
+  void renumber() {
+    final lines = text.split('\n');
+    final counters = <int, int>{};
+    final changes = <({int at, int length, String number})>[];
+    var offset = 0;
+    for (final line in lines) {
+      final n = _numberLine.firstMatch(line);
+      final b = _bulletLine.firstMatch(line);
+      if (n == null && b == null) {
+        counters.clear();
+      } else {
+        final level = listLevel((n ?? b)!.group(1)!.length);
+        counters.removeWhere((l, _) => l > level);
+        if (n != null) {
+          final number = (counters[level] ?? 0) + 1;
+          counters[level] = number;
+          if (n.group(2) != '$number') {
+            changes.add((at: offset + n.group(1)!.length, length: n.group(2)!.length, number: '$number'));
+          }
+        } else {
+          counters.remove(level);
+        }
+      }
+      offset += line.length + 1;
+    }
+    if (changes.isEmpty) return;
+    final sel = selection;
+    var shift = 0;
+    for (final c in changes.reversed) {
+      value = value.copyWith(text: text.replaceRange(c.at, c.at + c.length, c.number));
+      if (sel.isValid && c.at < sel.start) shift += c.number.length - c.length;
+    }
+    if (sel.isValid) {
+      value = value.copyWith(
+        selection: TextSelection(
+          baseOffset: (sel.baseOffset + shift).clamp(0, text.length),
+          extentOffset: (sel.extentOffset + shift).clamp(0, text.length),
+        ),
+      );
+    }
   }
 
   @override
@@ -342,19 +467,31 @@ class RichEditorField extends StatelessWidget {
       const SingleActivator(LogicalKeyboardKey.keyU, control: true): controller.toggleUnderline,
       const SingleActivator(LogicalKeyboardKey.keyK, control: true): ?onLink,
     },
-    child: TextField(
-      key: ValueKey(controller.generation),
-      controller: controller,
-      undoController: controller.undo,
-      focusNode: focusNode,
-      autofocus: autofocus,
-      minLines: minLines,
-      maxLines: maxLines,
-      inputFormatters: [ListContinuation()],
-      decoration: InputDecoration(
-        hintText: hint,
-        border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.all(12),
+    // Tab / Umschalt+Tab in einer Liste: Unterpunkt bzw. eine Stufe zurück.
+    child: Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyUpEvent || event.logicalKey != LogicalKeyboardKey.tab) return KeyEventResult.ignored;
+        final keys = HardwareKeyboard.instance;
+        if (keys.isControlPressed || keys.isAltPressed || !controller.inList) return KeyEventResult.ignored;
+        controller.indent(more: !keys.isShiftPressed);
+        return KeyEventResult.handled;
+      },
+      child: TextField(
+        key: ValueKey(controller.generation),
+        controller: controller,
+        undoController: controller.undo,
+        focusNode: focusNode,
+        autofocus: autofocus,
+        minLines: minLines,
+        maxLines: maxLines,
+        inputFormatters: [ListContinuation()],
+        decoration: InputDecoration(
+          hintText: hint,
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.all(12),
+        ),
       ),
     ),
   );
@@ -472,6 +609,16 @@ class RichToolbar extends StatelessWidget {
               Icons.format_list_numbered,
               tr('Nummerierte Liste', 'Numbered list'),
               c == null ? null : () => c.toggleList(numbered: true),
+            ),
+            button(
+              Icons.format_indent_decrease,
+              tr('Einzug verkleinern (Umschalt+Tab)', 'Decrease indent (Shift+Tab)'),
+              c == null ? null : () => c.indent(more: false),
+            ),
+            button(
+              Icons.format_indent_increase,
+              tr('Unterpunkt (Tab)', 'Sub-item (Tab)'),
+              c == null ? null : () => c.indent(more: true),
             ),
             button(Icons.format_clear, tr('Formatierung entfernen', 'Clear formatting'), c?.clearFormatting),
             gap(),
@@ -725,11 +872,11 @@ class _RichTextViewState extends State<RichTextView> {
         lines.add(Text.rich(_span(raw, lineChars, base)));
         continue;
       }
-      final indent = m.group(1)!.length;
-      final marker = b != null ? (indent >= 2 ? '◦' : '•') : '${n!.group(2)}.';
+      final level = listLevel(m.group(1)!.length);
+      final marker = b != null ? bulletFor(level) : '${n!.group(2)}.';
       lines.add(
         Padding(
-          padding: EdgeInsets.only(left: indent >= 2 ? 18 : 0, bottom: 2),
+          padding: EdgeInsets.only(left: level * 20.0, bottom: 2),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
