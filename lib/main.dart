@@ -99,6 +99,8 @@ void _registerFontLicenses() {
     'Noto Serif': 'OFL-NotoSerif.txt',
     'Roboto': 'OFL-Roboto.txt',
     'Roboto Mono': 'OFL-RobotoMono.txt',
+    'IBM Plex Sans': 'OFL-IBMPlexSans.txt',
+    'Sora': 'OFL-Sora.txt',
   };
   LicenseRegistry.addLicense(() async* {
     for (final e in fonts.entries) {

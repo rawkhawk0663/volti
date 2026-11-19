@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
+import '../../app/visuals.dart';
 import '../../app/window_buttons.dart';
 import '../../core/library/folders.dart';
 import '../../core/library/library_filter.dart';
@@ -541,13 +541,12 @@ class _SetlistsViewState extends State<SetlistsView> with LibraryActions {
         _selecting ? _endSelecting() : _up();
       },
       child: Scaffold(
-        backgroundColor: Colors.transparent,
         floatingActionButton: _selecting
             ? null
-            : FloatingActionButton.extended(
+            : GradientFab(
                 onPressed: _newSetlist,
                 icon: const Icon(Icons.add),
-                label: Text(tr('Neue Setlist', 'New setlist')),
+                label: tr('Neue Setlist', 'New setlist'),
               ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -755,89 +754,88 @@ class SetlistDetailScreen extends StatelessWidget {
       listenable: library,
       builder: (context, _) {
         final s = setlist;
-        return VoltiBackground(
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              leading: onBack == null
-                  ? null
-                  : IconButton(
-                      tooltip: tr('Zurück zu den Setlists', 'Back to the setlists'),
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: onBack,
-                    ),
-              automaticallyImplyLeading: onBack == null,
-              title: Text(s.name),
-              actions: [
-                IconButton(
-                  tooltip: tr('Ganze Setlist als PDF (z. B. für die Band)', 'Whole setlist as PDF (e.g. for the band)'),
-                  icon: const Icon(Icons.ios_share),
-                  onPressed: s.items.isEmpty ? null : () => _exportSetlist(context, library, s),
-                ),
-                IconButton(
-                  tooltip: tr('Umbenennen', 'Rename'),
-                  icon: const Icon(Icons.edit_outlined),
-                  onPressed: () async {
-                    final name = await askForName(
-                      context,
-                      title: tr('Setlist umbenennen', 'Rename setlist'),
-                      initial: s.name,
-                    );
-                    if (name == null) return;
-                    s.name = name;
-                    await library.saveSetlist(s);
-                  },
-                ),
-                IconButton(
-                  tooltip: tr('Setlist löschen', 'Delete setlist'),
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () async {
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: Text(tr('Setlist löschen?', 'Delete setlist?')),
-                        content: Text(
-                          tr(
-                            '„${s.name}“ wird gelöscht. Die Noten selbst bleiben erhalten.',
-                            '“${s.name}” will be deleted. The music itself is kept.',
-                          ),
-                        ),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
-                          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Löschen', 'Delete'))),
-                        ],
-                      ),
-                    );
-                    if (ok != true) return;
-                    await library.deleteSetlist(s);
-                    if (!context.mounted) return;
-                    if (onBack != null) {
-                      onBack!();
-                    } else {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: s.items.isEmpty ? null : () => playSetlist(context, library, s),
-                  icon: const Icon(Icons.play_arrow),
-                  label: Text(tr('Spielen', 'Play')),
-                ),
-                const SizedBox(width: 8),
-                const WindowButtons(),
-                const SizedBox(width: 4),
-              ],
-            ),
-            floatingActionButton: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'sheet',
-                  tooltip: tr(
-                    'Leeres Blatt für Notizen (z. B. als Music Director)',
-                    'Blank sheet for notes (e.g. as music director)',
+        return Scaffold(
+          appBar: AppBar(
+            leading: onBack == null
+                ? null
+                : IconButton(
+                    tooltip: tr('Zurück zu den Setlists', 'Back to the setlists'),
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: onBack,
                   ),
+            automaticallyImplyLeading: onBack == null,
+            title: Text(s.name),
+            actions: [
+              IconButton(
+                tooltip: tr('Ganze Setlist als PDF (z. B. für die Band)', 'Whole setlist as PDF (e.g. for the band)'),
+                icon: const Icon(Icons.ios_share),
+                onPressed: s.items.isEmpty ? null : () => _exportSetlist(context, library, s),
+              ),
+              IconButton(
+                tooltip: tr('Umbenennen', 'Rename'),
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () async {
+                  final name = await askForName(
+                    context,
+                    title: tr('Setlist umbenennen', 'Rename setlist'),
+                    initial: s.name,
+                  );
+                  if (name == null) return;
+                  s.name = name;
+                  await library.saveSetlist(s);
+                },
+              ),
+              IconButton(
+                tooltip: tr('Setlist löschen', 'Delete setlist'),
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: Text(tr('Setlist löschen?', 'Delete setlist?')),
+                      content: Text(
+                        tr(
+                          '„${s.name}“ wird gelöscht. Die Noten selbst bleiben erhalten.',
+                          '“${s.name}” will be deleted. The music itself is kept.',
+                        ),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+                        FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Löschen', 'Delete'))),
+                      ],
+                    ),
+                  );
+                  if (ok != true) return;
+                  await library.deleteSetlist(s);
+                  if (!context.mounted) return;
+                  if (onBack != null) {
+                    onBack!();
+                  } else {
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: s.items.isEmpty ? null : () => playSetlist(context, library, s),
+                icon: const Icon(Icons.play_arrow),
+                label: Text(tr('Spielen', 'Play')),
+              ),
+              const SizedBox(width: 8),
+              const WindowButtons(),
+              const SizedBox(width: 4),
+            ],
+          ),
+          floatingActionButton: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Tooltip(
+                message: tr(
+                  'Leeres Blatt für Notizen (z. B. als Music Director)',
+                  'Blank sheet for notes (e.g. as music director)',
+                ),
+                child: GradientFab(
+                  secondary: true,
                   onPressed: () async {
                     final r = await showPaperPicker(
                       context,
@@ -853,118 +851,111 @@ class SetlistDetailScreen extends StatelessWidget {
                     if (sheet != null) await library.addToSetlist(current, [sheet]);
                   },
                   icon: const Icon(Icons.sticky_note_2_outlined),
-                  label: Text(tr('Notizblatt', 'Note sheet')),
+                  label: tr('Notizblatt', 'Note sheet'),
                 ),
-                const SizedBox(width: 12),
-                FloatingActionButton.extended(
-                  heroTag: 'add',
-                  onPressed: () async {
-                    final picked = await showScorePicker(context, library);
-                    if (picked != null && picked.isNotEmpty) await library.addToSetlist(s, picked);
+              ),
+              const SizedBox(width: 12),
+              GradientFab(
+                onPressed: () async {
+                  final picked = await showScorePicker(context, library);
+                  if (picked != null && picked.isNotEmpty) await library.addToSetlist(s, picked);
+                },
+                icon: const Icon(Icons.add),
+                label: tr('Stücke hinzufügen', 'Add pieces'),
+              ),
+            ],
+          ),
+          body: s.items.isEmpty
+              ? Center(child: Text(tr('Noch leer. Füge Stücke hinzu.', 'Still empty. Add some pieces.')))
+              : ReorderableListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                  itemCount: s.items.length,
+                  onReorderItem: (from, to) {
+                    final item = s.items.removeAt(from);
+                    s.items.insert(to, item);
+                    library.saveSetlist(s);
                   },
-                  icon: const Icon(Icons.add),
-                  label: Text(tr('Stücke hinzufügen', 'Add pieces')),
-                ),
-              ],
-            ),
-            body: s.items.isEmpty
-                ? Center(child: Text(tr('Noch leer. Füge Stücke hinzu.', 'Still empty. Add some pieces.')))
-                : ReorderableListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                    itemCount: s.items.length,
-                    onReorderItem: (from, to) {
-                      final item = s.items.removeAt(from);
-                      s.items.insert(to, item);
-                      library.saveSetlist(s);
-                    },
-                    itemBuilder: (context, i) {
-                      final item = s.items[i];
-                      final entry = library.byRelativePath(item.relativePath);
-                      return Card(
-                        key: ValueKey(item.id),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            radius: 14,
-                            child: entry?.isSheet == true
-                                ? const Icon(Icons.sticky_note_2_outlined, size: 16)
-                                : Text('${i + 1}', style: const TextStyle(fontSize: 12)),
-                          ),
-                          title: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  item.label ?? entry?.title ?? item.relativePath,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                  itemBuilder: (context, i) {
+                    final item = s.items[i];
+                    final entry = library.byRelativePath(item.relativePath);
+                    return Card(
+                      key: ValueKey(item.id),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 14,
+                          child: entry?.isSheet == true
+                              ? const Icon(Icons.sticky_note_2_outlined, size: 16)
+                              : Text('${i + 1}', style: const TextStyle(fontSize: 12)),
+                        ),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                item.label ?? entry?.title ?? item.relativePath,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              if (entry?.musicalKey != null) ...[
-                                const SizedBox(width: 8),
-                                KeyBadge(entry!.musicalKey!),
-                              ],
-                            ],
-                          ),
-                          subtitle: entry?.isSheet == true
-                              ? Text(
-                                  tr(
-                                    'Notizblatt – zum Beschreiben; mehr Seiten über ⋮ → Leere Seite einfügen',
-                                    'Note sheet – for writing on; more pages via ⋮ → Insert blank page',
-                                  ),
-                                )
-                              : entry == null
-                              ? Text(
-                                  tr('Nicht gefunden – umbenannt oder gelöscht?', 'Not found – renamed or deleted?'),
-                                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                                )
-                              : item.bookmark != null
-                              ? Text(tr('Lesezeichen in «${entry.title}»', 'Bookmark in «${entry.title}»'))
-                              : (entry.composer == null ? null : Text(entry.composer!)),
-                          onTap: entry == null ? null : () => playSetlist(context, library, s, start: i),
-                          trailing: Padding(
-                            padding: const EdgeInsets.only(right: 24), // Platz für den Zieh-Griff
-                            child: IconButton(
-                              tooltip: tr('Aus Setlist entfernen', 'Remove from setlist'),
-                              icon: const Icon(Icons.remove_circle_outline),
-                              onPressed: () async {
-                                if (entry?.isSheet == true && entry!.hasAnnotations) {
-                                  final ok = await showDialog<bool>(
-                                    context: context,
-                                    builder: (c) => AlertDialog(
-                                      title: Text(
-                                        tr(
-                                          'Notizblatt „${entry.title}“ entfernen?',
-                                          'Remove note sheet “${entry.title}”?',
-                                        ),
-                                      ),
-                                      content: Text(
-                                        tr(
-                                          'Deine Notizen darauf werden gelöscht.',
-                                          'Your notes on it will be deleted.',
-                                        ),
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(c, false),
-                                          child: Text(tr('Abbrechen', 'Cancel')),
-                                        ),
-                                        FilledButton(
-                                          onPressed: () => Navigator.pop(c, true),
-                                          child: Text(tr('Entfernen', 'Remove')),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (ok != true) return;
-                                }
-                                await library.removeFromSetlist(s, i);
-                              },
                             ),
+                            if (entry?.musicalKey != null) ...[const SizedBox(width: 8), KeyBadge(entry!.musicalKey!)],
+                          ],
+                        ),
+                        subtitle: entry?.isSheet == true
+                            ? Text(
+                                tr(
+                                  'Notizblatt – zum Beschreiben; mehr Seiten über ⋮ → Leere Seite einfügen',
+                                  'Note sheet – for writing on; more pages via ⋮ → Insert blank page',
+                                ),
+                              )
+                            : entry == null
+                            ? Text(
+                                tr('Nicht gefunden – umbenannt oder gelöscht?', 'Not found – renamed or deleted?'),
+                                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                              )
+                            : item.bookmark != null
+                            ? Text(tr('Lesezeichen in «${entry.title}»', 'Bookmark in «${entry.title}»'))
+                            : (entry.composer == null ? null : Text(entry.composer!)),
+                        onTap: entry == null ? null : () => playSetlist(context, library, s, start: i),
+                        trailing: Padding(
+                          padding: const EdgeInsets.only(right: 24), // Platz für den Zieh-Griff
+                          child: IconButton(
+                            tooltip: tr('Aus Setlist entfernen', 'Remove from setlist'),
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: () async {
+                              if (entry?.isSheet == true && entry!.hasAnnotations) {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    title: Text(
+                                      tr(
+                                        'Notizblatt „${entry.title}“ entfernen?',
+                                        'Remove note sheet “${entry.title}”?',
+                                      ),
+                                    ),
+                                    content: Text(
+                                      tr('Deine Notizen darauf werden gelöscht.', 'Your notes on it will be deleted.'),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(c, false),
+                                        child: Text(tr('Abbrechen', 'Cancel')),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () => Navigator.pop(c, true),
+                                        child: Text(tr('Entfernen', 'Remove')),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (ok != true) return;
+                              }
+                              await library.removeFromSetlist(s, i);
+                            },
                           ),
                         ),
-                      );
-                    },
-                  ),
-          ),
+                      ),
+                    );
+                  },
+                ),
         );
       },
     );

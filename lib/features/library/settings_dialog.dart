@@ -16,6 +16,7 @@ import 'auto_backup_controller.dart';
 import 'help_dialog.dart';
 import 'sync_controller.dart';
 import '../../app/l10n.dart';
+import '../../app/visuals.dart';
 
 /// Einstellungen in einem eigenen Fenster: Darstellung, Notenansicht und –
 /// aus der Bibliothek – Sync und Datenordner. Änderungen gelten sofort.
@@ -947,15 +948,12 @@ void showVoltiLicenses(BuildContext context) {
     context: context,
     applicationName: 'Volti',
     applicationVersion: voltiVersion,
-    applicationIcon: Padding(
-      padding: const EdgeInsets.all(8),
-      child: Image.asset('assets/brand/volti_mark.png', height: 48),
-    ),
+    applicationIcon: Padding(padding: const EdgeInsets.all(8), child: const VoltiMark(height: 48)),
     applicationLegalese: tr(
       'Notenzeichen: Bravura (Steinberg, SIL Open Font License). '
-          'Schriften: Roboto, Roboto Mono und Noto Serif (SIL Open Font License).',
+          'Schriften: IBM Plex Sans, Sora, Roboto, Roboto Mono und Noto Serif (SIL Open Font License).',
       'Music symbols: Bravura (Steinberg, SIL Open Font License). '
-          'Fonts: Roboto, Roboto Mono and Noto Serif (SIL Open Font License).',
+          'Fonts: IBM Plex Sans, Sora, Roboto, Roboto Mono and Noto Serif (SIL Open Font License).',
     ),
   );
 }

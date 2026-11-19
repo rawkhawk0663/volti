@@ -330,7 +330,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: n.background == TextNote.noBackground ? null : Color(n.background),
-                border: active ? Border.all(color: VoltiColors.seafoam.withValues(alpha: 0.35)) : null,
+                border: active ? Border.all(color: VoltiColors.selection.withValues(alpha: 0.35)) : null,
                 borderRadius: BorderRadius.circular(3),
               ),
               child: Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: label),
@@ -386,11 +386,11 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(color: VoltiColors.seafoam),
+                  borderSide: const BorderSide(color: VoltiColors.selection),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(color: VoltiColors.seafoam, width: 1.5),
+                  borderSide: const BorderSide(color: VoltiColors.selection, width: 1.5),
                 ),
               ),
             ),

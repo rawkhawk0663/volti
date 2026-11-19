@@ -4,7 +4,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
+import '../../app/visuals.dart';
 import '../../app/window_buttons.dart';
 import '../../core/library/folders.dart';
 import '../../core/library/library_filter.dart';
@@ -139,48 +139,42 @@ class _LibraryScreenState extends State<LibraryScreen> {
           if (teaching) (Icons.school_outlined, Icons.school, tr('Unterricht', 'Teaching')),
         ];
         if (wide) {
-          return VoltiBackground(
-            child: Scaffold(
-              backgroundColor: Colors.transparent,
-              body: SafeArea(
-                child: Row(
-                  children: [
-                    NavigationRail(
-                      selectedIndex: _tab,
-                      onDestinationSelected: _select,
-                      labelType: NavigationRailLabelType.all,
-                      // Am Logo lässt sich das Fenster verschieben (keine Titelleiste).
-                      leading: WindowDragArea(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                          child: Image.asset('assets/brand/volti_mark.png', height: 34),
-                        ),
+          return Scaffold(
+            body: SafeArea(
+              child: Row(
+                children: [
+                  NavigationRail(
+                    selectedIndex: _tab,
+                    onDestinationSelected: _select,
+                    labelType: NavigationRailLabelType.all,
+                    // Am Logo lässt sich das Fenster verschieben (keine Titelleiste).
+                    leading: WindowDragArea(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        child: const VoltiMark(height: 34),
                       ),
-                      destinations: [
-                        for (final (icon, sel, label) in destinations)
-                          NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: Text(label)),
-                      ],
                     ),
-                    const VerticalDivider(width: 1),
-                    Expanded(child: body),
-                  ],
-                ),
+                    destinations: [
+                      for (final (icon, sel, label) in destinations)
+                        NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: Text(label)),
+                    ],
+                  ),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: body),
+                ],
               ),
             ),
           );
         }
-        return VoltiBackground(
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            body: SafeArea(child: body),
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _tab,
-              onDestinationSelected: _select,
-              destinations: [
-                for (final (icon, sel, label) in destinations)
-                  NavigationDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: label),
-              ],
-            ),
+        return Scaffold(
+          body: SafeArea(child: body),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _tab,
+            onDestinationSelected: _select,
+            destinations: [
+              for (final (icon, sel, label) in destinations)
+                NavigationDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: label),
+            ],
           ),
         );
       },
@@ -209,7 +203,7 @@ class _EmptyLibrary extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Image.asset('assets/brand/volti_mark.png', height: 64),
+                const VoltiMark(height: 64),
                 const SizedBox(width: 12),
                 Image.asset('assets/brand/volti_wordmark.png', height: 48, color: dark ? Colors.white : null),
               ],
@@ -687,13 +681,12 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
             child: Text(tr('Ganzen Ordner importieren …', 'Import a whole folder …')),
           ),
       ],
-      builder: (context, controller, _) => FloatingActionButton.extended(
-        heroTag: 'import',
+      builder: (context, controller, _) => GradientFab(
         onPressed: lib.importing ? null : () => controller.isOpen ? controller.close() : controller.open(),
         icon: lib.importing
             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
             : const Icon(Icons.add),
-        label: Text(lib.importing ? tr('Wird importiert …', 'Importing …') : tr('Importieren', 'Import')),
+        label: lib.importing ? tr('Wird importiert …', 'Importing …') : tr('Importieren', 'Import'),
       ),
     );
   }
@@ -740,7 +733,6 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
         }
       },
       child: Scaffold(
-        backgroundColor: Colors.transparent,
         // Importieren unten rechts, wie „Neue Setlist“ bei den Setlists. Nicht
         // beim Auswählen und nicht in der leeren Bibliothek (dort stehen die
         // grossen Import-Knöpfe in der Mitte).

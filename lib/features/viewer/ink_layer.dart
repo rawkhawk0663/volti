@@ -1313,14 +1313,14 @@ class _SelectionPainter extends CustomPainter {
   static final _line = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5
-    ..color = VoltiColors.deep;
+    ..color = VoltiColors.selection;
 
   @override
   void paint(Canvas canvas, Size size) {
     final lasso = state._lasso;
     if (lasso != null && lasso.length > 1) {
       final path = Path()..addPolygon(lasso, true);
-      canvas.drawPath(path, Paint()..color = VoltiColors.seafoam.withValues(alpha: 0.10));
+      canvas.drawPath(path, Paint()..color = VoltiColors.selection.withValues(alpha: 0.10));
       _dashedPath(canvas, lasso, close: false);
     }
     final sel = state._mySelection;
@@ -1362,14 +1362,14 @@ class _SelectionPainter extends CustomPainter {
 
     // Rahmen und Griff
     final box = Rect.fromPoints(px(r.topLeft), px(r.bottomRight)).inflate(_InkLayerState._selPad);
-    canvas.drawRect(box, Paint()..color = VoltiColors.seafoam.withValues(alpha: 0.08));
+    canvas.drawRect(box, Paint()..color = VoltiColors.selection.withValues(alpha: 0.08));
     _dashedPath(canvas, [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft], close: true);
     final h = box.bottomRight;
     canvas.drawCircle(h, 9, Paint()..color = const Color(0xFFFFFFFF));
     canvas.drawCircle(h, 9, _line..strokeWidth = 2);
     // kleiner Doppelpfeil im Griff
     final arrow = Paint()
-      ..color = VoltiColors.deep
+      ..color = VoltiColors.selection
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(h + const Offset(-4, -4), h + const Offset(4, 4), arrow);
@@ -1480,7 +1480,7 @@ class _ActivePainter extends CustomPainter {
           Paint()
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.5
-            ..color = VoltiColors.seafoam.withValues(alpha: 0.6),
+            ..color = VoltiColors.selection.withValues(alpha: 0.6),
         );
       }
       return;

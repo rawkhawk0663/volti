@@ -255,7 +255,7 @@ class _PageSetupScreenState extends State<_PageSetupScreen> {
                           InkWell(
                             onTap: blank ? () => _choosePaper(src) : () => _editCrop(src),
                             child: Container(
-                              color: VoltiColors.anthracite,
+                              color: VoltiColors.pageSurround,
                               padding: const EdgeInsets.all(4),
                               child: _Thumb(
                                 cache: _thumbs,
@@ -523,7 +523,7 @@ class _CropEditorState extends State<_CropEditor> {
               const SizedBox(height: 10),
               Flexible(
                 child: ColoredBox(
-                  color: VoltiColors.anthracite,
+                  color: VoltiColors.pageSurround,
                   child: Padding(
                     padding: const EdgeInsets.all(12),
                     child: Center(

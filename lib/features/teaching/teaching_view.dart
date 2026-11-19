@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/floating_actions.dart';
+import '../../app/visuals.dart';
 import '../../app/l10n.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_actions.dart';
@@ -155,7 +156,6 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return ListenableBuilder(
       listenable: library,
       builder: (context, _) {
@@ -216,7 +216,6 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
           children: [
             // Zweite Menüleiste des Unterrichts.
             NavigationRail(
-              backgroundColor: scheme.surfaceContainerLow.withValues(alpha: 0.6),
               minWidth: 76,
               selectedIndex: _section.index,
               labelType: NavigationRailLabelType.all,
@@ -307,16 +306,8 @@ class _NavPill extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     Widget round(IconData icon, String tip, VoidCallback? onTap) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
-      // Gleiches Seegrün wie die schwebenden Knöpfe unten rechts.
-      child: IconButton.filled(
-        tooltip: tip,
-        onPressed: onTap,
-        icon: Icon(icon),
-        style: IconButton.styleFrom(
-          backgroundColor: scheme.primaryContainer,
-          foregroundColor: scheme.onPrimaryContainer,
-        ),
-      ),
+      // Gleicher Verlauf wie die schwebenden Knöpfe unten rechts.
+      child: GradientIconButton(icon: icon, tooltip: tip, onPressed: onTap),
     );
     return Material(
       color: scheme.surfaceContainerHigh,
@@ -454,17 +445,12 @@ class _StudentsSectionState extends State<_StudentsSection> {
     return FloatingActions(
       actions: [
         floatingAction(
-          tag: 'group',
           icon: Icons.groups_outlined,
           label: tr('Gruppe bilden', 'Make group'),
           onPressed: widget.state._createGroup,
+          secondary: true,
         ),
-        floatingAction(
-          tag: 'student',
-          icon: Icons.add,
-          label: tr('Neue:r Schüler:in', 'New student'),
-          onPressed: widget.state._add,
-        ),
+        floatingAction(icon: Icons.add, label: tr('Neue:r Schüler:in', 'New student'), onPressed: widget.state._add),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -751,7 +737,6 @@ class _TodosSectionState extends State<_TodosSection> {
     return FloatingActions(
       actions: [
         floatingAction(
-          tag: 'todo',
           icon: Icons.add,
           label: tr('Neues To-Do', 'New to-do'),
           onPressed: () => showTodoDialog(context, lib, chooseStudent: true),

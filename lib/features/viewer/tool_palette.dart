@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
 import 'ink_controller.dart';
 import 'layers_panel.dart';
 import 'tool_controller.dart';
@@ -164,7 +163,6 @@ class _ToolOverlayState extends State<ToolOverlay> {
       color: scheme.surface,
       child: Ink(
         width: _barWidth,
-        decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(

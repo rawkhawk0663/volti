@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../../app/theme.dart';
+import '../../app/visuals.dart';
 import '../../core/pdf/page_image_cache.dart';
 import '../../core/pdf/paper.dart';
 import 'ink_controller.dart';
@@ -905,7 +906,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       autofocus: true,
       onKeyEvent: _onKey,
       child: Scaffold(
-        backgroundColor: VoltiColors.pageSurround(context),
+        backgroundColor: VoltiColors.pageSurround,
         body: Stack(
           children: [
             Positioned.fill(child: _buildPageArea()),
@@ -1264,7 +1265,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
               child: _buildPage(next, nxt.width, nxt.height, dpr),
             ),
           ),
-          Container(height: 3, width: math.max(cur.width, nxt.width), color: VoltiColors.seafoam),
+          Container(height: 3, width: math.max(cur.width, nxt.width), color: VoltiColors.selection),
           ClipRect(
             child: Align(
               alignment: Alignment.bottomCenter,
@@ -1430,7 +1431,6 @@ class _TopBar extends StatelessWidget {
         color: scheme.surface,
         elevation: 2,
         child: Ink(
-          decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
           child: SafeArea(
             bottom: false,
             // Ohne Titelleiste: an der Leiste lässt sich das Fenster verschieben.
@@ -1455,10 +1455,11 @@ class _TopBar extends StatelessWidget {
                           style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
                         ),
                       ),
-                    FilledButton.tonalIcon(
+                    GradientButton(
+                      compact: true,
                       onPressed: tools.startEditing,
                       icon: const Icon(Icons.edit),
-                      label: Text(tr('Bearbeiten', 'Edit')),
+                      label: tr('Bearbeiten', 'Edit'),
                     ),
                     ListenableBuilder(
                       listenable: state._metronome,

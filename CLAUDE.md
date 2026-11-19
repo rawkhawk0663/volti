@@ -13,7 +13,7 @@ Volti ist ein PDF-Notenleser mit Stift-Anmerkungen. Hauptziel ist Windows (Surfa
 - **Keine Hinweise auf andere Apps** (Wunsch des Besitzers, stört ihn sehr): Kommentare im Code, Tests und diese Datei erklären nur, was Volti macht, nie „wie bei …“ oder „angelehnt an …“ eine andere App oder ein anderes Programm. Dienste, mit denen Volti tatsächlich arbeitet (Dropbox, Proton Drive, WhatsApp …), dürfen genannt werden.
 
 ## Technik
-- Flutter `3.47.9` (in `.github/workflows/build.yml` festgelegt), Material 3. Markenfarbe Seegrün `#3BA796` (`VoltiColors.seafoam`), für Knöpfe das tiefere `#1A8070` und im Dunkelmodus `#5CC8B4`. Bibliothek und Setlists haben einen sanften Hintergrundverlauf (`VoltiBackground`). Logo erzeugt `tool/extract_brand.py`, die App-Symbole (Quadrat mit runden Ecken, aussen durchsichtig, Wunsch des Besitzers) `tool/make_icons.py` aus `assets/brand/volti_mark.png`. Mit `--white <ordner>` entsteht zusätzlich eine weisse Fassung ohne Hintergrund (nur zum Weitergeben, nicht im Projekt).
+- Flutter `3.47.9` (in `.github/workflows/build.yml` festgelegt), Material 3. Gestaltung wie die Schwester-App Conti (siehe „Darstellung“). Logo-Dateien färbt `tool/make_brand.py` im Markenverlauf ein (Türkis → Violett, nur die Form der bestehenden PNGs wird gebraucht), die App-Symbole (Quadrat mit runden Ecken, aussen durchsichtig, Wunsch des Besitzers; weisse Bildmarke auf dem Verlauf) macht `tool/make_icons.py` aus `assets/brand/volti_mark.png`. Mit `--white <ordner>` entsteht zusätzlich eine weisse Fassung ohne Hintergrund (nur zum Weitergeben, nicht im Projekt).
 - PDF-Darstellung über `pdfrx` (PDFium). Seiten werden selbst gerendert und gecacht (`lib/core/pdf/page_image_cache.dart`), damit das Umblättern sofort geht.
 - Builds laufen über GitHub Actions. Jeder Push auf `main` erzeugt ein Release mit `Volti-Windows.zip` und `Volti-Android.apk`. Die fertigen Dateien gehen über den **Cache** (`actions/cache/save`/`restore`, `enableCrossOsArchive`) an den Release-Schritt, nicht über „Artifacts“: deren Speicher war im November 2026 voll (wird über den Monat gerechnet), alle Builds scheiterten.
 
@@ -31,7 +31,7 @@ lib/
     library/      Bibliothek mit Ordnern und Mehrfachauswahl, Infos-Dialog, Setlists (LibraryController hält den Zustand)
     viewer/       Notenansicht (Spielansicht + Bearbeiten), Stift-Ebene, Text-Ebene, Werkzeug-Palette,
                   ToolController (Werkzeuge + Stift-Vorlagen app-weit, via ToolScope), Stift-Test
-assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
+assets/brand/     Logo (eingefärbt mit tool/make_brand.py)
 ```
 
 ## Grundsätze, die nicht gebrochen werden dürfen
@@ -53,7 +53,7 @@ assets/brand/     Logo (erzeugt mit tool/extract_brand.py)
    Einstellungen und Favoriten liegen in `Bibliothek/.volti/presets.json` (Format `volti-tools` v2; v1 `volti-presets` wird zu Favoriten) und werden synchronisiert (jüngste Fassung gewinnt).
    Text-Notizen haben eine eigene Text- und Hintergrundfarbe (`bg`, 0 = durchsichtig). Ältere Notizen ohne `bg` behalten den hellen Hintergrund `0xC8FFFFFF`.
    **Kein Vollbild** (vom Besitzer entfernt): Volti öffnet maximiert (`prepareWindow` in `window_buttons.dart`), die Leiste der Notenansicht verschwindet beim Spielen von selbst, so blieb nur die Taskleiste. Das Vollbild über `window_manager` machte unter Windows wiederholt Ärger (automatisches Vollbild unzuverlässig, Volti hing beim Wegwechseln, Fokus-Flackern beim Umschalten). Bitte nicht wieder einbauen. Wer die Taskleiste nicht sehen will, stellt in Windows „Taskleiste automatisch ausblenden“ ein. `window_manager` bleibt bei **0.5.x** (0.6 baut auf einer neuen, ungeprüften Grundlage auf).
-   Hinter der Notenseite liegt Anthrazit (`VoltiColors.anthracite`). Die Seite hat keinen Schatten, weil weiche Schatten beim Malen teuer sind.
+   Hinter der Notenseite liegt ein dunkles Grau (`VoltiColors.pageSurround`, in beiden Modi). Die Seite hat keinen Schatten, weil weiche Schatten beim Malen teuer sind.
    Radierer: „Ganze Elemente“ (Standard) oder „Teilweise“ (`eraserPartial`, `InkController.replaceStroke` teilt Striche). Das Radierer-Ende des Stifts nutzt dieselbe Einstellung. Ein Radier-Zug ist ein einziger Rückgängig-Schritt (`beginBatch`/`endBatch`).
    Text-Notizen: Schriften `VoltiSans` (Roboto), `VoltiSerif` (Noto Serif) und `VoltiMono` (Roboto Mono) liegen in `assets/fonts` (OFL). Es sind variable Schriften: Fett wird über `FontVariation.weight` eingestellt. Felder `font`, `b` und `i` in der Zusatzdatei.
 8. **Flüssigkeit:** Notenseite, Strich-Ebenen, Text-Ebene, Leisten und Einstellungsfenster stehen jeweils in einer eigenen `RepaintBoundary`.
@@ -202,8 +202,8 @@ flutter test
 ```
 
 ## Einheitliche Knöpfe (Wunsch des Besitzers, gilt überall, auch für neue Seiten)
-- **Anlegen und Hinzufügen** einer Seite („Importieren“, „Neue Setlist“, „Stücke hinzufügen“, „Neue:r Schüler:in“, „Gruppe bilden“, „Neues To-Do“ …) steht immer als schwebender Knopf **unten rechts** (`FloatingActionButton.extended`; in Seiten ohne eigenes `Scaffold` über `FloatingActions`/`floatingAction` in `lib/app/floating_actions.dart`). Mehrere nebeneinander, die Hauptaktion mit „+“ ganz rechts. Nicht in die Kopfzeile. Listen darunter brauchen unten 96 Punkte Platz. Knöpfe *innerhalb* einer Karte (z. B. Repertoire „Hinzufügen“) bleiben in der Karte.
-- **Farbe:** Alle schwebenden Knöpfe haben dasselbe Seegrün (`colorScheme.primaryContainer` mit `onPrimaryContainer`, Standard der FAB), auch runde Symbol-Knöpfe in schwebenden Leisten (z. B. Suche und ← → in „Unterrichten“, `_NavPill`).
+- **Anlegen und Hinzufügen** einer Seite („Importieren“, „Neue Setlist“, „Stücke hinzufügen“, „Neue:r Schüler:in“, „Gruppe bilden“, „Neues To-Do“ …) steht immer als schwebender Knopf **unten rechts** (`GradientFab` in `lib/app/visuals.dart`; in Seiten ohne eigenes `Scaffold` über `FloatingActions`/`floatingAction` in `lib/app/floating_actions.dart`). Mehrere nebeneinander, die Hauptaktion mit „+“ ganz rechts (Verlauf), Nebenaktionen ruhig (`secondary: true`). Nicht in die Kopfzeile. Listen darunter brauchen unten 96 Punkte Platz. Knöpfe *innerhalb* einer Karte (z. B. Repertoire „Hinzufügen“) bleiben in der Karte.
+- **Farbe:** Hauptknöpfe haben den Markenverlauf Türkis → Violett (`GradientFab`, `GradientButton`, z. B. auch „Bearbeiten“ in der Notenansicht), runde Symbol-Knöpfe in schwebenden Leisten ebenso (`GradientIconButton`, z. B. Suche und ← → in „Unterrichten“, `_NavPill`).
 
 ## Bedienung nur mit Finger/Stift
 - Die App soll vollständig als reine Tablet-App bedienbar sein (Wunsch des Besitzers). **Langes Drücken ist überall der Rechtsklick.** Wo es ein Rechtsklick-Menü gibt, braucht es auch `onLongPress`. Hinweise (`Tooltip`) erscheinen deshalb nur beim Darüberfahren mit der Maus (`TooltipTriggerMode.manual` im Theme), damit sie das lange Drücken nicht abfangen.
@@ -217,9 +217,11 @@ flutter test
 ## Offene Tests beim Besitzer
 - **Pedal:** Das iRig BlueTurn verliert beim Besitzer immer wieder die Bluetooth-Verbindung. Das liegt am Gerät, nicht an Volti. Pfeiltasten funktionieren, also auch die meisten Pedale. Er kauft eventuell ein anderes.
 
-## Darstellung
-- Hell/dunkel/System wählt der Besitzer unter ⚙ (`ToolController.themeMode`, geräteeigene Einstellung `themeMode`).
-- Hellmodus (vom Besitzer gewünscht): Flächen in sanftem, neutralem Grau, Akzente im hellen Seegrün (`buildVoltiTheme`). Der Dunkelmodus bleibt, wie er ist.
+## Darstellung (Wunsch des Besitzers: wie die Schwester-App Conti, nach seinem Bild)
+- Hell/dunkel/System wählt der Besitzer unter ⚙ (`ToolController.themeMode`, geräteeigene Einstellung `themeMode`). Beide Modi gleichwertig.
+- **Farben** in `lib/app/theme.dart`: `VoltiColors` (ThemeExtension, `context.volti`) mit dunklen Karten (`#18191D` auf `#0D0E11`; hell Weiss auf `#F1F2F6`) und leuchtenden **Verläufen**: `brand` Türkis → Violett (Logo, Hauptknöpfe, aktive Lektion), `mint` Mint → Blau (erledigt/eingetragen), `sun` Gelb → Pink, `sky` Türkis → Blau (Zeitleiste), `pink` Pink → Violett. Auswahl und aktive Elemente in Violett (`colorScheme.primary`/`primaryContainer`; auf der Notenseite `VoltiColors.selection`). Karten mit 20 Punkten Rundung und feinem Rand, keine Schatten (ausser dem Leuchten der schwebenden Knöpfe).
+- **Schriften der Oberfläche:** IBM Plex Sans (`Plex`, Grundschrift, feine grosse Zahlen mit 300) und Sora (`Sora`, Überschriften), feste Schnitte aus Conti, OFL-Texte unter ⚙ → Lizenzen. Text-Notizen auf den Noten behalten ihre eigenen Schriften.
+- Bausteine in `lib/app/visuals.dart`: `GradientButton`, `GradientFab`, `GradientIconButton`, `VoltiMark` (Bildmarke im Verlauf). Karten-Symbole der Übersicht ebenfalls im Verlauf (`ShaderMask`).
 
 ## Offene Ideen (noch nicht umsetzen)
 - **Audio zum Mitspielen** (MP3 an ein Stück hängen): später besprechen.

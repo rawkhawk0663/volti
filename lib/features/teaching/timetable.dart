@@ -256,7 +256,7 @@ Future<List<int>> buildTimetablePdf(List<Student> students) async {
   }
   const grey = PdfColor.fromInt(0xFF666666);
   const line = PdfColor.fromInt(0xFFDDDDDD);
-  const accent = PdfColor.fromInt(0xFF1A8070);
+  const accent = PdfColor.fromInt(0xFF7A3CF0);
   const axis = 34.0, headHeight = 18.0;
   String hhmm(int m) => '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
 
@@ -285,7 +285,7 @@ Future<List<int>> buildTimetablePdf(List<Student> students) async {
               height: h - 1,
               padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
               decoration: pw.BoxDecoration(
-                color: const PdfColor.fromInt(0xFFE6F3F0),
+                color: const PdfColor.fromInt(0xFFF0EAFE),
                 border: const pw.Border(left: pw.BorderSide(color: accent, width: 2)),
               ),
               child: pw.ClipRect(

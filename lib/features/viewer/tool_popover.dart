@@ -3,7 +3,6 @@ import 'dart:ui' show PointMode, PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
 import '../../core/ink/stamp_catalog.dart';
 import '../../core/ink/stroke.dart';
 import '../../core/ink/text_note.dart';
@@ -84,7 +83,6 @@ class ToolPopover extends StatelessWidget {
       color: scheme.surface,
       child: Ink(
         width: width,
-        decoration: BoxDecoration(gradient: VoltiColors.barGradient(Theme.of(context).brightness)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

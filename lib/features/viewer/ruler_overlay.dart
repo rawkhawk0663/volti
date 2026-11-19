@@ -182,17 +182,17 @@ class _RulerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final r = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(6));
-    canvas.drawRRect(r, Paint()..color = const Color(0x553BA796));
+    canvas.drawRRect(r, Paint()..color = const Color(0x447A3CF0));
     canvas.drawRRect(
       r,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5
-        ..color = const Color(0xCC1A8070),
+        ..color = const Color(0xCC7A3CF0),
     );
     // Skala an beiden Kanten
     final tick = Paint()
-      ..color = const Color(0xAA1A8070)
+      ..color = const Color(0xAA7A3CF0)
       ..strokeWidth = 1;
     for (var x = 10.0; x < size.width - 4; x += 10) {
       final long = ((x - 10) / 10) % 5 == 0;

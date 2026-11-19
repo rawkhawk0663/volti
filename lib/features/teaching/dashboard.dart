@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/l10n.dart';
+import '../../app/theme.dart';
 import '../../core/teaching/student.dart';
 import '../library/library_controller.dart';
 import 'attendance_table.dart' show absenceBackground;
@@ -278,18 +279,18 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final v = context.volti;
     return Material(
-      color: scheme.surfaceContainerLow,
+      color: v.card,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: v.line),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+          padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -297,7 +298,11 @@ class _Card extends StatelessWidget {
                 height: 30,
                 child: Row(
                   children: [
-                    Icon(icon, size: 19, color: scheme.onSurfaceVariant),
+                    // Symbol im Markenverlauf.
+                    ShaderMask(
+                      shaderCallback: (r) => LinearGradient(colors: v.brand).createShader(r),
+                      child: Icon(icon, size: 20, color: Colors.white),
+                    ),
                     const SizedBox(width: 8),
                     Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                     const Spacer(),
@@ -467,10 +472,13 @@ class _TodayCardState extends State<_TodayCard> {
     final entry = s.lessonOn(today);
     final running = s.minutes <= minute && minute < s.minutes + s.duration;
     final done = entry != null && (entry.status == LessonStatus.held || entry.status == LessonStatus.makeUp);
-    const green = Color(0xFF2E9E6B);
+    final v = context.volti;
     final absence = entry == null ? null : absenceBackground(entry.status, theme.brightness);
-    final bg = absence ?? (done ? green.withValues(alpha: 0.18) : scheme.primary.withValues(alpha: 0.10));
-    final edge = done ? green : (running ? scheme.primary : scheme.primary.withValues(alpha: 0.45));
+    // Eingetragen: Mint-Blau, jetzt: Markenverlauf, sonst Türkis-Blau (blass).
+    final colors = done ? v.mint : (running ? v.brand : v.sky);
+    final green = v.mint.first;
+    final bg = absence ?? colors.first.withValues(alpha: done || running ? 0.16 : 0.08);
+    final edge = running ? colors.last : colors.first.withValues(alpha: done ? 0.7 : 0.35);
     return Positioned(
       left: _axis,
       right: 0,
@@ -501,7 +509,7 @@ class _TodayCardState extends State<_TodayCard> {
                     ),
                   ),
                 ),
-                if (done) const Icon(Icons.check, size: 16, color: green),
+                if (done) Icon(Icons.check, size: 16, color: green),
                 if (running && !done) Icon(Icons.play_arrow_rounded, size: 18, color: scheme.primary),
               ],
             ),
@@ -618,15 +626,27 @@ class _TodosCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            open.isEmpty
-                ? tr('Nichts offen 🎉', 'Nothing open 🎉')
-                : tr(
-                    '${open.length} ${open.length == 1 ? 'offenes To-Do' : 'offene To-Dos'}',
-                    '${open.length} open ${open.length == 1 ? 'to-do' : 'to-dos'}',
+          if (open.isEmpty)
+            Text(tr('Nichts offen 🎉', 'Nothing open 🎉'), style: theme.textTheme.bodyMedium)
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Grosse, feine Zahl.
+                Text(
+                  '${open.length}',
+                  style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w300, height: 1),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    tr(open.length == 1 ? 'offenes To-Do' : 'offene To-Dos', 'open'),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                   ),
-            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
+                ),
+              ],
+            ),
           if (overdue > 0)
             Text(
               tr('$overdue überfällig', '$overdue overdue'),

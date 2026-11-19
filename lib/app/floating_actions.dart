@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'visuals.dart';
+
 /// Knöpfe zum Anlegen und Hinzufügen stehen in Volti immer schwebend unten
 /// rechts (wie „Importieren“ in der Bibliothek). Mehrere stehen nebeneinander,
-/// die Hauptaktion ganz rechts.
+/// die Hauptaktion (Verlauf) ganz rechts.
 ///
 /// Für Seiten ohne eigenes `Scaffold`: [child] füllt die Fläche, die Knöpfe
 /// liegen darüber. Listen darunter brauchen unten etwa 96 Punkte Platz.
@@ -31,11 +33,11 @@ class FloatingActions extends StatelessWidget {
   );
 }
 
-/// Ein schwebender Knopf mit Symbol und Text (Hauptaktion: Symbol „+“).
-/// [tag] muss auf der Seite eindeutig sein.
+/// Ein schwebender Knopf mit Symbol und Text im Markenverlauf.
+/// [secondary]: ruhiger Nebenknopf (steht links vom Hauptknopf).
 Widget floatingAction({
-  required String tag,
   required IconData icon,
   required String label,
   required VoidCallback? onPressed,
-}) => FloatingActionButton.extended(heroTag: tag, onPressed: onPressed, icon: Icon(icon), label: Text(label));
+  bool secondary = false,
+}) => GradientFab(icon: Icon(icon), label: label, onPressed: onPressed, secondary: secondary);

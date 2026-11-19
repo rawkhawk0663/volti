@@ -39,10 +39,29 @@ flutter:
     - assets/fonts/OFL-NotoSerif.txt
     - assets/fonts/OFL-Roboto.txt
     - assets/fonts/OFL-RobotoMono.txt
+    - assets/fonts/OFL-IBMPlexSans.txt
+    - assets/fonts/OFL-Sora.txt
     # Feste Roboto-Schnitte für selbst erzeugte PDFs (tool/make_pdf_fonts.py)
     - assets/fonts/pdf/
   # Schriften für Text-Notizen (SIL Open Font License, siehe assets/fonts/OFL-*.txt)
   fonts:
+    # Schriften der Oberfläche (feste Schnitte, OFL)
+    - family: Plex
+      fonts:
+        - asset: assets/fonts/IBMPlexSans-Light.ttf
+          weight: 300
+        - asset: assets/fonts/IBMPlexSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexSans-SemiBold.ttf
+          weight: 600
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Sora-Bold.ttf
+          weight: 700
     - family: VoltiSans
       fonts:
         - asset: assets/fonts/Roboto.ttf

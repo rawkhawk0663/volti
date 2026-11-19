@@ -1,5 +1,6 @@
 """Erzeugt die App-Symbole aus der Bildmarke (assets/brand/volti_mark.png):
-Windows-Icon (.ico), Android-Startsymbole und ein grosses PNG.
+Windows-Icon (.ico), Android-Startsymbole und ein grosses PNG. Weisse
+Bildmarke auf dem Markenverlauf Türkis → Violett.
 
 Das Symbol ist ein Quadrat mit abgerundeten Ecken (Wunsch des Besitzers,
 sieht auf dem Desktop und in der Taskleiste sauberer aus), aussen durchsichtig.
@@ -40,21 +41,30 @@ def _place_mark(canvas, mark, scale):
 
 
 def icon(size):
-    """Farbiges App-Symbol: Bildmarke auf hellem Mint-Verlauf, runde Ecken."""
-    yy = np.linspace(0, 1, size)[:, None, None]
-    top, bottom = np.array((246, 252, 250), np.float32), np.array((221, 241, 236), np.float32)
-    bg = np.repeat(top * (1 - yy) + bottom * yy, size, axis=1).round().astype(np.uint8)
+    """Farbiges App-Symbol: weisse Bildmarke auf dem Markenverlauf
+    (Türkis oben links → Violett unten rechts) mit weichem Glanz, runde Ecken."""
+    yy, xx = np.mgrid[0:size, 0:size] / max(size - 1, 1)
+    t = ((xx + yy) / 2)[..., None]
+    turquoise, violet = np.array((20, 184, 196), np.float32), np.array((122, 60, 240), np.float32)
+    bg = (turquoise * (1 - t) + violet * t)
+    # Weicher heller Schein oben links.
+    glow = np.exp(-(((xx - 0.18) ** 2 + (yy - 0.12) ** 2) / 0.12))[..., None]
+    bg = np.clip(bg + glow * 38, 0, 255).round().astype(np.uint8)
     canvas = Image.fromarray(np.dstack([bg, np.full((size, size), 255, np.uint8)]), "RGBA")
-    _place_mark(canvas, MARK, SCALE)
+    _place_mark(canvas, _white(MARK), SCALE)
     canvas.putalpha(_rounded_mask(size))
     return canvas
 
 
+def _white(mark):
+    """Bildmarke in Weiss (nur die Form wird übernommen)."""
+    a = np.asarray(mark)[..., 3]
+    return Image.fromarray(np.dstack([np.full(a.shape + (3,), 255, np.uint8), a]), "RGBA")
+
+
 def white_icon(size):
     """Nur die Bildmarke in Weiss, ohne Hintergrund (durchsichtig)."""
-    a = np.asarray(MARK)[..., 3]
-    white = Image.fromarray(np.dstack([np.full(a.shape + (3,), 255, np.uint8), a]), "RGBA")
-    return _place_mark(Image.new("RGBA", (size, size), (0, 0, 0, 0)), white, 0.86)
+    return _place_mark(Image.new("RGBA", (size, size), (0, 0, 0, 0)), _white(MARK), 0.86)
 
 
 def save_ico(make, path):

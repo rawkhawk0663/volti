@@ -126,9 +126,9 @@ class _ReflowScreenState extends State<_ReflowScreen> {
       autofocus: true,
       onKeyEvent: _onKey,
       child: Scaffold(
-        backgroundColor: VoltiColors.anthracite,
+        backgroundColor: VoltiColors.pageSurround,
         appBar: AppBar(
-          backgroundColor: VoltiColors.anthracite,
+          backgroundColor: VoltiColors.pageSurround,
           foregroundColor: Colors.white,
           title: Text(tr('${widget.title} · Endlosband', '${widget.title} · continuous scroll')),
           actions: [
