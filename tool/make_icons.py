@@ -1,6 +1,6 @@
 """Erzeugt die App-Symbole aus der Bildmarke (assets/brand/volti_mark.png):
 Windows-Icon (.ico), Android-Startsymbole und ein grosses PNG. Weisse
-Bildmarke auf dem Markenverlauf Türkis → Violett.
+Bildmarke auf dem Markenverlauf Pink → Violett.
 
 Das Symbol ist ein Quadrat mit abgerundeten Ecken (Wunsch des Besitzers,
 sieht auf dem Desktop und in der Taskleiste sauberer aus), aussen durchsichtig.
@@ -42,11 +42,11 @@ def _place_mark(canvas, mark, scale):
 
 def icon(size):
     """Farbiges App-Symbol: weisse Bildmarke auf dem Markenverlauf
-    (Türkis oben links → Violett unten rechts) mit weichem Glanz, runde Ecken."""
+    (Pink oben links → Violett unten rechts) mit weichem Glanz, runde Ecken."""
     yy, xx = np.mgrid[0:size, 0:size] / max(size - 1, 1)
     t = ((xx + yy) / 2)[..., None]
-    turquoise, violet = np.array((20, 184, 196), np.float32), np.array((122, 60, 240), np.float32)
-    bg = (turquoise * (1 - t) + violet * t)
+    pink, violet = np.array((240, 71, 156), np.float32), np.array((122, 60, 240), np.float32)
+    bg = (pink * (1 - t) + violet * t)
     # Weicher heller Schein oben links.
     glow = np.exp(-(((xx - 0.18) ** 2 + (yy - 0.12) ** 2) / 0.12))[..., None]
     bg = np.clip(bg + glow * 38, 0, 255).round().astype(np.uint8)

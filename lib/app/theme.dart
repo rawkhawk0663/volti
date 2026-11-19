@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 /// gleichwertiger heller Modus (gleiche Gestaltung wie Conti).
 ///
 /// Die Verläufe:
-/// - [brand] Türkis → Violett: Logo, Hauptknöpfe, aktive Auswahl
+/// - [brand] Pink → Violett: Logo, Hauptknöpfe, aktive Auswahl
 /// - [mint] Mint → Blau: erledigt, anwesend, gespeichert
 /// - [sun] Gelb → Pink: fällig, Warnung, Geburtstage
 /// - [sky] Türkis → Blau: Abgleich, Hinweise, Zeitleiste
-/// - [pink] Pink → Violett: Hervorhebungen
 @immutable
 class VoltiColors extends ThemeExtension<VoltiColors> {
   const VoltiColors({
@@ -18,7 +17,6 @@ class VoltiColors extends ThemeExtension<VoltiColors> {
     required this.line,
     required this.muted,
     required this.brand,
-    required this.pink,
     required this.mint,
     required this.sun,
     required this.sky,
@@ -31,7 +29,6 @@ class VoltiColors extends ThemeExtension<VoltiColors> {
   final Color line;
   final Color muted;
   final List<Color> brand;
-  final List<Color> pink;
   final List<Color> mint;
   final List<Color> sun;
   final List<Color> sky;
@@ -52,8 +49,7 @@ class VoltiColors extends ThemeExtension<VoltiColors> {
     cardHigh: Color(0xFF202126),
     line: Color(0xFF2A2C32),
     muted: Color(0xFF8E939D),
-    brand: [Color(0xFF5FE3E0), Color(0xFF9A6BFF)],
-    pink: [Color(0xFFFF7AC6), Color(0xFF9A6BFF)],
+    brand: [Color(0xFFFF7AC6), Color(0xFF9A6BFF)],
     mint: [Color(0xFF6EF0B5), Color(0xFF4C7CF0)],
     sun: [Color(0xFFFFC83D), Color(0xFFFF6F91)],
     sky: [Color(0xFF5FE3E0), Color(0xFF5B8CFF)],
@@ -66,8 +62,7 @@ class VoltiColors extends ThemeExtension<VoltiColors> {
     cardHigh: Color(0xFFF6F7FA),
     line: Color(0xFFE2E4EA),
     muted: Color(0xFF686D78),
-    brand: [Color(0xFF14B8C4), Color(0xFF7A3CF0)],
-    pink: [Color(0xFFF0479C), Color(0xFF7A3CF0)],
+    brand: [Color(0xFFF0479C), Color(0xFF7A3CF0)],
     mint: [Color(0xFF29D398), Color(0xFF3F6FF0)],
     sun: [Color(0xFFFFB400), Color(0xFFFF5A8A)],
     sky: [Color(0xFF34D6E0), Color(0xFF3F6FF0)],
@@ -96,7 +91,6 @@ class VoltiColors extends ThemeExtension<VoltiColors> {
       line: c(line, other.line),
       muted: c(muted, other.muted),
       brand: l(brand, other.brand),
-      pink: l(pink, other.pink),
       mint: l(mint, other.mint),
       sun: l(sun, other.sun),
       sky: l(sky, other.sky),
