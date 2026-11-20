@@ -322,6 +322,7 @@ class _TabLayerState extends State<TabLayer> {
                           moving: editing?.id,
                           moveDelta: _moveDelta,
                           widthDelta: _widthDelta,
+                          dragging: _barIndex != null || _moveDelta != Offset.zero || _widthDelta != 0,
                         ),
                       ),
                     ),
@@ -538,8 +539,20 @@ class _Handle extends StatelessWidget {
 }
 
 class _TabsPainter extends CustomPainter {
-  _TabsPainter(this.tabs, {this.preview, this.moving, this.moveDelta = Offset.zero, this.widthDelta = 0});
+  _TabsPainter(
+    this.tabs, {
+    this.preview,
+    this.moving,
+    this.moveDelta = Offset.zero,
+    this.widthDelta = 0,
+    this.dragging = false,
+  });
   final List<TabBlock> tabs;
+
+  /// Wird die Tabulatur gerade verschoben (oder ein Taktstrich)? Dann ist ihr
+  /// Hintergrund höchstens zu 75 % deckend – man sieht, was darunter liegt.
+  final bool dragging;
+  static const _dragAlpha = 0.75;
 
   /// Bearbeitete Tabulatur mit Änderungen, die noch nicht gespeichert sind.
   final TabBlock? preview;
@@ -559,6 +572,10 @@ class _TabsPainter extends CustomPainter {
           width: math.max(0.08, t.width + widthDelta / size.width),
         );
       }
+      final bg = shown.background;
+      if (t.id == moving && dragging && bg != TabBlock.noBackground && (bg >>> 24) / 255 > _dragAlpha) {
+        shown = shown.copyWith(background: ((_dragAlpha * 255).round() << 24) | (bg & 0xFFFFFF));
+      }
       paintTabBlock(canvas, shown, size);
     }
   }
@@ -569,7 +586,8 @@ class _TabsPainter extends CustomPainter {
       !identical(old.preview, preview) ||
       old.moving != moving ||
       old.moveDelta != moveDelta ||
-      old.widthDelta != widthDelta;
+      old.widthDelta != widthDelta ||
+      old.dragging != dragging;
 }
 
 /// Cursor: Kästchen auf Saite und Schlag, dazu die Spalte leicht hervorgehoben.
