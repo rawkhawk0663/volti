@@ -425,6 +425,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       tr('Version $voltiVersion', 'Version ${voltiVersion == 'Testversion' ? 'test build' : voltiVersion}'),
       style: theme.textTheme.bodyMedium,
     ),
+    const SizedBox(height: 4),
+    Text(
+      tr(
+        'Volti ist freie Software unter der GNU GPL-3.0. Quellcode: github.com/rawkhawk0663/volti',
+        'Volti is free software under the GNU GPL-3.0. Source code: github.com/rawkhawk0663/volti',
+      ),
+      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+    ),
     const SizedBox(height: 8),
     const UpdateSection(),
     const SizedBox(height: 8),
@@ -676,8 +684,8 @@ class _UpdateSectionState extends State<UpdateSection> {
             padding: const EdgeInsets.only(top: 12),
             child: Text(
               tr(
-                'Tipp: Mit der App „Obtainium“ kommen Updates von selbst. Dort „App hinzufügen“ wählen und diese Adresse eintragen: github.com/rawkhawk0663/volti-releases',
-                'Tip: with the “Obtainium” app, updates arrive by themselves. Choose “Add app” there and enter this address: github.com/rawkhawk0663/volti-releases',
+                'Tipp: Mit der App „Obtainium“ kommen Updates von selbst. Dort „App hinzufügen“ wählen und diese Adresse eintragen: github.com/rawkhawk0663/volti',
+                'Tip: with the “Obtainium” app, updates arrive by themselves. Choose “Add app” there and enter this address: github.com/rawkhawk0663/volti',
               ),
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
@@ -961,9 +969,13 @@ void showVoltiLicenses(BuildContext context) {
     applicationVersion: voltiVersion,
     applicationIcon: Padding(padding: const EdgeInsets.all(8), child: const VoltiMark(height: 48)),
     applicationLegalese: tr(
-      'Notenzeichen: Bravura (Steinberg, SIL Open Font License). '
+      'Volti ist freie Software: Du darfst Volti unter den Bedingungen der GNU General Public License, '
+          'Version 3, weitergeben und verändern (github.com/rawkhawk0663/volti). Volti kommt ohne jede Gewährleistung.\n\n'
+          'Notenzeichen: Bravura (Steinberg, SIL Open Font License). '
           'Schriften: IBM Plex Sans, Sora, Roboto, Roboto Mono und Noto Serif (SIL Open Font License).',
-      'Music symbols: Bravura (Steinberg, SIL Open Font License). '
+      'Volti is free software: you may redistribute and modify it under the terms of the GNU General Public '
+          'License, version 3 (github.com/rawkhawk0663/volti). Volti comes with absolutely no warranty.\n\n'
+          'Music symbols: Bravura (Steinberg, SIL Open Font License). '
           'Fonts: IBM Plex Sans, Sora, Roboto, Roboto Mono and Noto Serif (SIL Open Font License).',
     ),
   );

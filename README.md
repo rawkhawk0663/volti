@@ -6,7 +6,7 @@
 Noten lesen, mit dem Pedal umblättern und mit dem Stift hineinschreiben.</p>
 
 <p align="center">
-  <a href="https://github.com/rawkhawk0663/volti-releases/releases/latest"><b>⬇ Neueste Version herunterladen</b></a> ·
+  <a href="https://github.com/rawkhawk0663/volti/releases/latest"><b>⬇ Neueste Version herunterladen</b></a> ·
   <a href="README.en.md">English</a>
 </p>
 
@@ -18,7 +18,7 @@ Volti gibt es auf **Deutsch und Englisch** (⚙ → *Darstellung* → *Sprache �
 
 ## Installieren (Windows 10 und 11)
 
-1. Öffne die **[neueste Version](https://github.com/rawkhawk0663/volti-releases/releases/latest)**.
+1. Öffne die **[neueste Version](https://github.com/rawkhawk0663/volti/releases/latest)**.
 2. Lade **`Volti-Setup.exe`** herunter und starte die Datei.
 3. Windows meldet beim ersten Mal eventuell „Der Computer wurde durch Windows geschützt“. Tippe auf **Weitere Informationen → Trotzdem ausführen**. Die Meldung erscheint, weil Volti nicht mit einem kostenpflichtigen Zertifikat signiert ist.
 4. Volti steht danach im Startmenü.
@@ -31,9 +31,9 @@ Für die Installation brauchst du keine Administrator-Rechte. Deinstallieren geh
 
 ## Installieren (Android)
 
-Lade **`Volti-Android.apk`** aus der [neuesten Version](https://github.com/rawkhawk0663/volti-releases/releases/latest) herunter und öffne die Datei.
+Lade **`Volti-Android.apk`** aus der [neuesten Version](https://github.com/rawkhawk0663/volti/releases/latest) herunter und öffne die Datei.
 
-- **Automatische Updates:** In der App [Obtainium](https://github.com/ImranR98/Obtainium) „App hinzufügen“ wählen und `https://github.com/rawkhawk0663/volti-releases` eintragen. Obtainium meldet und installiert jede neue Version.
+- **Automatische Updates:** In der App [Obtainium](https://github.com/ImranR98/Obtainium) „App hinzufügen“ wählen und `https://github.com/rawkhawk0663/volti` eintragen. Obtainium meldet und installiert jede neue Version.
 
 ## Was Volti kann
 
@@ -118,13 +118,15 @@ Volti speichert alles auf deinem Gerät, im Ordner `%APPDATA%\Volti`. Unter ⚙ 
 
 Unter ⚙ → *Über Volti* → *Fehlerprotokoll* siehst du technische Fehlermeldungen. Mit *Kopieren* kannst du sie weitergeben. Sie enthalten keine Noten und keine persönlichen Inhalte.
 
-## Lizenzen
+## Lizenz
 
-Volti nutzt die Notenschrift **Bravura** (Steinberg) und die Schriften **Roboto**, **Roboto Mono** und **Noto Serif**, alle unter der SIL Open Font License. Die PDF-Darstellung beruht auf **PDFium**. Alle Lizenzen findest du in der App unter ⚙ → *Über Volti* → *Lizenzen*.
+Volti ist **freie Software** unter der [GNU General Public License, Version 3](LICENSE) (GPL-3.0). Du darfst Volti nutzen, weitergeben und verändern. Wer eine veränderte Fassung weitergibt, muss sie ebenfalls unter der GPL-3.0 mit Quellcode weitergeben. Volti kommt ohne jede Gewährleistung.
+
+Volti nutzt die Notenschrift **Bravura** (Steinberg) und die Schriften **IBM Plex Sans**, **Sora**, **Roboto**, **Roboto Mono** und **Noto Serif**, alle unter der SIL Open Font License. Die PDF-Darstellung beruht auf **PDFium**. Alle Lizenzen findest du in der App unter ⚙ → *Über Volti* → *Lizenzen*.
 
 ## Für Entwickler
 
-Flutter `3.47.9`. Aufbau und Regeln stehen in [`CLAUDE.md`](CLAUDE.md). Jeder Push auf `main` baut Windows und Android und legt die Downloads im öffentlichen Projekt [volti-releases](https://github.com/rawkhawk0663/volti-releases) ab.
+Flutter `3.47.9`. Aufbau und Regeln stehen in [`CLAUDE.md`](CLAUDE.md). Jeder Push auf `main` baut Windows und Android und legt die Downloads hier unter [Releases](https://github.com/rawkhawk0663/volti/releases) ab.
 
 ```bash
 flutter analyze

@@ -6,7 +6,7 @@
 Read your sheet music, turn pages with a pedal and write on it with a pen.</p>
 
 <p align="center">
-  <a href="https://github.com/rawkhawk0663/volti-releases/releases/latest"><b>⬇ Download the latest version</b></a> ·
+  <a href="https://github.com/rawkhawk0663/volti/releases/latest"><b>⬇ Download the latest version</b></a> ·
   <a href="README.md">Deutsch</a>
 </p>
 
@@ -18,7 +18,7 @@ Volti is available in **English and German** (⚙ → *Appearance* → *Sprache 
 
 ## Installation (Windows 10 and 11)
 
-1. Open the **[latest version](https://github.com/rawkhawk0663/volti-releases/releases/latest)**.
+1. Open the **[latest version](https://github.com/rawkhawk0663/volti/releases/latest)**.
 2. Download **`Volti-Setup.exe`** and run it.
 3. The first time, Windows may say "Windows protected your PC". Tap **More info → Run anyway**. You see this message because Volti isn't signed with a paid certificate.
 4. Volti now appears in the Start menu.
@@ -31,9 +31,9 @@ Installing doesn't need administrator rights. Uninstall it from the Windows sett
 
 ## Installation (Android)
 
-Download **`Volti-Android.apk`** from the [latest version](https://github.com/rawkhawk0663/volti-releases/releases/latest) and open it.
+Download **`Volti-Android.apk`** from the [latest version](https://github.com/rawkhawk0663/volti/releases/latest) and open it.
 
-- **Automatic updates:** in the [Obtainium](https://github.com/ImranR98/Obtainium) app choose “Add app” and enter `https://github.com/rawkhawk0663/volti-releases`. Obtainium notifies you about and installs every new version.
+- **Automatic updates:** in the [Obtainium](https://github.com/ImranR98/Obtainium) app choose “Add app” and enter `https://github.com/rawkhawk0663/volti`. Obtainium notifies you about and installs every new version.
 
 ## Features
 
@@ -118,13 +118,15 @@ Volti keeps everything on your device, in the folder `%APPDATA%\Volti`. ⚙ → 
 
 Under ⚙ → *About Volti* → *Error log* you can see technical error messages. Use *Copy* to pass them on. They contain no music and no personal content.
 
-## Licences
+## Licence
 
-Volti uses the music font **Bravura** (Steinberg) and the fonts **Roboto**, **Roboto Mono** and **Noto Serif**, all under the SIL Open Font License. PDF rendering is based on **PDFium**. You'll find all licences in the app under ⚙ → *About Volti* → *Licences*.
+Volti is **free software** under the [GNU General Public License, version 3](LICENSE) (GPL-3.0). You may use, share and modify Volti. If you distribute a modified version, it must also be released under the GPL-3.0 with its source code. Volti comes with absolutely no warranty.
+
+Volti uses the music font **Bravura** (Steinberg) and the fonts **IBM Plex Sans**, **Sora**, **Roboto**, **Roboto Mono** and **Noto Serif**, all under the SIL Open Font License. PDF rendering is based on **PDFium**. You'll find all licences in the app under ⚙ → *About Volti* → *Licences*.
 
 ## For developers
 
-Flutter `3.47.9`. Structure and conventions are described in [`CLAUDE.md`](CLAUDE.md) (in German). Every push to `main` builds Windows and Android and publishes the downloads in the public project [volti-releases](https://github.com/rawkhawk0663/volti-releases).
+Flutter `3.47.9`. Structure and conventions are described in [`CLAUDE.md`](CLAUDE.md) (in German). Every push to `main` builds Windows and Android and publishes the downloads here under [Releases](https://github.com/rawkhawk0663/volti/releases).
 
 ```bash
 flutter analyze

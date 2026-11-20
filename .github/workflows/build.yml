@@ -163,25 +163,6 @@ jobs:
         run: |
           TAG="v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
           MSG=$(printf '%s' "$COMMIT_MSG" | head -1)
-          gh release create "$TAG" dist/* \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --title "Volti $TAG" \
-            --notes "Automatischer Build. Änderung: ${MSG:-manuell gestartet}" \
-            --prerelease=false --latest
-      # Zusätzlich im öffentlichen Download-Projekt ablegen (ohne Programmcode).
-      # Von dort sucht Volti nach Updates. Fehlt der Schlüssel, wird es übersprungen.
-      - name: Downloads im öffentlichen Projekt ablegen
-        env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "Kein RELEASES_TOKEN hinterlegt – übersprungen."
-            exit 0
-          fi
-          TAG="v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
-          MSG=$(printf '%s' "$COMMIT_MSG" | head -1)
           cat > notes.md <<EOT
           **Neu / New:** ${MSG:-Verbesserungen}
 
@@ -194,12 +175,33 @@ jobs:
           If Volti is already installed, update right in the app: ⚙ → *About Volti* → *Check for updates*.
 
           ### Android
-          \`Volti-Android.apk\` herunterladen und öffnen. Automatische Updates: In der App *Obtainium* „App hinzufügen“ wählen und \`https://github.com/rawkhawk0663/volti-releases\` eintragen.
-          Download and open \`Volti-Android.apk\`. Automatic updates: in the *Obtainium* app choose "Add app" and enter \`https://github.com/rawkhawk0663/volti-releases\`.
+          \`Volti-Android.apk\` herunterladen und öffnen. Automatische Updates: In der App *Obtainium* „App hinzufügen“ wählen und \`https://github.com/rawkhawk0663/volti\` eintragen.
+          Download and open \`Volti-Android.apk\`. Automatic updates: in the *Obtainium* app choose "Add app" and enter \`https://github.com/rawkhawk0663/volti\`.
+
+          Volti ist freie Software unter der GPL-3.0. / Volti is free software under the GPL-3.0.
           EOT
           sed -i 's/^          //' notes.md
           gh release create "$TAG" dist/* \
-            --repo "rawkhawk0663/volti-releases" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
             --title "Volti $TAG" \
             --notes-file notes.md \
+            --prerelease=false --latest
+      # ÜBERGANG: Volti bis v0.1.84 sucht Updates im früheren Download-Projekt
+      # volti-releases. Damit diese Versionen das Update noch finden, kommt es
+      # vorerst auch dorthin. Entfernen, sobald alle Geräte umgestellt sind.
+      - name: Übergang – auch im früheren Download-Projekt ablegen
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Kein RELEASES_TOKEN hinterlegt – übersprungen."
+            exit 0
+          fi
+          TAG="v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
+          { echo "**Volti ist umgezogen / Volti has moved:** https://github.com/rawkhawk0663/volti/releases"; echo; cat notes.md; } > notes-old.md
+          gh release create "$TAG" dist/* \
+            --repo "rawkhawk0663/volti-releases" \
+            --title "Volti $TAG" \
+            --notes-file notes-old.md \
             --latest
