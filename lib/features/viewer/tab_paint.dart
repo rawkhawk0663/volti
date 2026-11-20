@@ -260,8 +260,9 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     // Hals (nicht bei ganzen Noten)
     if (b.value >= 2) canvas.drawLine(Offset(cx, l.stemTop), Offset(cx, l.stemBottom), stem);
     if (b.dotted) {
-      final y = b.value == 1 ? l.stemTop + g * 0.6 : l.stemBottom - g * 0.25;
-      canvas.drawCircle(Offset(cx + g * 0.5, y), g * 0.17, Paint()..color = color);
+      // Oben neben dem Hals: Dort liegen nie Balken (die sind unten, bis zu
+      // drei übereinander bei 32steln).
+      canvas.drawCircle(Offset(cx + g * 0.5, l.stemTop + g * 0.45), g * 0.17, Paint()..color = color);
     }
   }
 
