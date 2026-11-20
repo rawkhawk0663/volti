@@ -51,6 +51,9 @@ class _TabLayerState extends State<TabLayer> {
   Offset _moveDelta = Offset.zero;
   double _widthDelta = 0;
 
+  /// Markieren durch Ziehen über eine Tabulatur: ihre ID und der Anfang.
+  ({String id, int from})? _selecting;
+
   /// Taktstrich, der gerade gezogen wird, und seine Stelle in Pixeln.
   int? _barIndex;
   double _barX = 0;
@@ -199,9 +202,25 @@ class _TabLayerState extends State<TabLayer> {
       width: (right - left) / size.width,
       gap: gap,
       background: tools.tabBackground,
+      meter: tools.tabMeter,
     );
     final t = c.annotations.tab(id);
     if (t != null) _start(t);
+  }
+
+  /// Markierte Schläge in die Zwischenablage (Ausschneiden: danach weg).
+  void _copy(TabSession s, {bool cut = false}) {
+    final clip = s.copy();
+    if (clip.isEmpty) return;
+    tools.tabClip = clip;
+    if (cut) {
+      s.hasSelection ? s.deleteSelection() : s.perform(TabAction.deleteBeat);
+    }
+  }
+
+  void _paste(TabSession s) {
+    final clip = tools.tabClip;
+    if (clip != null) s.paste(clip);
   }
 
   void _resetBar(TabBlock t, int i) {
@@ -228,7 +247,30 @@ class _TabLayerState extends State<TabLayer> {
       c.redo();
       return KeyEventResult.handled;
     }
+    // Kopieren, Ausschneiden, Einfügen, alles markieren (fest belegt).
+    if (ctrl && !alt && !shift) {
+      if (k == LogicalKeyboardKey.keyC || k == LogicalKeyboardKey.keyX) {
+        _copy(s, cut: k == LogicalKeyboardKey.keyX);
+        return KeyEventResult.handled;
+      }
+      if (k == LogicalKeyboardKey.keyV) {
+        _paste(s);
+        return KeyEventResult.handled;
+      }
+      if (k == LogicalKeyboardKey.keyA) {
+        s.selectAll();
+        return KeyEventResult.handled;
+      }
+    }
     final action = tools.tabKeys.actionFor(k, ctrl: ctrl, shift: shift, alt: alt);
+    // Umschalt + ← / → markiert (wenn die Kombination nicht anders belegt ist).
+    if (action == null && shift && !ctrl && !alt) {
+      final plain = tools.tabKeys.actionFor(k, ctrl: false, shift: false, alt: false);
+      if (plain == TabAction.left || plain == TabAction.right) {
+        s.extend(plain == TabAction.left ? -1 : 1);
+        return KeyEventResult.handled;
+      }
+    }
     if (action != null) {
       if (!s.perform(action)) _finish();
       return KeyEventResult.handled;
@@ -282,12 +324,34 @@ class _TabLayerState extends State<TabLayer> {
                       onTapUp: (d) => _tapUp(d, size),
                       onPanStart: (d) {
                         if (d.kind == PointerDeviceKind.touch) return;
+                        // Auf einer Tabulatur: markieren statt neu anlegen.
+                        final hit = _hit(d.localPosition, size);
+                        if (hit != null) {
+                          final l = layoutTab(hit, size);
+                          final slot = l.slotAt(d.localPosition.dx);
+                          if (_session?.id != hit.id) _start(hit, beat: slot, string: l.stringAt(d.localPosition.dy));
+                          _selecting = (id: hit.id, from: slot);
+                          _session?.selectRange(slot, slot);
+                          return;
+                        }
                         setState(() => _dragFrom = _dragTo = d.localPosition);
                       },
                       onPanUpdate: (d) {
+                        final sel = _selecting;
+                        if (sel != null) {
+                          final t = c.annotations.tab(sel.id);
+                          if (t != null) {
+                            _session?.selectRange(sel.from, layoutTab(t, size).slotAt(d.localPosition.dx));
+                          }
+                          return;
+                        }
                         if (_dragFrom != null) setState(() => _dragTo = d.localPosition);
                       },
                       onPanEnd: (_) {
+                        if (_selecting != null) {
+                          _selecting = null;
+                          return;
+                        }
                         final a = _dragFrom, b = _dragTo;
                         setState(() => _dragFrom = _dragTo = null);
                         if (a != null && b != null) {
@@ -315,9 +379,21 @@ class _TabLayerState extends State<TabLayer> {
     final g = l.gap;
     final handle = math.max(22.0, g * 1.8);
     return [
+      // Takte mit falscher Länge (zu voll oder zu leer) leicht rot.
+      if (t.measure != null)
+        IgnorePointer(
+          child: CustomPaint(painter: _MeasureCheckPainter(t, l, scheme.error, offset: _moveDelta)),
+        ),
       IgnorePointer(
         child: CustomPaint(
-          painter: _CursorPainter(layout: l, beat: s.beat, string: s.string, color: scheme.primary, offset: _moveDelta),
+          painter: _CursorPainter(
+            layout: l,
+            beat: s.beat,
+            string: s.string,
+            color: scheme.primary,
+            offset: _moveDelta,
+            selection: s.selection,
+          ),
         ),
       ),
       // Griff zum Verschieben (links oben)
@@ -478,7 +554,11 @@ class _TabsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TabsPainter old) =>
-      !identical(old.tabs, tabs) || !identical(old.preview, preview) || old.moving != moving || old.moveDelta != moveDelta || old.widthDelta != widthDelta;
+      !identical(old.tabs, tabs) ||
+      !identical(old.preview, preview) ||
+      old.moving != moving ||
+      old.moveDelta != moveDelta ||
+      old.widthDelta != widthDelta;
 }
 
 /// Cursor: Kästchen auf Saite und Schlag, dazu die Spalte leicht hervorgehoben.
@@ -489,16 +569,30 @@ class _CursorPainter extends CustomPainter {
     required this.string,
     required this.color,
     this.offset = Offset.zero,
+    this.selection,
   });
   final TabLayout layout;
   final int beat, string;
   final Color color;
   final Offset offset;
 
+  /// Markierte Einträge (beide inklusive).
+  final (int, int)? selection;
+
   @override
   void paint(Canvas canvas, Size size) {
     final l = layout;
     final g = l.gap;
+    final sel = selection;
+    if (sel != null && sel.$2 < l.xs.length) {
+      final left = l.xs[sel.$1] - l.slotWidths[sel.$1] / 2;
+      final right = l.xs[sel.$2] + l.slotWidths[sel.$2] / 2;
+      final r = Rect.fromLTRB(left, l.top - g * 0.7, right, l.stemBottom).shift(offset);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(r, Radius.circular(g * 0.3)),
+        Paint()..color = color.withValues(alpha: 0.22),
+      );
+    }
     final i = beat.clamp(0, l.xs.length - 1);
     final cx = l.xs[i] + offset.dx;
     final w = math.max(l.slotWidths[i] * 0.9, g * 1.5);
@@ -521,7 +615,12 @@ class _CursorPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CursorPainter old) =>
-      old.beat != beat || old.string != string || old.layout != layout || old.offset != offset || old.color != color;
+      old.beat != beat ||
+      old.string != string ||
+      old.layout != layout ||
+      old.offset != offset ||
+      old.color != color ||
+      old.selection != selection;
 }
 
 /// Vorschau beim Aufziehen einer neuen Tabulatur.
@@ -542,4 +641,38 @@ class _PreviewPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PreviewPainter old) => old.a != a || old.b != b;
+}
+
+/// Markiert Takte, deren Notenwerte nicht zur Taktart passen. Der letzte Takt
+/// darf noch zu kurz sein (dort wird gerade geschrieben).
+class _MeasureCheckPainter extends CustomPainter {
+  _MeasureCheckPainter(this.t, this.l, this.color, {this.offset = Offset.zero});
+  final TabBlock t;
+  final TabLayout l;
+  final Color color;
+  final Offset offset;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final m = t.measure;
+    if (m == null) return;
+    final all = measuresOf(t.beats);
+    final g = l.gap;
+    for (final (i, part) in all.indexed) {
+      if (part.end <= part.start) continue;
+      final last = i == all.length - 1;
+      final wrong = (part.length - m).abs() > 1e-6 && !(last && part.length < m);
+      if (!wrong) continue;
+      final left = l.xs[part.start] - l.slotWidths[part.start] / 2;
+      final right = l.xs[part.end - 1] + l.slotWidths[part.end - 1] / 2;
+      final r = Rect.fromLTRB(left, l.top - g * 0.6, right, l.stemBottom + g * 0.2).shift(offset);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(r, Radius.circular(g * 0.3)),
+        Paint()..color = color.withValues(alpha: 0.13),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MeasureCheckPainter old) => !identical(old.t, t) || old.offset != offset || old.color != color;
 }

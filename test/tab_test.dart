@@ -162,6 +162,88 @@ void main() {
     });
   });
 
+  group('Taktart und Takte', () {
+    const q = TabBeat(frets: {0: 1});
+    test('Taktart lesen, Ganztaktpausen', () {
+      expect(meterLength('3/4'), 0.75);
+      expect(meterLength('6/8'), 0.75);
+      expect(meterLength('12/8'), 1.5);
+      expect(meterLength('7/3'), isNull);
+      expect(meterLength(null), isNull);
+      double total(List<TabBeat> r) => r.fold(0.0, (a, b) => a + b.length);
+      expect(restsFor(1.0), [const TabBeat(value: 1)]);
+      expect(restsFor(0.75), [const TabBeat(value: 2, dotted: true)], reason: '3/4 = punktierte Halbe');
+      expect(total(restsFor(1.25)), closeTo(1.25, 1e-9), reason: '5/4');
+      expect(restsFor(1.25).every((b) => b.isRest), isTrue);
+    });
+
+    test('Beim Weiterschreiben kommt nach einem vollen Takt der Taktstrich von selbst', () {
+      final e = TabEditor(const [], measure: 0.5); // 2/4
+      e.setFret(1);
+      e.move(1);
+      e.setFret(2);
+      e.move(1);
+      e.setFret(3);
+      expect(e.beats.map((b) => b.bar).toList(), [false, false, true, false]);
+    });
+
+    test('Taktstriche neu setzen, Takt einfügen und löschen – die anderen Takte bleiben', () {
+      final beats = rebar([q, q, q, q, q, q, const TabBeat.bar(), q, q], 1.0);
+      expect(beats.map((b) => b.bar).toList(), [false, false, false, false, true, false, false, false, false]);
+      final e = TabEditor(beats, measure: 1.0);
+      // Cursor im zweiten Takt
+      e.beat = 6;
+      e.insertMeasure();
+      final m = measuresOf(e.beats);
+      expect(m.length, 3);
+      expect(e.beats[m[1].start].isRest, isTrue, reason: 'neuer leerer Takt vor dem zweiten');
+      expect(m[1].length, 1.0);
+      expect(m[2].length, 1.0, reason: 'der bisherige zweite Takt bleibt ganz');
+      e.deleteMeasure();
+      expect(measuresOf(e.beats).length, 2);
+      expect(e.beats.where((b) => b.bar).length, 1);
+      // Am Ende: ein Takt wird hinten angefügt
+      e.beat = e.beats.length;
+      e.insertMeasure();
+      expect(measuresOf(e.beats).length, 3);
+      expect(measuresOf(e.beats).last.length, 1.0);
+    });
+
+    test('Taktart wird gespeichert', () {
+      final b = block('a').copyWith(meter: '6/8');
+      expect(TabBlock.fromJson(b.toJson()).meter, '6/8');
+      expect(TabBlock.fromJson(b.toJson()).measure, 0.75);
+      expect(TabBlock.fromJson(block('b').toJson()).meter, isNull);
+    });
+  });
+
+  group('Markieren, Kopieren, Einfügen', () {
+    test('Bereich kopieren und an anderer Stelle einfügen, Markierung löschen', () {
+      final e = TabEditor(const [
+        TabBeat(frets: {0: 1}),
+        TabBeat(frets: {0: 2}),
+        TabBeat(frets: {0: 3}),
+        TabBeat(frets: {0: 4}),
+      ]);
+      e.beat = 1;
+      e.extend(1);
+      expect(e.selection, (1, 2));
+      final clip = e.copySelection();
+      expect(clip.map((b) => b.frets[0]), [2, 3]);
+      e.move(10); // ans Ende, Markierung weg
+      expect(e.selection, isNull);
+      e.paste(clip);
+      expect(e.beats.map((b) => b.frets[0]), [1, 2, 3, 4, 2, 3]);
+      expect(e.beat, 6);
+      e.selectRange(0, 1);
+      expect(e.deleteSelection(), isTrue);
+      expect(e.beats.map((b) => b.frets[0]), [3, 4, 2, 3]);
+      e.selectAll();
+      e.paste(const [TabBeat(frets: {1: 9})]);
+      expect(e.beats.single.frets, {1: 9}, reason: 'Einfügen ersetzt die Markierung');
+    });
+  });
+
   group('Verschobene Taktstriche', () {
     const page = Size(1000, 1400);
     final beats = const [
@@ -356,6 +438,35 @@ void main() {
       await t.longPress(handle);
       await t.pump();
       expect(ink.annotations.tab(id)!.beats[1].at, isNull);
+      tools.tabSession.value = null;
+      await t.pump();
+      ink.dispose();
+    });
+
+    testWidgets('Umschalt+→ markiert, Strg+C/Strg+V kopiert, Takt einfügen mit Umschalt+N', (t) async {
+      await pump(t);
+      final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
+      ink.updateTab(id, beats: const [TabBeat(frets: {0: 1}), TabBeat(frets: {0: 2})]);
+      tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
+      await t.pump();
+      await t.pump();
+      await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(tools.tabClip?.length, 2);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(ink.annotations.tab(id)!.beats.map((b) => b.frets[0]), [1, 2, 1, 2]);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(ink.annotations.tab(id)!.beats.length, 6, reason: 'Pause und Taktstrich dazu');
       tools.tabSession.value = null;
       await t.pump();
       ink.dispose();

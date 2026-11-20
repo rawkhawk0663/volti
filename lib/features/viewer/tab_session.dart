@@ -43,6 +43,7 @@ class TabSession extends ChangeNotifier {
     if (b == null) return;
     _editor.beats = [...b.beats];
     _editor.beat = _editor.beat.clamp(0, b.beats.length);
+    _editor.measure = b.measure;
     op(_editor);
     ink.updateTab(id, beats: _editor.beats);
     notifyListeners();
@@ -62,7 +63,55 @@ class TabSession extends ChangeNotifier {
     e.string = string.clamp(0, TabBlock.strings - 1);
   });
 
-  void digit(int d) => _edit((e) => e.digit(d));
+  /// Markierte Einträge (Bereich, beide inklusive) oder null.
+  (int, int)? get selection {
+    final b = block;
+    if (b == null) return null;
+    _editor.beats = [...b.beats];
+    return _editor.selection;
+  }
+
+  bool get hasSelection => selection != null;
+
+  void extend(int by) => _move((e) => e.extend(by));
+  void selectRange(int from, int to) => _move((e) => e.selectRange(from, to));
+  void selectAll() => _move((e) => e.selectAll());
+  void clearSelection() {
+    markMode = false;
+    _move((e) => e.anchor = null);
+  }
+
+  /// Markieren über das Zahlenfeld: Solange an, erweitern ← und → die
+  /// Markierung (auf der Tastatur geht das mit Umschalt).
+  bool markMode = false;
+
+  void toggleMark() {
+    markMode = !markMode;
+    _move((e) => e.anchor = markMode && e.beats.isNotEmpty ? e.beat.clamp(0, e.beats.length - 1) : null);
+  }
+
+  /// Kopieren: die markierten Einträge (ohne Markierung der unter dem Cursor).
+  List<TabBeat> copy() {
+    final b = block;
+    if (b == null) return const [];
+    _editor.beats = [...b.beats];
+    return _editor.copySelection();
+  }
+
+  void deleteSelection() {
+    markMode = false;
+    _edit((e) => e.deleteSelection());
+  }
+
+  void paste(List<TabBeat> clip) {
+    markMode = false;
+    _edit((e) => e.paste(clip));
+  }
+
+  void digit(int d) => _edit((e) {
+    e.anchor = null;
+    e.digit(d);
+  });
   void setFret(int f) => _edit((e) => e.setFret(f));
   void setValue(int v) => _edit((e) => e.setValue(v));
   void bend(int quarters) => _edit((e) => e.bend(quarters));
@@ -77,9 +126,9 @@ class TabSession extends ChangeNotifier {
     }
     switch (a) {
       case TabAction.left:
-        _move((e) => e.move(-1));
+        markMode ? extend(-1) : _move((e) => e.move(-1));
       case TabAction.right:
-        _move((e) => e.move(1));
+        markMode ? extend(1) : _move((e) => e.move(1));
       case TabAction.up:
         _move((e) => e.moveString(-1));
       case TabAction.down:
@@ -99,11 +148,15 @@ class TabSession extends ChangeNotifier {
       case TabAction.bend:
         _edit((e) => e.cycleBend());
       case TabAction.clearNote:
-        _edit((e) => e.clearNote());
+        _edit((e) => e.deleteSelection() ? null : e.clearNote());
       case TabAction.deleteBeat:
-        _edit((e) => e.deleteBeat());
+        _edit((e) => e.deleteSelection() ? null : e.deleteBeat());
       case TabAction.insertBeat:
         _edit((e) => e.insertBeat());
+      case TabAction.insertMeasure:
+        _edit((e) => e.insertMeasure());
+      case TabAction.deleteMeasure:
+        _edit((e) => e.deleteMeasure());
       case TabAction.finish:
         return false;
       default:

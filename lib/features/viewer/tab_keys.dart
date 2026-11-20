@@ -27,6 +27,8 @@ enum TabAction {
   clearNote,
   deleteBeat,
   insertBeat,
+  insertMeasure,
+  deleteMeasure,
   finish;
 
   String get label => switch (this) {
@@ -50,6 +52,11 @@ enum TabAction {
     clearNote => tr('Bundzahl löschen', 'Delete fret number'),
     deleteBeat => tr('Ganzen Schlag löschen', 'Delete whole beat'),
     insertBeat => tr('Schlag einfügen', 'Insert beat'),
+    insertMeasure => tr(
+      'Leeren Takt einfügen (vor dem Takt mit dem Cursor)',
+      'Insert empty bar (before the current bar)',
+    ),
+    deleteMeasure => tr('Ganzen Takt löschen', 'Delete whole bar'),
     finish => tr('Fertig (Schreiben beenden)', 'Done (stop writing)'),
   };
 
@@ -142,6 +149,8 @@ class TabKeymap {
     TabAction.clearNote: const KeyBinding(LogicalKeyboardKey.backspace),
     TabAction.deleteBeat: const KeyBinding(LogicalKeyboardKey.delete),
     TabAction.insertBeat: const KeyBinding(LogicalKeyboardKey.keyN),
+    TabAction.insertMeasure: const KeyBinding(LogicalKeyboardKey.keyN, shift: true),
+    TabAction.deleteMeasure: const KeyBinding(LogicalKeyboardKey.delete, shift: true),
     TabAction.finish: const KeyBinding(LogicalKeyboardKey.escape),
   });
 

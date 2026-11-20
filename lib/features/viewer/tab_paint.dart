@@ -75,6 +75,15 @@ class TabLayout {
 /// Breite des „TAB“-Zeichens am Anfang (in Linienabständen).
 const _clef = 3.0;
 
+/// Breite der Taktart (in Linienabständen).
+double _meterWidth(String meter) {
+  final digits = meter.split('/').map((p) => p.length).fold(1, math.max);
+  return 1.4 + digits * 2.0;
+}
+
+/// Ziffern der Taktart in der Notenschrift Bravura.
+String _meterDigits(String n) => String.fromCharCodes(n.codeUnits.map((c) => 0xE080 + c - 0x30));
+
 /// Freier Platz hinter dem letzten Eintrag (in Linienabständen).
 const _tail = 2.4;
 
@@ -100,8 +109,10 @@ double _naturalWidth(TabBeat b) {
 TabLayout layoutTab(TabBlock t, Size page) {
   final gap = t.gap * page.width;
   final origin = Offset(t.x * page.width, t.y * page.height);
-  final width = math.max(t.width * page.width, gap * (_clef + _tail + 2));
-  final start = origin.dx + gap * _clef;
+  // Mit Taktart steht sie nach „TAB“ und braucht etwas mehr Platz.
+  final clef = _clef + (t.measure != null ? _meterWidth(t.meter!) : 0);
+  final width = math.max(t.width * page.width, gap * (clef + _tail + 2));
+  final start = origin.dx + gap * clef;
   final contentEnd = origin.dx + width;
 
   // 1. Natürliche Lage (ohne Enge): Mitte und Breite jedes Eintrags.
@@ -279,6 +290,20 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     canvas.drawRect((at & p.size).inflate(g * 0.08), Paint()..color = ground);
     p.paint(canvas, at);
     p.dispose();
+  }
+
+  // Taktart nach „TAB“: Zähler oben, Nenner unten.
+  if (t.measure != null) {
+    final parts = t.meter!.split('/');
+    final cx = l.origin.dx + g * (_clef + 0.3 + _meterWidth(t.meter!) / 2);
+    for (final (i, part) in parts.indexed) {
+      final p = _text(_meterDigits(part), g * 4.8, color, family: 'Bravura');
+      final base = p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+      // Die Ziffern sind um ihre Grundlinie herum gezeichnet.
+      final cy = l.top + g * (i == 0 ? 1.25 : 3.75);
+      p.paint(canvas, Offset(cx - p.width / 2, cy - base));
+      p.dispose();
+    }
   }
 
   final knockout = Paint()..color = ground;

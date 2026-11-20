@@ -173,6 +173,10 @@ class ToolController extends ChangeNotifier {
   /// Werkzeugfenster). null = keine.
   final tabSession = ValueNotifier<TabSession?>(null);
 
+  /// Kopierte Schläge einer Tabulatur (zum Einfügen, auch in einem anderen
+  /// Stück). null = nichts kopiert.
+  List<TabBeat>? tabClip;
+
   /// Tastenbelegung für Tabulaturen (nur auf diesem Gerät gemerkt, weil jede
   /// Tastatur anders ist).
   TabKeymap get tabKeys => _tabKeys ??= TabKeymap.fromJson(settings.text('tabKeys'));
@@ -189,6 +193,18 @@ class ToolController extends ChangeNotifier {
 
   Future<void> setTabGap(double v) async {
     await settings.setText('tabGap', '$v');
+    notifyListeners();
+  }
+
+  /// Taktart für neue Tabulaturen („4/4“; leer = frei).
+  String? get tabMeter {
+    final v = settings.text('tabMeter');
+    if (v == null) return '4/4';
+    return meterLength(v) == null ? null : v;
+  }
+
+  Future<void> setTabMeter(String? v) async {
+    await settings.setText('tabMeter', v ?? '');
     notifyListeners();
   }
 

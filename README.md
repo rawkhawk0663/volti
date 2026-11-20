@@ -83,7 +83,7 @@ Lade **`Volti-Android.apk`** aus der [neuesten Version](https://github.com/rawkh
 - **Text-Notizen** mit drei Schriften, Farben und Hintergrund. Innerhalb einer Notiz kannst du einzelne Wörter fett, kursiv, unterstrichen oder farbig machen.
 - **Stempel** mit über hundert Musiksymbolen in Gruppen (Dynamik, Artikulation, Streicher, Bläser, Tasten, Gitarre …) sowie **eigene Stempel** aus Bildern.
 - **Formen**: Linie, Pfeil, Rechteck und Ellipse (auch gefüllt, z. B. weiss zum Abdecken), Crescendo/Decrescendo, Bogen, Notenlinien und Tabulatur-Linien.
-- **Tabulatur schreiben**: Mit dem Werkzeug „TAB“ eine Tabulatur auf die Seite ziehen und Bundzahlen mit der Tastatur (auch ohne Ziffernblock) oder dem Zahlenfeld tippen, mit Rhythmus (ganze bis 32stel, punktiert, Pausen), Slides, Bendings (¼, ½, 1, 1½), verschiebbaren Taktstrichen, einstellbarer Grösse und Hintergrundfarbe. Die Tasten lassen sich unter ⚙ → Noteneingabe ändern.
+- **Tabulatur schreiben**: Mit dem Werkzeug „TAB“ eine Tabulatur auf die Seite ziehen und Bundzahlen mit der Tastatur (auch ohne Ziffernblock) oder dem Zahlenfeld tippen, mit Rhythmus (ganze bis 32stel, punktiert, Pausen), Taktart mit automatischen Taktstrichen, Takte einfügen und löschen, Markieren, Kopieren und Einfügen, Slides, Bendings (¼, ½, 1, 1½), verschiebbaren Taktstrichen, einstellbarer Grösse und Hintergrundfarbe. Die Tasten lassen sich unter ⚙ → Noteneingabe ändern.
 - **Lineal** für gerade Linien, mit den Fingern verschieben und drehen.
 - **Auswählen (Lasso)** zum Verschieben, Vergrössern, Kopieren und Umfärben, sowie ein **Verschieben-Werkzeug**.
 - **Takte kopieren**: Takte samt Notizen ausschneiden und an anderer Stelle einfügen, auch in einem anderen Stück.

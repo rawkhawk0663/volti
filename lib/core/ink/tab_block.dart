@@ -147,6 +147,80 @@ class TabBeat {
   );
 }
 
+/// Taktarten zur Auswahl.
+const tabMeters = ['2/4', '3/4', '4/4', '5/4', '2/2', '3/8', '6/8', '7/8', '9/8', '12/8'];
+
+/// Länge eines Takts in ganzen Noten („3/4“ → 0,75); ungültig → null.
+double? meterLength(String? meter) {
+  final m = RegExp(r'^(\d{1,2})/(1|2|4|8|16)$').firstMatch(meter ?? '');
+  if (m == null) return null;
+  final n = int.parse(m.group(1)!);
+  if (n < 1) return null;
+  return n / int.parse(m.group(2)!);
+}
+
+/// Pausen, die zusammen [length] (in ganzen Noten) ergeben – für einen leeren
+/// Takt: möglichst wenige, punktierte erlaubt (3/4 = punktierte Halbe).
+List<TabBeat> restsFor(double length) {
+  final out = <TabBeat>[];
+  var left = length;
+  while (left > 1e-9 && out.length < 16) {
+    TabBeat? pick;
+    for (final v in tabValues) {
+      for (final dot in [true, false]) {
+        final b = TabBeat(value: v, dotted: dot);
+        if (b.length <= left + 1e-9) {
+          pick = b;
+          break;
+        }
+      }
+      if (pick != null) break;
+    }
+    if (pick == null) break;
+    out.add(pick);
+    left -= pick.length;
+  }
+  return out;
+}
+
+/// Taktstriche neu nach der Taktart setzen: alle bisherigen weg, dann nach
+/// jedem vollen Takt einer (ein zu langer Schlag beendet seinen Takt).
+List<TabBeat> rebar(List<TabBeat> beats, double measure) {
+  final notes = [
+    for (final b in beats)
+      if (!b.bar) b,
+  ];
+  final out = <TabBeat>[];
+  var acc = 0.0;
+  for (var i = 0; i < notes.length; i++) {
+    out.add(notes[i]);
+    acc += notes[i].length;
+    if (acc >= measure - 1e-9 && i < notes.length - 1) {
+      out.add(const TabBeat.bar());
+      acc = 0;
+    }
+  }
+  return out;
+}
+
+/// Takte als Bereiche [start, end) in der Liste (ohne den Taktstrich), dazu
+/// ihre Länge in ganzen Noten.
+List<({int start, int end, double length})> measuresOf(List<TabBeat> beats) {
+  final out = <({int start, int end, double length})>[];
+  var start = 0;
+  var len = 0.0;
+  for (var i = 0; i <= beats.length; i++) {
+    if (i == beats.length || beats[i].bar) {
+      out.add((start: start, end: i, length: len));
+      start = i + 1;
+      len = 0;
+    } else {
+      len += beats[i].length;
+    }
+  }
+  return out;
+}
+
 /// Eine Tabulatur auf einer Notenseite: sechs Linien mit Bundzahlen und
 /// Rhythmus, mit der Tastatur oder dem Zahlenfeld geschrieben.
 ///
@@ -170,6 +244,7 @@ class TabBlock {
     this.modifiedAt,
     this.deleted = false,
     this.layer,
+    this.meter,
   });
 
   static const strings = 6;
@@ -196,6 +271,12 @@ class TabBlock {
   /// Ebene (null = Grund-Ebene [kDefaultLayer]).
   final String? layer;
 
+  /// Taktart, z. B. „4/4“ (null = frei, Taktstriche nur von Hand).
+  final String? meter;
+
+  /// Länge eines Takts in ganzen Noten (null = frei).
+  double? get measure => meterLength(meter);
+
   DateTime get lastChange => modifiedAt ?? createdAt;
 
   TabBlock copyWith({
@@ -210,6 +291,7 @@ class TabBlock {
     DateTime? modifiedAt,
     bool? deleted,
     String? layer,
+    Object? meter = _keep,
   }) => TabBlock(
     id: id ?? this.id,
     page: page,
@@ -224,7 +306,10 @@ class TabBlock {
     modifiedAt: modifiedAt ?? this.modifiedAt,
     deleted: deleted ?? this.deleted,
     layer: layer ?? this.layer,
+    meter: identical(meter, _keep) ? this.meter : meter as String?,
   );
+
+  static const _keep = Object();
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -240,6 +325,7 @@ class TabBlock {
     if (modifiedAt != null) 'modified': modifiedAt!.toUtc().toIso8601String(),
     if (deleted) 'deleted': true,
     if (layer != null && layer != kDefaultLayer) 'layer': layer,
+    if (meter != null) 'meter': meter,
   };
 
   static TabBlock fromJson(Map<String, dynamic> j) => TabBlock(
@@ -256,6 +342,7 @@ class TabBlock {
     modifiedAt: j['modified'] == null ? null : DateTime.parse(j['modified'] as String),
     deleted: j['deleted'] == true,
     layer: j['layer'] as String?,
+    meter: meterLength(j['meter'] as String?) == null ? null : j['meter'] as String,
   );
 }
 
@@ -266,7 +353,10 @@ class TabBlock {
 /// Der Cursor darf einen Platz hinter dem letzten Eintrag stehen: Dort
 /// Getipptes legt einen neuen Schlag an.
 class TabEditor {
-  TabEditor(List<TabBeat> beats, {this.beat = 0, this.string = 0}) : beats = [...beats];
+  TabEditor(List<TabBeat> beats, {this.beat = 0, this.string = 0, this.measure}) : beats = [...beats];
+
+  /// Länge eines Takts (aus der Taktart); null = frei.
+  double? measure;
 
   List<TabBeat> beats;
 
@@ -275,6 +365,68 @@ class TabEditor {
 
   /// Saite unter dem Cursor (0 = oberste Linie).
   int string;
+
+  /// Markierung: Anfang (der Cursor ist das andere Ende). null = keine.
+  int? anchor;
+
+  /// Markierte Einträge als Bereich [from, to] (beide inklusive), oder null.
+  (int, int)? get selection {
+    final a = anchor;
+    if (a == null || beats.isEmpty) return null;
+    final last = beats.length - 1;
+    final x = a.clamp(0, last), y = beat.clamp(0, last);
+    return x <= y ? (x, y) : (y, x);
+  }
+
+  /// Markierung um [by] Einträge erweitern bzw. verkleinern.
+  void extend(int by) {
+    if (beats.isEmpty) return;
+    anchor ??= beat.clamp(0, beats.length - 1);
+    beat = (beat.clamp(0, beats.length - 1) + by).clamp(0, beats.length - 1);
+    _resetDigits();
+  }
+
+  /// Von [from] bis [to] markieren (z. B. mit dem Stift gezogen).
+  void selectRange(int from, int to) {
+    if (beats.isEmpty) return;
+    anchor = from.clamp(0, beats.length - 1);
+    beat = to.clamp(0, beats.length - 1);
+  }
+
+  void selectAll() {
+    if (beats.isEmpty) return;
+    anchor = 0;
+    beat = beats.length - 1;
+  }
+
+  /// Markierte Einträge (ohne Markierung: der Eintrag unter dem Cursor).
+  List<TabBeat> copySelection() {
+    final sel = selection;
+    if (sel != null) return beats.sublist(sel.$1, sel.$2 + 1);
+    return beat < beats.length ? [beats[beat]] : const [];
+  }
+
+  /// Markierte Einträge entfernen. Gibt false zurück, wenn nichts markiert war.
+  bool deleteSelection() {
+    final sel = selection;
+    if (sel == null) return false;
+    beats.removeRange(sel.$1, sel.$2 + 1);
+    beat = sel.$1.clamp(0, beats.length);
+    anchor = null;
+    _resetDigits();
+    return true;
+  }
+
+  /// Einfügen vor dem Cursor (eine Markierung wird ersetzt). Der Cursor steht
+  /// danach hinter dem Eingefügten.
+  void paste(List<TabBeat> clip) {
+    if (clip.isEmpty) return;
+    deleteSelection();
+    final at = beat.clamp(0, beats.length);
+    beats.insertAll(at, clip);
+    beat = at + clip.length;
+    _resetDigits();
+  }
 
   /// Zuletzt getippte Ziffer (für zweistellige Bünde wie 12).
   int? _lastDigit;
@@ -299,6 +451,11 @@ class TabEditor {
   /// Schlag noch nicht, wird er jetzt angelegt.
   TabBeat _ensureBeat() {
     if (beat >= beats.length) {
+      // Mit Taktart: Ist der letzte Takt voll, kommt zuerst der Taktstrich.
+      final m = measure;
+      if (m != null && beats.isNotEmpty && !beats.last.bar && measuresOf(beats).last.length >= m - 1e-9) {
+        beats.add(const TabBeat.bar());
+      }
       beats.add(_fresh());
       beat = beats.length - 1;
     }
@@ -436,6 +593,48 @@ class TabEditor {
     _resetDigits();
   }
 
+  /// Takt, in dem der Cursor steht.
+  ({int start, int end, double length}) get _currentMeasure {
+    final all = measuresOf(beats);
+    for (final m in all) {
+      if (beat >= m.start && beat <= m.end) return m;
+    }
+    return all.last;
+  }
+
+  /// Leeren Takt (Pausen) vor dem Takt mit dem Cursor einfügen. Alles danach
+  /// rückt als Ganzes nach hinten.
+  void insertMeasure() {
+    final m = measure ?? 1.0;
+    final rests = restsFor(m);
+    final cur = _currentMeasure;
+    if (beat >= beats.length) {
+      // Am Ende (hinter dem letzten Eintrag): neuer Takt hinten anfügen.
+      if (beats.isNotEmpty && !beats.last.bar) beats.add(const TabBeat.bar());
+      beat = beats.length;
+      beats.addAll(rests);
+    } else {
+      beats.insertAll(cur.start, [...rests, const TabBeat.bar()]);
+      beat = cur.start;
+    }
+    _resetDigits();
+  }
+
+  /// Ganzen Takt mit dem Cursor löschen (samt seinem Taktstrich).
+  void deleteMeasure() {
+    if (beats.isEmpty) return;
+    final cur = _currentMeasure;
+    var from = cur.start, to = cur.end; // to = Taktstrich danach (falls es ihn gibt)
+    if (to < beats.length) {
+      to++; // Taktstrich danach mitnehmen
+    } else if (from > 0) {
+      from--; // letzter Takt: Taktstrich davor mitnehmen
+    }
+    beats.removeRange(from, to);
+    beat = from.clamp(0, beats.length);
+    _resetDigits();
+  }
+
   /// Leeren Schlag vor dem Cursor einfügen.
   void insertBeat() {
     final at = beat.clamp(0, beats.length);
@@ -446,6 +645,7 @@ class TabEditor {
 
   /// Nach links/rechts (ein Platz hinter dem letzten Eintrag ist erlaubt).
   void move(int by) {
+    anchor = null;
     beat = (beat + by).clamp(0, beats.length);
     _resetDigits();
   }

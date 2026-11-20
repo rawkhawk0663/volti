@@ -382,6 +382,7 @@ class InkController extends ChangeNotifier {
     required double width,
     double gap = TabBlock.defaultGap,
     int background = TabBlock.noBackground,
+    String? meter,
   }) {
     final t = TabBlock(
       id: _uuid.v4(),
@@ -391,6 +392,7 @@ class InkController extends ChangeNotifier {
       width: width,
       gap: gap,
       background: background,
+      meter: meter,
       createdAt: DateTime.now().toUtc(),
       layer: _layerForNew(),
     );
@@ -408,6 +410,8 @@ class InkController extends ChangeNotifier {
     double? width,
     double? gap,
     int? background,
+    String? meter,
+    bool clearMeter = false,
   }) {
     final before = _annotations.tab(id);
     if (before == null || before.deleted) return;
@@ -418,9 +422,11 @@ class InkController extends ChangeNotifier {
       width: width,
       gap: gap,
       background: background,
+      meter: clearMeter ? null : (meter ?? before.meter),
       modifiedAt: DateTime.now().toUtc(),
     );
-    if (after.gap == before.gap &&
+    if (after.meter == before.meter &&
+        after.gap == before.gap &&
         after.background == before.background &&
         after.x == before.x &&
         after.y == before.y &&

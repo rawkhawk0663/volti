@@ -1465,6 +1465,33 @@ class _TabSettings extends StatelessWidget {
               ExcludeFocus(
                 child: _TabKeypad(session: session, tools: tools),
               ),
+            _Label(tr('Taktart', 'Time signature')),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final m in <String?>[null, ...tabMeters])
+                  ChoiceChip(
+                    label: Text(m ?? tr('frei', 'free')),
+                    selected: (session == null ? tools.tabMeter : block?.meter) == m,
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) {
+                      tools.setTabMeter(m);
+                      final b = block;
+                      if (session == null || b == null) return;
+                      // Neue Taktart: Taktstriche danach neu setzen (rückgängig machbar).
+                      final len = meterLength(m);
+                      session.ink.updateTab(
+                        b.id,
+                        meter: m,
+                        clearMeter: m == null,
+                        beats: len == null ? null : rebar(b.beats, len),
+                      );
+                    },
+                  ),
+              ],
+            ),
             _TabSize(tools: tools, session: session, gap: block?.gap ?? tools.tabGap),
             if (block != null && block.beats.any((b) => b.at != null))
               Align(
@@ -1659,6 +1686,62 @@ class _TabKeypad extends StatelessWidget {
                   const Icon(Icons.playlist_add, size: 18),
                   () => session.perform(TabAction.insertBeat),
                   tooltip: tip(TabAction.insertBeat),
+                ),
+                key(
+                  const Icon(Icons.add_box_outlined, size: 18),
+                  () => session.perform(TabAction.insertMeasure),
+                  tooltip: tip(TabAction.insertMeasure),
+                ),
+                key(
+                  const Icon(Icons.indeterminate_check_box_outlined, size: 18),
+                  () => session.perform(TabAction.deleteMeasure),
+                  tooltip: tip(TabAction.deleteMeasure),
+                ),
+              ],
+            ),
+            _Label(tr('Auswahl', 'Selection')),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                key(
+                  const Icon(Icons.highlight_alt, size: 18),
+                  session.toggleMark,
+                  selected: session.markMode,
+                  tooltip: tr(
+                    'Markieren: danach mit ← → erweitern (Tastatur: Umschalt + ← →, oder mit dem Stift darüberziehen)',
+                    'Select: then extend with ← → (keyboard: Shift + ← →, or drag over it with the pen)',
+                  ),
+                  width: 56,
+                ),
+                key(
+                  const Icon(Icons.copy, size: 18),
+                  () {
+                    final clip = session.copy();
+                    if (clip.isNotEmpty) tools.tabClip = clip;
+                  },
+                  tooltip: tr('Kopieren (Strg+C)', 'Copy (Ctrl+C)'),
+                  width: 56,
+                ),
+                key(
+                  const Icon(Icons.content_cut, size: 18),
+                  () {
+                    final clip = session.copy();
+                    if (clip.isEmpty) return;
+                    tools.tabClip = clip;
+                    session.hasSelection ? session.deleteSelection() : session.perform(TabAction.deleteBeat);
+                  },
+                  tooltip: tr('Ausschneiden (Strg+X)', 'Cut (Ctrl+X)'),
+                  width: 56,
+                ),
+                key(
+                  const Icon(Icons.content_paste, size: 18),
+                  () {
+                    final clip = tools.tabClip;
+                    if (clip != null) session.paste(clip);
+                  },
+                  tooltip: tr('Einfügen (Strg+V)', 'Paste (Ctrl+V)'),
+                  width: 56,
                 ),
               ],
             ),
