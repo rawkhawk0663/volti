@@ -169,6 +169,8 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.repeatEnd());
       case TabAction.finalBar:
         _edit((e) => e.finalBar());
+      case TabAction.doubleBar:
+        _edit((e) => e.doubleBar());
       case TabAction.clearNote:
         _edit((e) => e.deleteSelection() ? null : e.clearNote());
       case TabAction.deleteBeat:

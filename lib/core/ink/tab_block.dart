@@ -17,7 +17,10 @@ enum BarKind {
   repeatBoth,
 
   /// Schlussstrich (dünn, dick).
-  last;
+  last,
+
+  /// Doppelter Taktstrich (zwei dünne, z. B. vor einem neuen Teil).
+  doubleLine;
 
   static BarKind fromName(String? n) => BarKind.values.firstWhere((k) => k.name == n, orElse: () => normal);
 
@@ -795,6 +798,9 @@ class TabEditor {
 
   /// Schlussstrich nach dem Takt mit dem Cursor ein/aus.
   void finalBar() => _setEnd(BarKind.last);
+
+  /// Doppelter Taktstrich nach dem Takt mit dem Cursor ein/aus.
+  void doubleBar() => _setEnd(BarKind.doubleLine);
 
   void _setEnd(BarKind want) {
     final cur = _currentMeasure;

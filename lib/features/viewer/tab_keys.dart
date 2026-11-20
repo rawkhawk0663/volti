@@ -30,6 +30,7 @@ enum TabAction {
   repeatStart,
   repeatEnd,
   finalBar,
+  doubleBar,
   clearNote,
   deleteBeat,
   insertBeat,
@@ -61,6 +62,7 @@ enum TabAction {
     repeatStart => tr('Wiederholung Anfang (vor dem Takt)', 'Repeat start (before the bar)'),
     repeatEnd => tr('Wiederholung Ende (nach dem Takt)', 'Repeat end (after the bar)'),
     finalBar => tr('Schlussstrich (nach dem Takt)', 'Final bar line (after the bar)'),
+    doubleBar => tr('Doppelter Taktstrich (nach dem Takt)', 'Double bar line (after the bar)'),
     clearNote => tr(
       'Bundzahl löschen (nur diese Note; markierte Noten alle)',
       'Delete fret number (only this note; all selected notes)',
@@ -167,6 +169,7 @@ class TabKeymap {
     TabAction.repeatStart: const KeyBinding(LogicalKeyboardKey.keyW),
     TabAction.repeatEnd: const KeyBinding(LogicalKeyboardKey.keyE),
     TabAction.finalBar: const KeyBinding(LogicalKeyboardKey.keyF),
+    TabAction.doubleBar: const KeyBinding(LogicalKeyboardKey.keyT, shift: true),
     TabAction.clearNote: const KeyBinding(LogicalKeyboardKey.delete),
     TabAction.deleteBeat: const KeyBinding(LogicalKeyboardKey.delete, ctrl: true),
     TabAction.insertBeat: const KeyBinding(LogicalKeyboardKey.keyN),

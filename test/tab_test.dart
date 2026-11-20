@@ -265,6 +265,11 @@ void main() {
       e.beat = e.beats.length - 2;
       e.finalBar();
       expect(e.beats.last.kind, BarKind.last);
+      e.doubleBar();
+      expect(e.beats.last.kind, BarKind.doubleLine, reason: 'Schlussstrich wird zum Doppelstrich');
+      e.doubleBar();
+      expect(e.beats.last.kind, BarKind.normal);
+      expect(TabBeat.fromJson(const TabBeat.bar(kind: BarKind.doubleLine).toJson()).kind, BarKind.doubleLine);
       final back = TabBeat.fromJson(const TabBeat.bar(kind: BarKind.repeatBoth).toJson());
       expect(back.kind, BarKind.repeatBoth);
     });

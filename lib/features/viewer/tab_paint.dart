@@ -94,7 +94,7 @@ double _naturalWidth(TabBeat b) {
     return switch (b.kind) {
       BarKind.normal => 1.4,
       BarKind.repeatBoth => 4.2,
-      BarKind.last => 2.0,
+      BarKind.last || BarKind.doubleLine => 2.0,
       _ => 3.0,
     };
   }
@@ -560,6 +560,7 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
 double _barRight(BarKind k, double g) => switch (k) {
   BarKind.normal => 0,
   BarKind.repeatEnd || BarKind.last => g * 0.45,
+  BarKind.doubleLine => g * 0.25,
   BarKind.repeatStart => g * 0.25,
   BarKind.repeatBoth => g * 0.25,
 };
@@ -584,6 +585,9 @@ void _paintBar(Canvas canvas, BarKind kind, double cx, TabLayout l, Color color,
     case BarKind.last:
       thinAt(cx - g * 0.35);
       thickAt(cx + g * 0.25);
+    case BarKind.doubleLine:
+      thinAt(cx - g * 0.22);
+      thinAt(cx + g * 0.22);
     case BarKind.repeatEnd:
       dotsAt(cx - g * 0.75);
       thinAt(cx - g * 0.2);

@@ -1108,11 +1108,30 @@ class _TextSettings extends StatelessWidget {
               _Swatch(
                 color: b == TextNote.noBackground ? null : Color(b),
                 tooltip: b == TextNote.noBackground ? tr('Ohne Hintergrund', 'No background') : null,
-                selected: s.background == b,
+                // Gleiche Farbe auch mit anderer Deckkraft.
+                selected: b == TextNote.noBackground
+                    ? s.background == b
+                    : s.background != TextNote.noBackground && (s.background & 0xFFFFFF) == (b & 0xFFFFFF),
+                // Farbe wählen setzt ihre übliche Deckkraft (wie bisher).
                 onTap: () => tools.setTextStyle(s.copyWith(background: b)),
               ),
           ],
         ),
+        if (s.background != TextNote.noBackground) ...[
+          _Label(
+            tr(
+              'Deckkraft Hintergrund ${(_alpha(s.background) * 100).round()} %',
+              'Background opacity ${(_alpha(s.background) * 100).round()} %',
+            ),
+          ),
+          Slider(
+            min: 0.2,
+            max: 1,
+            divisions: 16,
+            value: _alpha(s.background).clamp(0.2, 1.0),
+            onChanged: (v) => tools.setTextStyle(s.copyWith(background: _withAlpha(s.background, v))),
+          ),
+        ],
       ],
     );
   }
@@ -1668,6 +1687,7 @@ class _TabKeypad extends StatelessWidget {
                   key(glyph(0xE040), () => session.perform(TabAction.repeatStart), tooltip: tip(TabAction.repeatStart), width: 37),
                   key(glyph(0xE041), () => session.perform(TabAction.repeatEnd), tooltip: tip(TabAction.repeatEnd), width: 37),
                   key(glyph(0xE032), () => session.perform(TabAction.finalBar), tooltip: tip(TabAction.finalBar), width: 37),
+                  key(glyph(0xE031), () => session.perform(TabAction.doubleBar), tooltip: tip(TabAction.doubleBar), width: 37),
                 ],
               ),
             ),
