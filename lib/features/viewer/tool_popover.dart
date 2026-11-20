@@ -1463,22 +1463,7 @@ class _TabSettings extends StatelessWidget {
             ),
             if (session != null) ExcludeFocus(child: _TabKeypad(session: session, tools: tools)),
             _Label(tr('Hintergrund', 'Background')),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final b in textBackgrounds)
-                  _Swatch(
-                    color: b == TabBlock.noBackground ? null : Color(b),
-                    tooltip: b == TabBlock.noBackground ? tr('Ohne Hintergrund', 'No background') : null,
-                    selected: bg == b,
-                    onTap: () {
-                      tools.setTabBackground(b);
-                      if (session != null) session.ink.updateTab(session.id, background: b);
-                    },
-                  ),
-              ],
-            ),
+            _TabBackground(tools: tools, session: session, background: bg),
             if (session != null) ...[
               const SizedBox(height: 12),
               Row(
@@ -1633,6 +1618,79 @@ class _TabKeypad extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+
+/// Hintergrund einer Tabulatur: Farbe (standardmässig ganz deckend) und
+/// Deckkraft. Beides steckt in der gespeicherten Farbe (ARGB).
+class _TabBackground extends StatefulWidget {
+  const _TabBackground({required this.tools, required this.session, required this.background});
+  final ToolController tools;
+  final TabSession? session;
+  final int background;
+
+  /// Farben ganz deckend (die Deckkraft stellt der Regler ein).
+  static const colors = [0xFFFFFFFF, 0xFFFFE066, 0xFF77DD99, 0xFF7FD3F7, 0xFFFF9EC4];
+
+  @override
+  State<_TabBackground> createState() => _TabBackgroundState();
+}
+
+class _TabBackgroundState extends State<_TabBackground> {
+  /// Deckkraft während des Ziehens am Regler (sonst aus der Farbe).
+  double? _dragging;
+
+  void _apply(int argb, {bool toBlock = true}) {
+    widget.tools.setTabBackground(argb);
+    final s = widget.session;
+    if (toBlock && s != null) s.ink.updateTab(s.id, background: argb);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = widget.background;
+    final none = bg == TabBlock.noBackground;
+    final alpha = _dragging ?? (none ? 1.0 : _alpha(bg));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _Swatch(
+              color: null,
+              tooltip: tr('Ohne Hintergrund', 'No background'),
+              selected: none,
+              onTap: () => _apply(TabBlock.noBackground),
+            ),
+            for (final c in _TabBackground.colors)
+              _Swatch(
+                color: Color(c),
+                selected: !none && (bg & 0xFFFFFF) == (c & 0xFFFFFF),
+                // Andere Farbe: die eingestellte Deckkraft bleibt.
+                onTap: () => _apply(_withAlpha(c, none ? 1.0 : _alpha(bg))),
+              ),
+          ],
+        ),
+        if (!none) ...[
+          _Label(tr('Deckkraft ${(alpha * 100).round()} %', 'Opacity ${(alpha * 100).round()} %')),
+          Slider(
+            min: 0.2,
+            max: 1,
+            divisions: 16,
+            value: alpha.clamp(0.2, 1.0),
+            onChanged: (v) => setState(() => _dragging = v),
+            // Erst beim Loslassen speichern: ein einziger Rückgängig-Schritt.
+            onChangeEnd: (v) {
+              setState(() => _dragging = null);
+              _apply(_withAlpha(bg, v));
+            },
+          ),
+        ],
+      ],
     );
   }
 }
