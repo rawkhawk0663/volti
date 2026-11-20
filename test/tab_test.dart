@@ -160,6 +160,65 @@ void main() {
       expect(back.slides, {2});
       expect(bendLabel(4), 'full');
     });
+
+    test('Slide in den Ton und aus dem Ton (Richtung wählbar)', () {
+      final e = TabEditor(const []);
+      e.slideIn(1);
+      expect(e.beats, isEmpty, reason: 'ohne Bundzahl nichts');
+      e.setFret(5);
+      e.slideIn(1);
+      expect(e.beats.single.slideIns, {0: 1});
+      e.slideIn(-1);
+      expect(e.beats.single.slideIns, {0: -1}, reason: 'andere Richtung ersetzt');
+      e.slideIn(-1);
+      expect(e.beats.single.slideIns, isEmpty, reason: 'gleiche Richtung nochmals = weg');
+      // Durchschalten mit einer Taste: von unten → von oben → aus
+      e.cycleSlideIn();
+      expect(e.beats.single.slideIns, {0: 1});
+      e.cycleSlideIn();
+      expect(e.beats.single.slideIns, {0: -1});
+      e.cycleSlideIn();
+      expect(e.beats.single.slideIns, isEmpty);
+      // Heraus: ersetzt den Slide zur nächsten Note und umgekehrt
+      e.toggleSlide();
+      e.slideOut(-1);
+      expect(e.beats.single.slideOuts, {0: -1});
+      expect(e.beats.single.slides, isEmpty);
+      e.toggleSlide();
+      expect(e.beats.single.slides, {0});
+      expect(e.beats.single.slideOuts, isEmpty);
+      // Davor und danach zugleich geht
+      e.slideIn(1);
+      e.slideOut(1);
+      expect(e.beats.single.slideIns, {0: 1});
+      expect(e.beats.single.slideOuts, {0: 1});
+      e.clearNote();
+      expect(e.beats.single.slideIns, isEmpty, reason: 'Bundzahl weg = Slide weg');
+      expect(e.beats.single.slideOuts, isEmpty);
+    });
+
+    test('Slides davor/danach speichern, lesen und zeichnen', () {
+      const b = TabBeat(frets: {1: 5, 3: 7}, slideIns: {1: -1}, slideOuts: {3: 1});
+      final back = TabBeat.fromJson(b.toJson());
+      expect(back, b);
+      expect(back, isNot(const TabBeat(frets: {1: 5, 3: 7}, slideIns: {1: 1}, slideOuts: {3: 1})));
+      // Ungültige Werte werden beim Lesen verworfen
+      final odd = TabBeat.fromJson({
+        'f': {'1': 5},
+        'sIn': {'1': 3, '2': 1},
+      });
+      expect(odd.slideIns, isEmpty);
+      // Platz für die Linie vor der Zahl
+      final plain = layoutTab(
+        block('a', beats: const [TabBeat(frets: {1: 5}), TabBeat(frets: {1: 7})]),
+        const Size(1000, 1400),
+      );
+      final slid = layoutTab(
+        block('a', beats: const [TabBeat(frets: {1: 5}), TabBeat(frets: {1: 7}, slideIns: {1: 1})]),
+        const Size(1000, 1400),
+      );
+      expect(slid.xs[1] - slid.xs[0], greaterThan(plain.xs[1] - plain.xs[0]));
+    });
   });
 
   group('Taktart und Takte', () {
@@ -493,6 +552,15 @@ void main() {
       expect(back[TabAction.bar]!.key, LogicalKeyboardKey.keyT);
       expect(TabKeymap.fromJson('kaputt')[TabAction.rest]!.key, LogicalKeyboardKey.keyP);
       expect(const KeyBinding(LogicalKeyboardKey.keyK, ctrl: true).label, contains('K'));
+      // Slides davor/danach: Umschalt+R und Strg+R, keine Taste doppelt
+      expect(d.actionFor(LogicalKeyboardKey.keyR, ctrl: false, shift: true, alt: false), TabAction.slideIn);
+      expect(d.actionFor(LogicalKeyboardKey.keyR, ctrl: true, shift: false, alt: false), TabAction.slideOut);
+      final all = [for (final a in TabAction.values) d[a]].whereType<KeyBinding>().toList();
+      for (var i = 0; i < all.length; i++) {
+        for (var j = i + 1; j < all.length; j++) {
+          expect(all[i].sameAs(all[j]), isFalse, reason: '${all[i].label} doppelt');
+        }
+      }
     });
   });
 

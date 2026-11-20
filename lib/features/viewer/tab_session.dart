@@ -125,6 +125,8 @@ class TabSession extends ChangeNotifier {
   void setFret(int f) => _edit((e) => e.setFret(f));
   void setValue(int v) => _edit((e) => e.setValue(v));
   void bend(int quarters) => _edit((e) => e.bend(quarters));
+  void slideIn(int dir) => _edit((e) => e.slideIn(dir));
+  void slideOut(int dir) => _edit((e) => e.slideOut(dir));
 
   /// Eine Aktion (Taste oder Knopf). Gibt false zurück bei [TabAction.finish] –
   /// das Beenden erledigt der Aufrufer.
@@ -157,6 +159,10 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.bar());
       case TabAction.slide:
         _edit((e) => e.toggleSlide());
+      case TabAction.slideIn:
+        _edit((e) => e.cycleSlideIn());
+      case TabAction.slideOut:
+        _edit((e) => e.cycleSlideOut());
       case TabAction.bend:
         _edit((e) => e.cycleBend());
       case TabAction.tie:

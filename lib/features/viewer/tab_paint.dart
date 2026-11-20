@@ -110,7 +110,9 @@ double _naturalWidth(TabBeat b) {
   final twoDigits = b.frets.values.any((f) => f >= 10);
   // Platz für den Bending-Pfeil rechts neben der Zahl.
   final bend = b.bends.isNotEmpty ? 1.0 : 0.0;
-  return math.max(w, twoDigits ? 2.3 : 1.6) + bend;
+  // Platz für Slides in den Ton hinein bzw. aus ihm heraus.
+  final slide = (b.slideIns.isNotEmpty ? 0.9 : 0.0) + (b.slideOuts.isNotEmpty ? 0.7 : 0.0);
+  return math.max(w, twoDigits ? 2.3 : 1.6) + bend + slide;
 }
 
 TabLayout layoutTab(TabBlock t, Size page) {
@@ -524,6 +526,25 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
         canvas.drawLine(Offset(x1, y - g * 0.25), Offset(x1 + g * 1.0, y + g * 0.35), line);
       }
     }
+    // Slide in den Ton: kurze Linie vor der Zahl, die von unten steigt bzw.
+    // von oben fällt.
+    for (final e in b.slideIns.entries) {
+      final fret = b.frets[e.key];
+      if (fret == null) continue;
+      final y = l.lineY(e.key);
+      final x2 = cx - _halfNumber(fret, g) - g * 0.15;
+      final dy = g * 0.3 * e.value;
+      canvas.drawLine(Offset(x2 - g * 0.95, y + dy), Offset(x2, y - dy), line);
+    }
+    // Slide aus dem Ton: kurze Linie nach der Zahl, nach oben bzw. unten.
+    for (final e in b.slideOuts.entries) {
+      final fret = b.frets[e.key];
+      if (fret == null) continue;
+      final y = l.lineY(e.key);
+      final x1 = cx + _halfNumber(fret, g) + g * 0.15;
+      final dy = g * 0.3 * e.value;
+      canvas.drawLine(Offset(x1, y + dy), Offset(x1 + g * 0.95, y - dy), line);
+    }
     for (final e in b.bends.entries) {
       final fret = b.frets[e.key];
       if (fret == null) continue;
@@ -726,4 +747,57 @@ class _BarIconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BarIconPainter old) => old.kind != kind || old.color != color;
+}
+
+/// Knopf-Symbol für einen Slide in den Ton hinein ([into]) oder aus ihm
+/// heraus: eine Linie (Saite) mit „5“ und dem kurzen Slide davor bzw. danach.
+/// [dir] +1 = steigend (von unten bzw. nach oben), −1 = fallend.
+class SlideIcon extends StatelessWidget {
+  const SlideIcon({super.key, required this.into, required this.dir, this.color});
+  final bool into;
+  final int dir;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: const Size(30, 22),
+    painter: _SlideIconPainter(into, dir, color ?? DefaultTextStyle.of(context).style.color ?? const Color(0xFF000000)),
+  );
+}
+
+class _SlideIconPainter extends CustomPainter {
+  _SlideIconPainter(this.into, this.dir, this.color);
+  final bool into;
+  final int dir;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cy = size.height / 2;
+    final number = TextPainter(
+      text: TextSpan(
+        text: '5',
+        style: TextStyle(fontFamily: 'VoltiSans', fontSize: 13, fontWeight: FontWeight.w600, color: color, height: 1),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final nx = into ? size.width - number.width - 3 : 3.0;
+    number.paint(canvas, Offset(nx, cy - number.height / 2));
+    final line = Paint()
+      ..color = color
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+    final dy = 5.0 * dir;
+    if (into) {
+      final x2 = nx - 2;
+      canvas.drawLine(Offset(x2 - 11, cy + dy), Offset(x2, cy - dy), line);
+    } else {
+      final x1 = nx + number.width + 2;
+      canvas.drawLine(Offset(x1, cy + dy), Offset(x1 + 11, cy - dy), line);
+    }
+    number.dispose();
+  }
+
+  @override
+  bool shouldRepaint(_SlideIconPainter old) => old.into != into || old.dir != dir || old.color != color;
 }

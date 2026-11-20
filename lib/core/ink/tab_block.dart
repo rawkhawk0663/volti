@@ -50,6 +50,8 @@ class TabBeat {
     this.bar = false,
     this.bends = const {},
     this.slides = const {},
+    this.slideIns = const {},
+    this.slideOuts = const {},
     this.ties = const {},
     this.staccato = false,
     this.accent = false,
@@ -65,6 +67,8 @@ class TabBeat {
       bar = true,
       bends = const {},
       slides = const {},
+      slideIns = const {},
+      slideOuts = const {},
       ties = const {},
       staccato = false,
       accent = false,
@@ -87,6 +91,14 @@ class TabBeat {
   /// Slides: Saiten, deren Ton zur nächsten Bundzahl auf derselben Saite
   /// rutscht (gibt es keine, ein kurzer Slide nach unten).
   final Set<int> slides;
+
+  /// Slide in den Ton hinein: Saite → +1 von unten, −1 von oben
+  /// (eine kurze Linie vor der Bundzahl, ohne Ausgangston).
+  final Map<int, int> slideIns;
+
+  /// Slide aus dem Ton heraus: Saite → +1 nach oben, −1 nach unten
+  /// (eine kurze Linie nach der Bundzahl, ohne Zielton).
+  final Map<int, int> slideOuts;
 
   /// Haltebögen: Saiten, deren Ton zur nächsten Bundzahl auf derselben Saite
   /// gehalten wird (die gehaltene steht in Klammern).
@@ -120,6 +132,8 @@ class TabBeat {
     bool? dotted,
     Map<int, int>? bends,
     Set<int>? slides,
+    Map<int, int>? slideIns,
+    Map<int, int>? slideOuts,
     Set<int>? ties,
     bool? staccato,
     bool? accent,
@@ -140,6 +154,14 @@ class TabBeat {
         for (final st in slides ?? this.slides)
           if (f.containsKey(st)) st,
       },
+      slideIns: {
+        for (final e in (slideIns ?? this.slideIns).entries)
+          if (f.containsKey(e.key)) e.key: e.value,
+      },
+      slideOuts: {
+        for (final e in (slideOuts ?? this.slideOuts).entries)
+          if (f.containsKey(e.key)) e.key: e.value,
+      },
       ties: {
         for (final st in ties ?? this.ties)
           if (f.containsKey(st)) st,
@@ -159,6 +181,8 @@ class TabBeat {
           if (dotted) 'dot': true,
           if (bends.isNotEmpty) 'bend': {for (final e in bends.entries) '${e.key}': e.value},
           if (slides.isNotEmpty) 'slide': (slides.toList()..sort()),
+          if (slideIns.isNotEmpty) 'sIn': {for (final e in slideIns.entries) '${e.key}': e.value},
+          if (slideOuts.isNotEmpty) 'sOut': {for (final e in slideOuts.entries) '${e.key}': e.value},
           if (ties.isNotEmpty) 'tie': (ties.toList()..sort()),
           if (staccato) 'stacc': true,
           if (accent) 'acc': true,
@@ -177,6 +201,11 @@ class TabBeat {
         if (int.tryParse(e.key) case final s? when s >= 0 && s < TabBlock.strings) s: (e.value as num).toInt(),
     };
     final frets = strings(f);
+    // Richtungen: nur +1/−1 und nur, wo eine Bundzahl steht.
+    Map<int, int> directions(Object? m) => {
+      for (final e in strings(m is Map<String, dynamic> ? m : const {}).entries)
+        if (frets.containsKey(e.key) && (e.value == 1 || e.value == -1)) e.key: e.value,
+    };
     return TabBeat(
       frets: frets,
       value: tabValues.contains(v) ? v : 4,
@@ -189,6 +218,8 @@ class TabBeat {
         for (final st in j['slide'] as List<dynamic>? ?? const [])
           if (st is int && frets.containsKey(st)) st,
       },
+      slideIns: directions(j['sIn']),
+      slideOuts: directions(j['sOut']),
       ties: {
         for (final st in j['tie'] as List<dynamic>? ?? const [])
           if (st is int && frets.containsKey(st)) st,
@@ -214,6 +245,8 @@ class TabBeat {
       _sameMap(other.bends, bends) &&
       other.slides.length == slides.length &&
       other.slides.containsAll(slides) &&
+      _sameMap(other.slideIns, slideIns) &&
+      _sameMap(other.slideOuts, slideOuts) &&
       other.ties.length == ties.length &&
       other.ties.containsAll(ties) &&
       other.staccato == staccato &&
@@ -230,6 +263,8 @@ class TabBeat {
     Object.hashAllUnordered(frets.entries.map((e) => e.key * 100 + e.value)),
     Object.hashAllUnordered(bends.entries.map((e) => e.key * 100 + e.value)),
     Object.hashAllUnordered(slides),
+    Object.hashAllUnordered(slideIns.entries.map((e) => e.key * 10 + e.value)),
+    Object.hashAllUnordered(slideOuts.entries.map((e) => e.key * 10 + e.value)),
     Object.hashAllUnordered(ties),
     staccato,
     accent,
@@ -760,14 +795,54 @@ class TabEditor {
     _resetDigits();
   }
 
-  /// Slide zur nächsten Bundzahl auf dieser Saite: ein/aus.
+  /// Slide zur nächsten Bundzahl auf dieser Saite: ein/aus. Ersetzt einen
+  /// Slide aus dem Ton heraus (beides zugleich geht nicht).
   void toggleSlide() {
     final b = current;
     if (b == null || b.bar || !b.frets.containsKey(string)) return;
     final slides = {...b.slides};
     slides.contains(string) ? slides.remove(string) : slides.add(string);
-    beats[beat] = b.copyWith(slides: slides);
+    beats[beat] = b.copyWith(slides: slides, slideOuts: {...b.slideOuts}..remove(string));
     _resetDigits();
+  }
+
+  /// Slide in den Ton hinein setzen: [dir] +1 = von unten, −1 = von oben.
+  /// Dieselbe Richtung nochmals entfernt ihn.
+  void slideIn(int dir) {
+    final b = current;
+    if (b == null || b.bar || !b.frets.containsKey(string)) return;
+    final ins = {...b.slideIns};
+    ins[string] == dir ? ins.remove(string) : ins[string] = dir;
+    beats[beat] = b.copyWith(slideIns: ins);
+    _resetDigits();
+  }
+
+  /// Slide aus dem Ton heraus setzen: [dir] +1 = nach oben, −1 = nach unten.
+  /// Dieselbe Richtung nochmals entfernt ihn; ersetzt einen Slide zur
+  /// nächsten Bundzahl.
+  void slideOut(int dir) {
+    final b = current;
+    if (b == null || b.bar || !b.frets.containsKey(string)) return;
+    final outs = {...b.slideOuts};
+    outs[string] == dir ? outs.remove(string) : outs[string] = dir;
+    beats[beat] = b.copyWith(slideOuts: outs, slides: {...b.slides}..remove(string));
+    _resetDigits();
+  }
+
+  /// Durchschalten (für eine einzige Taste): von unten → von oben → keiner.
+  void cycleSlideIn() => _cycle(current?.slideIns[string], slideIn);
+
+  /// Durchschalten: nach oben → nach unten → keiner.
+  void cycleSlideOut() => _cycle(current?.slideOuts[string], slideOut);
+
+  void _cycle(int? now, void Function(int) set) {
+    if (now == null) {
+      set(1);
+    } else if (now == 1) {
+      set(-1);
+    } else {
+      set(-1); // gleiche Richtung nochmals = weg
+    }
   }
 
   /// Haltebogen zur nächsten Note auf dieser Saite ein/aus. Hat der nächste

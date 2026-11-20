@@ -1666,6 +1666,30 @@ class _TabKeypad extends StatelessWidget {
                   ),
               ],
             ),
+            // Slides, die zu einem einzelnen Ton gehören: davor (in den Ton
+            // hinein) oder danach (heraus), steigend oder fallend.
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  for (final (into, dir, de, en) in [
+                    (true, 1, 'Slide in den Ton, von unten', 'Slide into the note, from below'),
+                    (true, -1, 'Slide in den Ton, von oben', 'Slide into the note, from above'),
+                    (false, 1, 'Slide aus dem Ton, nach oben', 'Slide out of the note, upwards'),
+                    (false, -1, 'Slide aus dem Ton, nach unten', 'Slide out of the note, downwards'),
+                  ])
+                    key(
+                      SlideIcon(into: into, dir: dir),
+                      () => into ? session.slideIn(dir) : session.slideOut(dir),
+                      selected: (into ? cur?.slideIns : cur?.slideOuts)?[session.string] == dir,
+                      tooltip: '${tr(de, en)} (${tools.tabKeys[into ? TabAction.slideIn : TabAction.slideOut]?.label ?? ''})',
+                      width: 46,
+                    ),
+                ],
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Wrap(
