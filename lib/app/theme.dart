@@ -175,6 +175,16 @@ ThemeData buildVoltiTheme(Brightness b) {
       ),
     ),
     dividerTheme: DividerThemeData(color: c.line, space: 1, thickness: 1),
+    // Farbige Knöpfe: weisse Schrift und Symbole auf kräftigem Violett,
+    // auch im Dunkelmodus (Wunsch des Besitzers).
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: c.brand.last,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: c.cardHigh,
+        disabledForegroundColor: c.muted,
+      ),
+    ),
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: c.card,
       indicatorColor: scheme.primaryContainer,

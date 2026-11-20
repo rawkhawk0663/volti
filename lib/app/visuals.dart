@@ -30,8 +30,8 @@ class GradientButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = context.volti;
     final scheme = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final onColor = secondary ? scheme.onSurface : (dark ? const Color(0xFF0D0E11) : Colors.white);
+    // Auf dem Verlauf immer weiss (Wunsch des Besitzers), auch im Dunkelmodus.
+    final onColor = secondary ? scheme.onSurface : Colors.white;
     final enabled = onPressed != null;
     return Opacity(
       opacity: enabled ? 1 : 0.5,
@@ -112,7 +112,6 @@ class GradientIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final v = context.volti;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     return Tooltip(
       message: tooltip,
       child: Opacity(
@@ -127,7 +126,7 @@ class GradientIconButton extends StatelessWidget {
               child: SizedBox(
                 width: 40,
                 height: 40,
-                child: Icon(icon, size: 20, color: dark ? const Color(0xFF0D0E11) : Colors.white),
+                child: Icon(icon, size: 20, color: Colors.white),
               ),
             ),
           ),

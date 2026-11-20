@@ -6,6 +6,7 @@ import 'tool_controller.dart';
 import 'freeze.dart';
 import 'tool_popover.dart';
 import '../../app/l10n.dart';
+import '../../app/visuals.dart';
 
 /// Werkzeuge beim Bearbeiten: eine feste, schmale Leiste am Seitenrand und
 /// daneben das Einstellungsfenster des aktiven Werkzeugs.
@@ -168,9 +169,10 @@ class _ToolOverlayState extends State<ToolOverlay> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Tooltip(
-                message: tr('Fertig (Esc)', 'Done (Esc)'),
-                child: IconButton.filled(onPressed: tools.finishEditing, icon: const Icon(Icons.check)),
+              GradientIconButton(
+                icon: Icons.check,
+                tooltip: tr('Fertig (Esc)', 'Done (Esc)'),
+                onPressed: tools.finishEditing,
               ),
               const _Sep(),
               tool(ToolMode.pen, Icons.edit, tr('Stift (P)', 'Pen (P)'), dot: Color(tools.pen.color | 0xFF000000)),
