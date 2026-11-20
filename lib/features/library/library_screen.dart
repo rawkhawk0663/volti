@@ -43,7 +43,7 @@ class LibraryScreen extends StatefulWidget {
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends State<LibraryScreen> {
+class _LibraryScreenState extends State<LibraryScreen> with LibraryActions<LibraryScreen> {
   int _tab = 0;
 
   /// Nochmals auf den gewählten Punkt tippen = zurück zur Übersicht.
@@ -69,6 +69,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   LibraryController get lib => widget.library;
+
+  @override
+  LibraryController get library => widget.library;
+
+  @override
+  SyncController get syncController => widget.sync;
 
   @override
   void initState() {
@@ -179,6 +185,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         for (final (icon, sel, label) in destinations)
                           NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: Text(label)),
                       ],
+                      // Einstellungen ganz unten, von überall erreichbar.
+                      trailingAtBottom: true,
+                      trailing: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _RailButton(
+                          icon: Icons.settings_outlined,
+                          label: tr('Einstellungen', 'Settings'),
+                          onTap: openSettings,
+                        ),
+                      ),
                     ),
                     const VerticalDivider(width: 1),
                     Expanded(child: body),
@@ -191,12 +207,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
         return _dropZone(
           Scaffold(
             body: SafeArea(child: body),
+            // Letzter Punkt: Einstellungen (öffnet das Fenster, kein eigener Bereich).
             bottomNavigationBar: NavigationBar(
               selectedIndex: _tab,
-              onDestinationSelected: _select,
+              onDestinationSelected: (i) => i == destinations.length ? openSettings() : _select(i),
               destinations: [
                 for (final (icon, sel, label) in destinations)
                   NavigationDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: label),
+                NavigationDestination(
+                  icon: const Icon(Icons.settings_outlined),
+                  label: tr('Einstellungen', 'Settings'),
+                ),
               ],
             ),
           ),
@@ -245,6 +266,47 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Knopf unten in der Seitenleiste, gestaltet wie ihre Punkte (Symbol mit
+/// Beschriftung darunter), aber ohne Auswahl: Er öffnet ein Fenster.
+class _RailButton extends StatelessWidget {
+  const _RailButton({required this.icon, required this.label, required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    return Semantics(
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          width: 72,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelSmall?.copyWith(color: color),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -37,9 +37,9 @@ class Updater {
 
   static const repo = 'rawkhawk0663/volti';
 
-  /// Laufende Nummer aus „v0.1.42“ bzw. „v1.0.60“ (null = unbekannt, z. B.
-  /// Testversion). Sie zählt bei jedem Build weiter, auch über den Wechsel
-  /// von 0.1 auf 1.0 hinweg.
+  /// Letzte Zahl aus „v0.1.42“ bzw. „v0.2.3“ (null = unbekannt, z. B.
+  /// Testversion). Seit v0.2.0 beginnt sie mit jedem neuen vorderen Teil
+  /// wieder bei 0; verglichen wird deshalb immer mit [newerThan].
   static int? numberOf(String tag) => partsOf(tag)?.$3;
 
   /// Alle drei Teile einer Version („v1.0.60“ → 1, 0, 60).
@@ -60,6 +60,9 @@ class Updater {
   }
 
   static int get currentNumber => numberOf(voltiVersion) ?? 0;
+
+  /// Lokal gebaut („Testversion“, ohne Versionsnummer).
+  static bool get isTestBuild => partsOf(voltiVersion) == null;
 
   /// Neueste Version (null = keine gefunden). Wirft bei Netzwerkfehlern.
   static Future<UpdateInfo?> latest() async {
@@ -166,7 +169,7 @@ class Updater {
 
     final target = File(Platform.resolvedExecutable).parent.path;
     final log = await _logFile();
-    final lines = <String>['Update ${u.tag}', 'Ziel ${u.number}', 'Heruntergeladen und ausgepackt'];
+    final lines = <String>['Update ${u.tag}', 'Ziel ${u.number}', 'Zielversion ${u.tag}', 'Heruntergeladen und ausgepackt'];
     Future<void> writeLog() => log.writeAsString('${lines.join('\r\n')}\r\n');
     await writeLog();
 
@@ -320,8 +323,14 @@ class Updater {
       if (!await f.exists()) return null;
       final text = await f.readAsString();
       await f.delete();
+      // Läuft jetzt mindestens die Zielversion? Ältere Protokolle kennen nur
+      // die letzte Zahl („Ziel 101“).
+      final goalTag = RegExp(r'Zielversion (\S+)').firstMatch(text)?.group(1);
       final goal = int.tryParse(RegExp(r'Ziel (\d+)').firstMatch(text)?.group(1) ?? '');
-      if (text.contains('FERTIG') && (goal == null || currentNumber >= goal)) {
+      final arrived = goalTag != null
+          ? !newerThan(goalTag, voltiVersion)
+          : goal == null || currentNumber >= goal;
+      if (text.contains('FERTIG') && arrived) {
         return (
           ok: true,
           message: tr(

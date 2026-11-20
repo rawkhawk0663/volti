@@ -849,7 +849,7 @@ class _UpdateSectionState extends State<UpdateSection> {
 /// Beim Start einmal leise nachschauen; gibt es eine neue Version, erscheint
 /// unten ein Hinweis mit „Installieren“. Ohne Verbindung passiert nichts.
 Future<void> checkForUpdateQuietly(BuildContext context) async {
-  if (Updater.currentNumber == 0) return; // Testversion
+  if (Updater.isTestBuild) return;
   UpdateInfo? u;
   try {
     u = await Updater.latest();

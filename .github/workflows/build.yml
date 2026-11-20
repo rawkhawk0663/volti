@@ -10,9 +10,13 @@ on:
 
 env:
   FLUTTER_VERSION: "3.47.9"
-  # Vorderer Teil der Versionsnummer. Die letzte Zahl ist die laufende Nummer
-  # des Builds (zählt immer weiter, darauf verlässt sich die Update-Suche).
-  VERSION_PREFIX: "0.1"
+  # Versionsnummer: VERSION_PREFIX + laufende Zahl. Die laufende Zahl ist die
+  # Build-Nummer minus VERSION_START (die Build-Nummer, mit der dieser vordere
+  # Teil begann), also v0.2.0, v0.2.1 … Für einen neuen vorderen Teil beide
+  # Werte umstellen (VERSION_START = Nummer des nächsten Builds). Die Update-
+  # Suche vergleicht alle drei Teile; Android zählt mit der Build-Nummer.
+  VERSION_PREFIX: "0.2"
+  VERSION_START: "101"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -47,6 +51,9 @@ jobs:
           cache: true
       # Schlüssel für Dropbox und Google Drive (Geheimnisse im GitHub-Projekt).
       # Fehlen sie, baut Volti trotzdem – nur ohne diese Sync-Möglichkeit.
+      - name: Versionsnummer
+        shell: bash
+        run: echo "VOLTI_VER=${VERSION_PREFIX}.$(( ${{ github.run_number }} - VERSION_START ))" >> "$GITHUB_ENV"
       - name: Windows-App bauen
         env:
           DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
@@ -55,9 +62,9 @@ jobs:
         shell: bash
         run: >-
           flutter build windows --release
-          --build-name=${{ env.VERSION_PREFIX }}.${{ github.run_number }}
+          --build-name=${{ env.VOLTI_VER }}
           --build-number=${{ github.run_number }}
-          --dart-define=VOLTI_VERSION=v${{ env.VERSION_PREFIX }}.${{ github.run_number }}
+          --dart-define=VOLTI_VERSION=v${{ env.VOLTI_VER }}
           --dart-define=DROPBOX_APP_KEY="$DROPBOX_APP_KEY"
           --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
           --dart-define=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET"
@@ -82,7 +89,7 @@ jobs:
           } else {
             Copy-Item $isl $out
           }
-          & $iscc "/DAppVersion=${{ env.VERSION_PREFIX }}.${{ github.run_number }}" windows\installer\volti.iss
+          & $iscc "/DAppVersion=${{ env.VOLTI_VER }}" windows\installer\volti.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item build\installer\Volti-Setup.exe Volti-Setup.exe
       # Weiterreichen an den letzten Schritt über den Cache statt über
@@ -115,6 +122,9 @@ jobs:
       # App gehen, auch mit Obtainium (Geheimnisse VOLTI_KEYSTORE und
       # VOLTI_KEYSTORE_PASSWORD). Bricht beim Herunterladen von Android-Teilen
       # die Verbindung ab, einmal nochmals versuchen.
+      - name: Versionsnummer
+        shell: bash
+        run: echo "VOLTI_VER=${VERSION_PREFIX}.$(( ${{ github.run_number }} - VERSION_START ))" >> "$GITHUB_ENV"
       - name: Android-App bauen
         env:
           VOLTI_KEYSTORE: ${{ secrets.VOLTI_KEYSTORE }}
@@ -124,7 +134,7 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           if [ -z "$VOLTI_KEYSTORE" ]; then echo "::warning::Kein Signier-Schlüssel hinterlegt – Test-Schlüssel wird verwendet."; fi
-          ARGS="--release --build-name=${{ env.VERSION_PREFIX }}.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v${{ env.VERSION_PREFIX }}.${{ github.run_number }} --dart-define=DROPBOX_APP_KEY=$DROPBOX_APP_KEY --dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID --dart-define=GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET"
+          ARGS="--release --build-name=${{ env.VOLTI_VER }} --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v${{ env.VOLTI_VER }} --dart-define=DROPBOX_APP_KEY=$DROPBOX_APP_KEY --dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID --dart-define=GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET"
           flutter build apk $ARGS || (echo "Zweiter Versuch …" && sleep 30 && flutter build apk $ARGS)
       - run: mkdir -p dist && cp build/app/outputs/flutter-apk/app-release.apk dist/Volti-Android.apk
       - uses: actions/cache/save@v4
@@ -156,12 +166,15 @@ jobs:
           key: dist-android-${{ github.run_id }}-${{ github.run_attempt }}
           enableCrossOsArchive: true
       - run: ls -la dist
+      - name: Versionsnummer
+        shell: bash
+        run: echo "VOLTI_VER=${VERSION_PREFIX}.$(( ${{ github.run_number }} - VERSION_START ))" >> "$GITHUB_ENV"
       - name: Release erstellen
         env:
           GH_TOKEN: ${{ github.token }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          TAG="v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
+          TAG="v${{ env.VOLTI_VER }}"
           MSG=$(printf '%s' "$COMMIT_MSG" | head -1)
           cat > notes.md <<EOT
           **Neu / New:** ${MSG:-Verbesserungen}
@@ -198,7 +211,7 @@ jobs:
             echo "Kein RELEASES_TOKEN hinterlegt – übersprungen."
             exit 0
           fi
-          TAG="v${{ env.VERSION_PREFIX }}.${{ github.run_number }}"
+          TAG="v${{ env.VOLTI_VER }}"
           { echo "**Volti ist umgezogen / Volti has moved:** https://github.com/rawkhawk0663/volti/releases"; echo; cat notes.md; } > notes-old.md
           gh release create "$TAG" dist/* \
             --repo "rawkhawk0663/volti-releases" \

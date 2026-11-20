@@ -18,6 +18,10 @@ void main() {
     expect(Updater.newerThan('v1.0.60', 'v1.0.60'), isFalse);
     expect(Updater.newerThan('v1.1.61', 'v1.0.70'), isTrue);
     expect(Updater.numberOf('v1.0.60'), 60);
+    // Ab v0.2.0 beginnt die letzte Zahl neu: v0.2.0 ist trotzdem neuer.
+    expect(Updater.newerThan('v0.2.0', 'v0.1.100'), isTrue);
+    expect(Updater.newerThan('v0.2.1', 'v0.2.0'), isTrue);
+    expect(Updater.newerThan('v0.1.100', 'v0.2.0'), isFalse);
   });
 
   group('Dateien austauschen', () {

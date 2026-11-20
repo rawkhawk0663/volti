@@ -22,28 +22,28 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
   LibraryController get library;
   SyncController get syncController;
 
-  /// Sync-Knopf und Zahnrad für die Kopfzeile.
+  /// Sync-Knopf und Fensterknöpfe für die Kopfzeile. Die Einstellungen
+  /// stehen in der Seitenleiste (ganz unten), nicht hier.
   List<Widget> headerActions() => [
     SyncButton(sync: syncController, onSetup: setupSync),
-    IconButton(
-      tooltip: tr('Einstellungen', 'Settings'),
-      icon: const Icon(Icons.settings_outlined),
-      onPressed: () => showSettingsDialog(
-        context,
-        sync: syncController,
-        onSetupSync: setupSync,
-        onStopSync: stopSync,
-        dataFolder: library.root,
-        onOpenDataFolder: Platform.isWindows || Platform.isLinux ? library.revealDataFolder : null,
-        onCreateBackup: createBackup,
-        onRestoreBackup: restoreBackup,
-        autoBackup: library.autoBackup,
-        library: library,
-      ),
-    ),
     // Schliessen, Minimieren, Maximieren (statt der Windows-Titelleiste).
     const WindowButtons(),
   ];
+
+  /// Einstellungsfenster mit allem, was nur die Bibliothek kann (Sync,
+  /// Sicherung, Datenordner).
+  void openSettings() => showSettingsDialog(
+    context,
+    sync: syncController,
+    onSetupSync: setupSync,
+    onStopSync: stopSync,
+    dataFolder: library.root,
+    onOpenDataFolder: Platform.isWindows || Platform.isLinux ? library.revealDataFolder : null,
+    onCreateBackup: createBackup,
+    onRestoreBackup: restoreBackup,
+    autoBackup: library.autoBackup,
+    library: library,
+  );
 
   /// Am Computer (Datei-Fenster zum Speichern, Ordner als Sync-Ziel).
   bool get isDesktop => !Platform.isAndroid && !Platform.isIOS;
