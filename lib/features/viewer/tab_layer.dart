@@ -270,6 +270,16 @@ class _TabLayerState extends State<TabLayer> {
         s.extend(plain == TabAction.left ? -1 : 1);
         return KeyEventResult.handled;
       }
+      // Umschalt + ↑ / ↓: Noten übereinander markieren.
+      if (plain == TabAction.up || plain == TabAction.down) {
+        s.extendString(plain == TabAction.up ? -1 : 1);
+        return KeyEventResult.handled;
+      }
+    }
+    // Rücktaste löscht wie „Bundzahl löschen“ (falls nicht anders belegt).
+    if (action == null && k == LogicalKeyboardKey.backspace && !ctrl && !alt) {
+      s.perform(TabAction.clearNote);
+      return KeyEventResult.handled;
     }
     if (action != null) {
       if (!s.perform(action)) _finish();
@@ -393,6 +403,7 @@ class _TabLayerState extends State<TabLayer> {
             color: scheme.primary,
             offset: _moveDelta,
             selection: s.selection,
+            strings: s.stringSelection,
           ),
         ),
       ),
@@ -570,6 +581,7 @@ class _CursorPainter extends CustomPainter {
     required this.color,
     this.offset = Offset.zero,
     this.selection,
+    this.strings,
   });
   final TabLayout layout;
   final int beat, string;
@@ -579,6 +591,9 @@ class _CursorPainter extends CustomPainter {
   /// Markierte Einträge (beide inklusive).
   final (int, int)? selection;
 
+  /// Markierte Saiten (beide inklusive), null = alle.
+  final (int, int)? strings;
+
   @override
   void paint(Canvas canvas, Size size) {
     final l = layout;
@@ -587,7 +602,11 @@ class _CursorPainter extends CustomPainter {
     if (sel != null && sel.$2 < l.xs.length) {
       final left = l.xs[sel.$1] - l.slotWidths[sel.$1] / 2;
       final right = l.xs[sel.$2] + l.slotWidths[sel.$2] / 2;
-      final r = Rect.fromLTRB(left, l.top - g * 0.7, right, l.stemBottom).shift(offset);
+      final ss = strings;
+      final r = (ss == null
+              ? Rect.fromLTRB(left, l.top - g * 0.7, right, l.stemBottom)
+              : Rect.fromLTRB(left, l.lineY(ss.$1) - g * 0.55, right, l.lineY(ss.$2) + g * 0.55))
+          .shift(offset);
       canvas.drawRRect(
         RRect.fromRectAndRadius(r, Radius.circular(g * 0.3)),
         Paint()..color = color.withValues(alpha: 0.22),
@@ -620,7 +639,8 @@ class _CursorPainter extends CustomPainter {
       old.layout != layout ||
       old.offset != offset ||
       old.color != color ||
-      old.selection != selection;
+      old.selection != selection ||
+      old.strings != strings;
 }
 
 /// Vorschau beim Aufziehen einer neuen Tabulatur.

@@ -297,6 +297,46 @@ void main() {
     });
   });
 
+  group('Einzelne Noten löschen, Noten übereinander markieren', () {
+    const chord = TabBeat(frets: {0: 0, 1: 1, 2: 0, 3: 2});
+    test('Ohne Markierung verschwindet nur die eine Note, der Schlag bleibt', () {
+      final e = TabEditor(const [chord, TabBeat(frets: {0: 3})]);
+      e.string = 1;
+      e.deleteSelection() ? null : e.clearNote();
+      expect(e.beats.length, 2);
+      expect(e.beats[0].frets, {0: 0, 2: 0, 3: 2});
+    });
+
+    test('Umschalt+↓ markiert Noten übereinander, Löschen trifft nur diese', () {
+      final e = TabEditor(const [chord, chord]);
+      e.string = 1;
+      e.extendString(1);
+      e.extendString(1); // Saiten 1–3
+      expect(e.stringSelection, (1, 3));
+      expect(e.selection, (0, 0));
+      expect(e.deleteSelection(), isTrue);
+      expect(e.beats.length, 2, reason: 'Schläge bleiben');
+      expect(e.beats[0].frets, {0: 0});
+      expect(e.beats[1].frets, chord.frets, reason: 'nur der markierte Schlag');
+      // Rechteck über zwei Schläge
+      e.beat = 0;
+      e.string = 0;
+      e.extendString(1);
+      e.extend(1);
+      expect(e.selection, (0, 1));
+      e.deleteSelection();
+      expect(e.beats[0].isRest, isTrue);
+      expect(e.beats[1].frets, {2: 0, 3: 2});
+    });
+
+    test('Alte gespeicherte Belegung wird umgestellt', () {
+      const old = '{"clearNote":{"k":4294967304},"deleteBeat":{"k":4294967423}}';
+      final m = TabKeymap.fromJson(old);
+      expect(m[TabAction.clearNote]!.key, LogicalKeyboardKey.delete);
+      expect(m[TabAction.deleteBeat]!.ctrl, isTrue);
+    });
+  });
+
   group('Verschobene Taktstriche', () {
     const page = Size(1000, 1400);
     final beats = const [

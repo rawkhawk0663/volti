@@ -74,11 +74,18 @@ class TabSession extends ChangeNotifier {
   bool get hasSelection => selection != null;
 
   void extend(int by) => _move((e) => e.extend(by));
+  void extendString(int by) => _move((e) => e.extendString(by));
+
+  /// Markierte Saiten (beide inklusive), null = alle.
+  (int, int)? get stringSelection => _editor.stringSelection;
   void selectRange(int from, int to) => _move((e) => e.selectRange(from, to));
   void selectAll() => _move((e) => e.selectAll());
   void clearSelection() {
     markMode = false;
-    _move((e) => e.anchor = null);
+    _move((e) {
+      e.anchor = null;
+      e.stringAnchor = null;
+    });
   }
 
   /// Markieren über das Zahlenfeld: Solange an, erweitern ← und → die
@@ -87,7 +94,10 @@ class TabSession extends ChangeNotifier {
 
   void toggleMark() {
     markMode = !markMode;
-    _move((e) => e.anchor = markMode && e.beats.isNotEmpty ? e.beat.clamp(0, e.beats.length - 1) : null);
+    _move((e) {
+      e.anchor = markMode && e.beats.isNotEmpty ? e.beat.clamp(0, e.beats.length - 1) : null;
+      e.stringAnchor = null;
+    });
   }
 
   /// Kopieren: die markierten Einträge (ohne Markierung der unter dem Cursor).
@@ -130,9 +140,9 @@ class TabSession extends ChangeNotifier {
       case TabAction.right:
         markMode ? extend(1) : _move((e) => e.move(1));
       case TabAction.up:
-        _move((e) => e.moveString(-1));
+        markMode ? extendString(-1) : _move((e) => e.moveString(-1));
       case TabAction.down:
-        _move((e) => e.moveString(1));
+        markMode ? extendString(1) : _move((e) => e.moveString(1));
       case TabAction.shorter:
         _edit((e) => e.shorter());
       case TabAction.longer:

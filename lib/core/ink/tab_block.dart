@@ -442,6 +442,32 @@ class TabEditor {
   /// Markierung: Anfang (der Cursor ist das andere Ende). null = keine.
   int? anchor;
 
+  /// Markierte Saiten: Anfang (die Saite des Cursors ist das andere Ende).
+  /// null = alle Saiten der markierten Schläge.
+  int? stringAnchor;
+
+  /// Markierte Saiten (beide inklusive), null = alle.
+  (int, int)? get stringSelection {
+    final a = stringAnchor;
+    if (a == null) return null;
+    return a <= string ? (a, string) : (string, a);
+  }
+
+  /// Nur einzelne Saiten markiert (nicht ganze Schläge)?
+  bool get _partialStrings {
+    final s = stringSelection;
+    return s != null && !(s.$1 == 0 && s.$2 == TabBlock.strings - 1);
+  }
+
+  /// Markierung nach oben/unten erweitern (mehrere Noten übereinander).
+  void extendString(int by) {
+    if (beats.isEmpty) return;
+    anchor ??= beat.clamp(0, beats.length - 1);
+    stringAnchor ??= string;
+    string = (string + by).clamp(0, TabBlock.strings - 1);
+    _resetDigits();
+  }
+
   /// Markierte Einträge als Bereich [from, to] (beide inklusive), oder null.
   (int, int)? get selection {
     final a = anchor;
@@ -462,30 +488,51 @@ class TabEditor {
   /// Von [from] bis [to] markieren (z. B. mit dem Stift gezogen).
   void selectRange(int from, int to) {
     if (beats.isEmpty) return;
+    stringAnchor = null;
     anchor = from.clamp(0, beats.length - 1);
     beat = to.clamp(0, beats.length - 1);
   }
 
   void selectAll() {
     if (beats.isEmpty) return;
+    stringAnchor = null;
     anchor = 0;
     beat = beats.length - 1;
   }
 
   /// Markierte Einträge (ohne Markierung: der Eintrag unter dem Cursor).
+  /// Sind nur einzelne Saiten markiert, nur deren Bundzahlen.
   List<TabBeat> copySelection() {
     final sel = selection;
-    if (sel != null) return beats.sublist(sel.$1, sel.$2 + 1);
-    return beat < beats.length ? [beats[beat]] : const [];
+    if (sel == null) return beat < beats.length ? [beats[beat]] : const [];
+    final part = beats.sublist(sel.$1, sel.$2 + 1);
+    final ss = stringSelection;
+    if (!_partialStrings || ss == null) return part;
+    return [
+      for (final b in part)
+        b.bar ? b : b.copyWith(frets: {for (final e in b.frets.entries) if (e.key >= ss.$1 && e.key <= ss.$2) e.key: e.value}),
+    ];
   }
 
-  /// Markierte Einträge entfernen. Gibt false zurück, wenn nichts markiert war.
+  /// Markierung löschen. Ganze Schläge werden entfernt; sind nur einzelne
+  /// Saiten markiert, verschwinden nur deren Bundzahlen (die Schläge und der
+  /// Rhythmus bleiben). Gibt false zurück, wenn nichts markiert war.
   bool deleteSelection() {
     final sel = selection;
     if (sel == null) return false;
-    beats.removeRange(sel.$1, sel.$2 + 1);
-    beat = sel.$1.clamp(0, beats.length);
+    final ss = stringSelection;
+    if (_partialStrings && ss != null) {
+      for (var i = sel.$1; i <= sel.$2; i++) {
+        final b = beats[i];
+        if (b.bar) continue;
+        beats[i] = b.copyWith(frets: {for (final e in b.frets.entries) if (e.key < ss.$1 || e.key > ss.$2) e.key: e.value});
+      }
+    } else {
+      beats.removeRange(sel.$1, sel.$2 + 1);
+      beat = sel.$1.clamp(0, beats.length);
+    }
     anchor = null;
+    stringAnchor = null;
     _resetDigits();
     return true;
   }
@@ -494,7 +541,14 @@ class TabEditor {
   /// danach hinter dem Eingefügten.
   void paste(List<TabBeat> clip) {
     if (clip.isEmpty) return;
-    deleteSelection();
+    if (_partialStrings) {
+      // Nur Noten markiert: nichts ersetzen, vor dem markierten Bereich einfügen.
+      beat = selection?.$1 ?? beat;
+      anchor = null;
+      stringAnchor = null;
+    } else {
+      deleteSelection();
+    }
     final at = beat.clamp(0, beats.length);
     beats.insertAll(at, clip);
     beat = at + clip.length;
@@ -812,12 +866,15 @@ class TabEditor {
   /// Nach links/rechts (ein Platz hinter dem letzten Eintrag ist erlaubt).
   void move(int by) {
     anchor = null;
+    stringAnchor = null;
     beat = (beat + by).clamp(0, beats.length);
     _resetDigits();
   }
 
   /// Nach oben/unten (andere Saite).
   void moveString(int by) {
+    anchor = null;
+    stringAnchor = null;
     string = (string + by).clamp(0, TabBlock.strings - 1);
     _resetDigits();
   }

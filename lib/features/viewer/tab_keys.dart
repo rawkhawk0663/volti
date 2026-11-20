@@ -61,8 +61,11 @@ enum TabAction {
     repeatStart => tr('Wiederholung Anfang (vor dem Takt)', 'Repeat start (before the bar)'),
     repeatEnd => tr('Wiederholung Ende (nach dem Takt)', 'Repeat end (after the bar)'),
     finalBar => tr('Schlussstrich (nach dem Takt)', 'Final bar line (after the bar)'),
-    clearNote => tr('Bundzahl löschen', 'Delete fret number'),
-    deleteBeat => tr('Ganzen Schlag löschen', 'Delete whole beat'),
+    clearNote => tr(
+      'Bundzahl löschen (nur diese Note; markierte Noten alle)',
+      'Delete fret number (only this note; all selected notes)',
+    ),
+    deleteBeat => tr('Ganzen Schlag entfernen (alle Saiten, Rhythmus rückt nach)', 'Remove whole beat (all strings)'),
     insertBeat => tr('Schlag einfügen', 'Insert beat'),
     insertMeasure => tr(
       'Leeren Takt einfügen (vor dem Takt mit dem Cursor)',
@@ -164,8 +167,8 @@ class TabKeymap {
     TabAction.repeatStart: const KeyBinding(LogicalKeyboardKey.keyW),
     TabAction.repeatEnd: const KeyBinding(LogicalKeyboardKey.keyE),
     TabAction.finalBar: const KeyBinding(LogicalKeyboardKey.keyF),
-    TabAction.clearNote: const KeyBinding(LogicalKeyboardKey.backspace),
-    TabAction.deleteBeat: const KeyBinding(LogicalKeyboardKey.delete),
+    TabAction.clearNote: const KeyBinding(LogicalKeyboardKey.delete),
+    TabAction.deleteBeat: const KeyBinding(LogicalKeyboardKey.delete, ctrl: true),
     TabAction.insertBeat: const KeyBinding(LogicalKeyboardKey.keyN),
     TabAction.insertMeasure: const KeyBinding(LogicalKeyboardKey.keyN, shift: true),
     TabAction.deleteMeasure: const KeyBinding(LogicalKeyboardKey.delete, shift: true),
@@ -201,7 +204,7 @@ class TabKeymap {
     return (map: TabKeymap(next), swapped: swapped);
   }
 
-  String toJson() => jsonEncode({for (final e in _b.entries) e.key.name: e.value.toJson()});
+  String toJson() => jsonEncode({'_v': 2, for (final e in _b.entries) e.key.name: e.value.toJson()});
 
   /// Gespeicherte Belegung; was fehlt, kommt von den Standardtasten.
   static TabKeymap fromJson(String? s) {
@@ -212,6 +215,14 @@ class TabKeymap {
       for (final a in TabAction.values) {
         final k = KeyBinding.fromJson(j[a.name]);
         if (k != null) map[a] = k;
+      }
+      // Früher: Rücktaste = Bundzahl, Entf = ganzer Schlag. Neu löscht Entf
+      // nur die Note, Strg+Entf den Schlag (Wunsch des Besitzers).
+      if (j['_v'] == null &&
+          map[TabAction.clearNote]?.sameAs(const KeyBinding(LogicalKeyboardKey.backspace)) == true &&
+          map[TabAction.deleteBeat]?.sameAs(const KeyBinding(LogicalKeyboardKey.delete)) == true) {
+        map[TabAction.clearNote] = defaults[TabAction.clearNote]!;
+        map[TabAction.deleteBeat] = defaults[TabAction.deleteBeat]!;
       }
       return TabKeymap(map);
     } catch (_) {
