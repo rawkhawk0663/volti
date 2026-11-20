@@ -396,7 +396,30 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         ),
         style: muted,
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 12),
+      Text(tr('Bund-Knöpfe (0–24) im Tab-Fenster', 'Fret buttons (0–24) in the tab window'), style: theme.textTheme.bodyMedium),
+      const SizedBox(height: 6),
+      AdaptiveChoice<TabKeypad>(
+        options: [
+          ChoiceOption(TabKeypad.auto, tr('Nur ohne Tastatur', 'Only without keyboard')),
+          ChoiceOption(TabKeypad.always, tr('Immer', 'Always')),
+          ChoiceOption(TabKeypad.never, tr('Nie', 'Never')),
+        ],
+        selected: tools.tabKeypad,
+        onChanged: tools.setTabKeypad,
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          tr(
+            '„Nur ohne Tastatur“: Die Knöpfe erscheinen, wenn das Surface im Tablet-Modus ist (Tastatur abgenommen oder umgeklappt).',
+            '“Only without keyboard”: the buttons appear when the Surface is in tablet mode (keyboard detached or folded back).',
+          ),
+          style: muted,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Text(tr('Tasten', 'Keys'), style: theme.textTheme.titleSmall),
       for (final a in TabAction.values)
         ListTile(
           contentPadding: EdgeInsets.zero,

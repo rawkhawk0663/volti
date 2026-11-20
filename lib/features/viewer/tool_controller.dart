@@ -196,6 +196,17 @@ class ToolController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Bund-Knöpfe im Tab-Fenster: automatisch (nur im Tablet-Modus), immer, nie.
+  TabKeypad get tabKeypad => TabKeypad.values.firstWhere(
+    (k) => k.name == settings.text('tabKeypad'),
+    orElse: () => TabKeypad.auto,
+  );
+
+  Future<void> setTabKeypad(TabKeypad k) async {
+    await settings.setText('tabKeypad', k.name);
+    notifyListeners();
+  }
+
   /// Taktart für neue Tabulaturen („4/4“; leer = frei).
   String? get tabMeter {
     final v = settings.text('tabMeter');

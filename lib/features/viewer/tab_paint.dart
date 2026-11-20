@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/painting.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../core/ink/tab_block.dart';
 
@@ -282,7 +282,9 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     final above = t.beats.any((b) => b.bends.isNotEmpty)
         ? 2.4
         : (t.beats.any((b) => b.staccato || b.accent) ? 2.0 : 1.0);
-    final r = Rect.fromLTRB(l.origin.dx - g * 0.6, l.top - g * above, lineEnd + g * 0.6, l.stemBottom + g * 0.8);
+    // Triolen-Zahlen stehen unter den Balken.
+    final below = t.beats.any((b) => b.triplet) ? 2.0 : 0.8;
+    final r = Rect.fromLTRB(l.origin.dx - g * 0.6, l.top - g * above, lineEnd + g * 0.6, l.stemBottom + g * below);
     canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(g * 0.5)), Paint()..color = bg);
   }
   // Hinter Zahlen und „TAB“: der Hintergrund bzw. Weiss (die Seite).
@@ -371,6 +373,7 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   }
 
   _paintTechniques(canvas, t, l, color, thin.strokeWidth);
+  _paintTriplets(canvas, t, l, color, stem.strokeWidth);
 
   // Balken (mehrere zusammen) und Notenfahnen (einzeln)
   final beam = Paint()..color = color;
@@ -566,16 +569,25 @@ double _barRight(BarKind k, double g) => switch (k) {
 };
 
 /// Taktstrich zeichnen: normal, Wiederholung Anfang/Ende/beides, Schlussstrich.
-void _paintBar(Canvas canvas, BarKind kind, double cx, TabLayout l, Color color, double thinWidth) {
+void _paintBar(
+  Canvas canvas,
+  BarKind kind,
+  double cx,
+  TabLayout l,
+  Color color,
+  double thinWidth, {
+  double? dotRadius,
+  double? thickWidth,
+}) {
   final g = l.gap;
-  final thick = g * 0.42;
+  final thick = thickWidth ?? g * 0.42;
   final fill = Paint()..color = color;
   void thinAt(double x) => canvas.drawRect(Rect.fromLTRB(x - thinWidth / 2, l.top, x + thinWidth / 2, l.bottom), fill);
   void thickAt(double x) => canvas.drawRect(Rect.fromLTRB(x - thick / 2, l.top, x + thick / 2, l.bottom), fill);
   void dotsAt(double x) {
     // In den Zwischenräumen über und unter der Mitte (6 Linien).
     for (final y in [l.top + g * 1.5, l.top + g * 3.5]) {
-      canvas.drawCircle(Offset(x, y), g * 0.22, fill);
+      canvas.drawCircle(Offset(x, y), dotRadius ?? g * 0.22, fill);
     }
   }
 
@@ -603,4 +615,115 @@ void _paintBar(Canvas canvas, BarKind kind, double cx, TabLayout l, Color color,
       thinAt(cx + g * 0.6);
       dotsAt(cx + g * 1.15);
   }
+}
+
+
+/// Triolen: eine „3“ unter den Balken; sind die Schläge nicht durch einen
+/// Balken verbunden (z. B. Viertel-Triole), dazu eine Klammer.
+void _paintTriplets(Canvas canvas, TabBlock t, TabLayout l, Color color, double lineWidth) {
+  final g = l.gap;
+  final beamed = beamGroups(t.beats);
+  for (final grp in tripletGroups(t.beats)) {
+    final x1 = l.xs[grp.start], x2 = l.xs[grp.end];
+    final cx = (x1 + x2) / 2;
+    final p = TextPainter(
+      text: TextSpan(
+        text: '3',
+        style: TextStyle(
+          fontFamily: 'VoltiSans',
+          fontSize: g * 1.05,
+          color: color,
+          height: 1,
+          fontStyle: FontStyle.italic,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final y = l.stemBottom + g * 0.45;
+    final inOneBeam = beamed.any((b) => b.contains(grp.start) && b.contains(grp.end) && b.length > 1);
+    if (!inOneBeam && grp.end > grp.start) {
+      final paint = Paint()
+        ..color = color
+        ..strokeWidth = lineWidth
+        ..style = PaintingStyle.stroke;
+      final yb = y + p.height / 2;
+      final gapHalf = p.width / 2 + g * 0.25;
+      canvas.drawPath(
+        Path()
+          ..moveTo(x1, yb - g * 0.3)
+          ..lineTo(x1, yb)
+          ..lineTo(cx - gapHalf, yb)
+          ..moveTo(cx + gapHalf, yb)
+          ..lineTo(x2, yb)
+          ..lineTo(x2, yb - g * 0.3),
+        paint,
+      );
+    }
+    p.paint(canvas, Offset(cx - p.width / 2, y));
+    p.dispose();
+  }
+}
+
+/// Kleines Symbol eines Taktstrichs (für die Knöpfe im Tab-Fenster).
+class BarKindIcon extends StatelessWidget {
+  const BarKindIcon(this.kind, {super.key, this.color});
+  final BarKind kind;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: const Size(24, 22),
+    painter: _BarIconPainter(kind, color ?? DefaultTextStyle.of(context).style.color ?? const Color(0xFF000000)),
+  );
+}
+
+class _BarIconPainter extends CustomPainter {
+  _BarIconPainter(this.kind, this.color);
+  final BarKind kind;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Eigene, gut lesbare Zeichnung (auf der Seite wären die Abstände zu eng).
+    final fill = Paint()..color = color;
+    const top = 2.0;
+    final bottom = size.height - 2;
+    final cx = size.width / 2;
+    void thin(double x) => canvas.drawRect(Rect.fromLTRB(x - 0.8, top, x + 0.8, bottom), fill);
+    void thick(double x) => canvas.drawRect(Rect.fromLTRB(x - 1.7, top, x + 1.7, bottom), fill);
+    void dots(double x) {
+      for (final y in [size.height * 0.36, size.height * 0.64]) {
+        canvas.drawCircle(Offset(x, y), 1.8, fill);
+      }
+    }
+
+    switch (kind) {
+      case BarKind.normal:
+        thin(cx);
+      case BarKind.repeatStart:
+        thick(cx - 5);
+        thin(cx);
+        dots(cx + 5);
+      case BarKind.repeatEnd:
+        dots(cx - 5);
+        thin(cx);
+        thick(cx + 5);
+      case BarKind.repeatBoth:
+        dots(cx - 8);
+        thin(cx - 4);
+        thick(cx);
+        thin(cx + 4);
+        dots(cx + 8);
+      case BarKind.doubleLine:
+        thin(cx - 2.5);
+        thin(cx + 2.5);
+      case BarKind.last:
+        thin(cx - 3);
+        thick(cx + 2);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BarIconPainter old) => old.kind != kind || old.color != color;
 }

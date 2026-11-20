@@ -342,6 +342,28 @@ void main() {
     });
   });
 
+  group('Triolen', () {
+    test('Drei Achtel-Triolen = eine Viertel, die Triole geht beim Weiterschreiben weiter', () {
+      final e = TabEditor(const [], measure: 0.25);
+      e.setValue(8);
+      e.setFret(1);
+      e.toggleTriplet();
+      e.move(1);
+      e.setFret(2);
+      e.move(1);
+      e.setFret(3);
+      expect(e.beats.where((b) => b.triplet).length, 3, reason: 'die angefangene Triole läuft weiter');
+      expect(measuresOf(e.beats).first.length, closeTo(0.25, 1e-9));
+      expect(tripletGroups(e.beats), [(start: 0, end: 2, complete: true)]);
+      e.move(1);
+      e.setFret(4);
+      expect(e.beats.last.triplet, isFalse, reason: 'nach einer vollen Triole normal weiter');
+      expect(e.beats.where((b) => b.bar).length, 1, reason: 'der Takt war voll');
+      expect(beamGroups(e.beats).first, [0, 1, 2]);
+      expect(TabBeat.fromJson(e.beats.first.toJson()).triplet, isTrue);
+    });
+  });
+
   group('Verschobene Taktstriche', () {
     const page = Size(1000, 1400);
     final beats = const [

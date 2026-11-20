@@ -149,6 +149,8 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.shorter(-1));
       case TabAction.dot:
         _edit((e) => e.toggleDot());
+      case TabAction.triplet:
+        _edit((e) => e.toggleTriplet());
       case TabAction.rest:
         _edit((e) => e.rest());
       case TabAction.bar:

@@ -53,6 +53,7 @@ class TabBeat {
     this.ties = const {},
     this.staccato = false,
     this.accent = false,
+    this.triplet = false,
   }) : at = null,
        kind = BarKind.normal;
 
@@ -66,7 +67,8 @@ class TabBeat {
       slides = const {},
       ties = const {},
       staccato = false,
-      accent = false;
+      accent = false,
+      triplet = false;
 
   /// Art des Taktstrichs (Wiederholung, Schlussstrich …).
   final BarKind kind;
@@ -93,6 +95,9 @@ class TabBeat {
   /// Staccato (Punkt über dem Schlag) und Akzent („>“).
   final bool staccato, accent;
 
+  /// Teil einer Triole (drei im Raum von zwei): dauert ⅔ so lange.
+  final bool triplet;
+
   /// Notenwert als Nenner (1, 2, 4, 8, 16, 32).
   final int value;
   final bool dotted;
@@ -104,7 +109,10 @@ class TabBeat {
   bool get isRest => !bar && frets.isEmpty;
 
   /// Dauer in ganzen Noten (Viertel = 0,25).
-  double get length => bar ? 0 : (1 / value) * (dotted ? 1.5 : 1);
+  double get length => bar ? 0 : nominal * (triplet ? 2 / 3 : 1);
+
+  /// Dauer ohne Triole (wie geschrieben).
+  double get nominal => bar ? 0 : (1 / value) * (dotted ? 1.5 : 1);
 
   TabBeat copyWith({
     Map<int, int>? frets,
@@ -115,6 +123,7 @@ class TabBeat {
     Set<int>? ties,
     bool? staccato,
     bool? accent,
+    bool? triplet,
   }) {
     final f = frets ?? this.frets;
     // Bendings und Slides nur dort, wo es eine Bundzahl gibt.
@@ -138,6 +147,7 @@ class TabBeat {
       // Ohne Bundzahl (Pause) keine Artikulation.
       staccato: f.isNotEmpty && (staccato ?? this.staccato),
       accent: f.isNotEmpty && (accent ?? this.accent),
+      triplet: triplet ?? this.triplet,
     );
   }
 
@@ -152,6 +162,7 @@ class TabBeat {
           if (ties.isNotEmpty) 'tie': (ties.toList()..sort()),
           if (staccato) 'stacc': true,
           if (accent) 'acc': true,
+          if (triplet) 'tri': true,
         };
 
   static TabBeat fromJson(Map<String, dynamic> j) {
@@ -184,6 +195,7 @@ class TabBeat {
       },
       staccato: frets.isNotEmpty && j['stacc'] == true,
       accent: frets.isNotEmpty && j['acc'] == true,
+      triplet: j['tri'] == true,
     );
   }
 
@@ -205,7 +217,8 @@ class TabBeat {
       other.ties.length == ties.length &&
       other.ties.containsAll(ties) &&
       other.staccato == staccato &&
-      other.accent == accent;
+      other.accent == accent &&
+      other.triplet == triplet;
 
   @override
   int get hashCode => Object.hash(
@@ -220,6 +233,7 @@ class TabBeat {
     Object.hashAllUnordered(ties),
     staccato,
     accent,
+    triplet,
   );
 }
 
@@ -294,6 +308,34 @@ List<({int start, int end, double length})> measuresOf(List<TabBeat> beats) {
       len += beats[i].length;
     }
   }
+  return out;
+}
+
+/// Triolen-Gruppen: aufeinanderfolgende Triolen-Schläge, je drei im Raum von
+/// zwei (z. B. drei Achtel = eine Viertel). [complete] = die Gruppe ist voll.
+List<({int start, int end, bool complete})> tripletGroups(List<TabBeat> beats) {
+  final out = <({int start, int end, bool complete})>[];
+  int? start;
+  var acc = 0.0, target = 0.0;
+  for (var i = 0; i < beats.length; i++) {
+    final b = beats[i];
+    if (b.bar || !b.triplet) {
+      if (start != null) out.add((start: start, end: i - 1, complete: false));
+      start = null;
+      continue;
+    }
+    if (start == null) {
+      start = i;
+      acc = 0;
+      target = b.nominal * 3;
+    }
+    acc += b.nominal;
+    if (acc >= target - 1e-9) {
+      out.add((start: start, end: i, complete: true));
+      start = null;
+    }
+  }
+  if (start != null) out.add((start: start, end: beats.length - 1, complete: false));
   return out;
 }
 
@@ -572,7 +614,11 @@ class TabEditor {
   /// Notenwert für einen neuen Schlag: wie der Schlag davor (sonst Viertel).
   TabBeat _fresh() {
     for (var i = beat - 1; i >= 0; i--) {
-      if (!beats[i].bar) return TabBeat(value: beats[i].value);
+      if (beats[i].bar) continue;
+      // Eine angefangene Triole geht weiter, bis sie voll ist.
+      final open = tripletGroups(beats.sublist(0, i + 1)).lastOrNull;
+      final inOpen = open != null && open.end == i && !open.complete;
+      return TabBeat(value: beats[i].value, triplet: inOpen);
     }
     return const TabBeat();
   }
@@ -732,6 +778,13 @@ class TabEditor {
         break;
       }
     }
+    _resetDigits();
+  }
+
+  /// Triole für den Schlag unter dem Cursor ein/aus.
+  void toggleTriplet() {
+    final b = _ensureBeat();
+    beats[beat] = b.copyWith(triplet: !b.triplet);
     _resetDigits();
   }
 

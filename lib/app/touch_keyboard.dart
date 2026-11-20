@@ -26,9 +26,22 @@ class TouchKeyboard {
   static bool _shown = false;
   static Timer? _hideTimer;
 
+  /// Tablet-Modus: keine Tastatur angeschlossen (Windows: abgenommen oder
+  /// umgeklappt; Android und iOS immer). Wird alle paar Sekunden nachgeführt.
+  static final tabletMode = ValueNotifier<bool>(Platform.isAndroid || Platform.isIOS);
+
+  static Future<void> _checkTablet() async {
+    try {
+      final v = await _channel.invokeMethod<bool>('isTablet');
+      if (v != null) tabletMode.value = v;
+    } catch (_) {}
+  }
+
   static void install() {
     if (_installed || !Platform.isWindows) return;
     _installed = true;
+    _checkTablet();
+    Timer.periodic(const Duration(seconds: 3), (_) => _checkTablet());
     GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
     FocusManager.instance.addListener(_onFocus);
   }

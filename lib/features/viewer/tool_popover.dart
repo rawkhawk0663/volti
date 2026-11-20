@@ -19,6 +19,8 @@ import 'rich_text.dart';
 import 'text_layer.dart';
 import 'tool_controller.dart';
 import 'tab_keys.dart';
+import 'tab_paint.dart';
+import '../../app/touch_keyboard.dart';
 import 'tab_session.dart';
 import '../../core/ink/tab_block.dart';
 import '../../app/l10n.dart';
@@ -1617,6 +1619,13 @@ class _TabKeypad extends StatelessWidget {
                   tooltip: tip(TabAction.dot),
                   width: 37,
                 ),
+                key(
+                  const Text('3', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, fontStyle: FontStyle.italic)),
+                  () => session.perform(TabAction.triplet),
+                  selected: cur?.triplet ?? false,
+                  tooltip: tip(TabAction.triplet),
+                  width: 37,
+                ),
                 key(glyph(0xE4E5), () => session.perform(TabAction.rest), tooltip: tip(TabAction.rest), width: 37),
                 key(
                   const Text('|', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
@@ -1684,21 +1693,46 @@ class _TabKeypad extends StatelessWidget {
                     tooltip: tip(TabAction.accent),
                     width: 37,
                   ),
-                  key(glyph(0xE040), () => session.perform(TabAction.repeatStart), tooltip: tip(TabAction.repeatStart), width: 37),
-                  key(glyph(0xE041), () => session.perform(TabAction.repeatEnd), tooltip: tip(TabAction.repeatEnd), width: 37),
-                  key(glyph(0xE032), () => session.perform(TabAction.finalBar), tooltip: tip(TabAction.finalBar), width: 37),
-                  key(glyph(0xE031), () => session.perform(TabAction.doubleBar), tooltip: tip(TabAction.doubleBar), width: 37),
+                  for (final (kind, action) in [
+                    (BarKind.repeatStart, TabAction.repeatStart),
+                    (BarKind.repeatEnd, TabAction.repeatEnd),
+                    (BarKind.doubleLine, TabAction.doubleBar),
+                    (BarKind.last, TabAction.finalBar),
+                  ])
+                    key(
+                      BarKindIcon(kind, color: scheme.onSurface),
+                      () => session.perform(action),
+                      tooltip: tip(action),
+                      width: 37,
+                    ),
                 ],
               ),
             ),
-            _Label(tr('Bund', 'Fret')),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                for (var f = 0; f <= TabEditor.maxFret; f++)
-                  key(Text('$f'), () => session.setFret(f), selected: fret == f, width: 44),
-              ],
+            // Bund-Knöpfe: braucht nur, wer keine Tastatur hat (Tablet-Modus).
+            ValueListenableBuilder<bool>(
+              valueListenable: TouchKeyboard.tabletMode,
+              builder: (context, tablet, _) {
+                final show = switch (tools.tabKeypad) {
+                  TabKeypad.always => true,
+                  TabKeypad.never => false,
+                  TabKeypad.auto => tablet,
+                };
+                if (!show) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Label(tr('Bund', 'Fret')),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (var f = 0; f <= TabEditor.maxFret; f++)
+                          key(Text('$f'), () => session.setFret(f), selected: fret == f, width: 44),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             Wrap(

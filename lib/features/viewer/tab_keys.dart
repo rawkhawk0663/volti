@@ -20,6 +20,7 @@ enum TabAction {
   shorter,
   longer,
   dot,
+  triplet,
   rest,
   bar,
   slide,
@@ -52,6 +53,7 @@ enum TabAction {
     shorter => tr('Notenwert kürzer', 'Shorter note value'),
     longer => tr('Notenwert länger', 'Longer note value'),
     dot => tr('Punktiert ein/aus', 'Dotted on/off'),
+    triplet => tr('Triole ein/aus (3 im Raum von 2)', 'Triplet on/off (3 in the time of 2)'),
     rest => tr('Pause', 'Rest'),
     bar => tr('Taktstrich', 'Bar line'),
     slide => tr('Slide zur nächsten Note ein/aus', 'Slide to the next note on/off'),
@@ -87,6 +89,14 @@ enum TabAction {
     thirtySecond => 32,
     _ => null,
   };
+}
+
+/// Wann das Tab-Fenster die Bund-Knöpfe (0–24) zeigt.
+enum TabKeypad {
+  /// Nur im Tablet-Modus (ohne Tastatur).
+  auto,
+  always,
+  never,
 }
 
 /// Eine Taste mit Zusatztasten (Strg, Umschalt, Alt).
@@ -159,6 +169,7 @@ class TabKeymap {
     TabAction.shorter: const KeyBinding(LogicalKeyboardKey.keyK),
     TabAction.longer: const KeyBinding(LogicalKeyboardKey.keyL),
     TabAction.dot: const KeyBinding(LogicalKeyboardKey.period),
+    TabAction.triplet: const KeyBinding(LogicalKeyboardKey.keyI),
     TabAction.rest: const KeyBinding(LogicalKeyboardKey.keyP),
     TabAction.bar: const KeyBinding(LogicalKeyboardKey.keyT),
     TabAction.slide: const KeyBinding(LogicalKeyboardKey.keyR),
