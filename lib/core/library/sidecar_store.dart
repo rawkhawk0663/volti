@@ -40,6 +40,7 @@ class ScoreSidecar {
     if (annotations.allLayers.isNotEmpty) 'layers': annotations.toJson()['layers'],
     if (annotations.allLinks.isNotEmpty) 'links': annotations.toJson()['links'],
     if (annotations.allBookmarks.isNotEmpty) 'bookmarks': annotations.toJson()['bookmarks'],
+    if (annotations.allTabs.isNotEmpty) 'tabs': annotations.toJson()['tabs'],
     if (pages.toJson() != null) 'pages': pages.toJson(),
   };
 

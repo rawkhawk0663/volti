@@ -9,6 +9,7 @@ import '../../app/adaptive_choice.dart';
 import '../../app/error_log.dart';
 import '../../app/updater.dart';
 import '../../app/version.dart';
+import '../viewer/tab_keys.dart';
 import '../viewer/tool_controller.dart';
 import '../../core/library/auto_backup.dart';
 import '../../core/teaching/school_calendar.dart';
@@ -77,7 +78,7 @@ class _SettingsDialog extends StatefulWidget {
 }
 
 /// Kategorien im Einstellungsfenster (links als Menüleiste).
-enum _Page { appearance, music, teaching, sync, backup, about }
+enum _Page { appearance, music, input, teaching, sync, backup, about }
 
 class _SettingsDialogState extends State<_SettingsDialog> {
   _Page _page = _Page.appearance;
@@ -95,6 +96,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   List<_Page> get _pages => [
     _Page.appearance,
     _Page.music,
+    _Page.input,
     _Page.teaching,
     if (sync != null) _Page.sync,
     if (onCreateBackup != null || dataFolder != null) _Page.backup,
@@ -106,6 +108,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   static const _icons = <IconData>[
     Icons.palette_outlined,
     Icons.menu_book_outlined,
+    Icons.piano_outlined,
     Icons.school_outlined,
     Icons.cloud_sync_outlined,
     Icons.save_outlined,
@@ -114,6 +117,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   static const _selectedIcons = <IconData>[
     Icons.palette,
     Icons.menu_book,
+    Icons.piano,
     Icons.school,
     Icons.cloud_sync,
     Icons.save,
@@ -125,6 +129,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   String _label(_Page p) => switch (p) {
     _Page.appearance => tr('Darstellung', 'Appearance'),
     _Page.music => tr('Notenansicht', 'Music view'),
+    _Page.input => tr('Noteneingabe', 'Note input'),
     _Page.teaching => tr('Unterricht', 'Teaching'),
     _Page.sync => tr('Sync', 'Sync'),
     _Page.backup => tr('Sicherung', 'Backup'),
@@ -144,6 +149,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       children: switch (_page) {
         _Page.appearance => _appearance(context, theme),
         _Page.music => _music(context, theme),
+        _Page.input => _input(context, theme),
         _Page.teaching => _teaching(context, theme),
         _Page.sync => _syncSection(context, sync!),
         _Page.backup => _backup(context, theme),
@@ -352,6 +358,64 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       onChanged: (_) => tools.togglePaletteSide(),
     ),
   ];
+
+  /// Noteneingabe: im Moment die Tasten für Tabulaturen.
+  List<Widget> _input(BuildContext context, ThemeData theme) {
+    final keys = tools.tabKeys;
+    final muted = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    Future<void> change(TabAction a) async {
+      final k = await _captureKey(context, a);
+      if (k == null) return;
+      final r = tools.tabKeys.withBinding(a, k);
+      await tools.setTabKeys(r.map);
+      if (r.swapped != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tr(
+                '${k.label} war schon für „${r.swapped!.label}“ belegt – die beiden Tasten wurden getauscht.',
+                '${k.label} was already used for “${r.swapped!.label}” – the two keys were swapped.',
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    return [
+      Text(tr('Tabulatur', 'Tablature'), style: theme.textTheme.titleSmall),
+      const SizedBox(height: 4),
+      Text(
+        tr(
+          'Bundzahlen tippst du mit den Ziffern – auf der Reihe oben oder auf dem Ziffernblock. Zweistellige '
+              '(z. B. 12) rasch hintereinander. Strg+Z und Strg+Y machen rückgängig bzw. wiederholen. Alles '
+              'andere kannst du hier auf andere Tasten legen. Die Belegung gilt nur auf diesem Gerät.',
+          'Type fret numbers with the digits – on the top row or the number pad. Two-digit numbers (e.g. 12) '
+              'quickly one after the other. Ctrl+Z and Ctrl+Y undo and redo. Everything else can be moved to '
+              'other keys here. The layout applies to this device only.',
+        ),
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      for (final a in TabAction.values)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: Text(a.label),
+          trailing: OutlinedButton(onPressed: () => change(a), child: Text(keys[a]?.label ?? tr('keine', 'none'))),
+          onTap: () => change(a),
+        ),
+      const SizedBox(height: 8),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () => tools.setTabKeys(TabKeymap.defaults),
+          icon: const Icon(Icons.restart_alt),
+          label: Text(tr('Standardtasten wiederherstellen', 'Restore default keys')),
+        ),
+      ),
+    ];
+  }
 
   List<Widget> _teaching(BuildContext context, ThemeData theme) => [
     SwitchListTile(
@@ -1079,3 +1143,68 @@ class _Stepper extends StatelessWidget {
     );
   }
 }
+
+/// Wartet auf die neue Taste für [action] (mit Strg/Umschalt/Alt).
+/// null = abgebrochen.
+Future<KeyBinding?> _captureKey(BuildContext context, TabAction action) => showDialog<KeyBinding>(
+  context: context,
+  builder: (c) {
+    String? hint;
+    return StatefulBuilder(
+      builder: (c, setState) => Focus(
+        autofocus: true,
+        onKeyEvent: (node, e) {
+          if (e is! KeyDownEvent || isModifierKey(e.logicalKey)) return KeyEventResult.handled;
+          final hk = HardwareKeyboard.instance;
+          final ctrl = hk.isControlPressed || hk.isMetaPressed, alt = hk.isAltPressed;
+          final shift = hk.isShiftPressed;
+          if (digitOf(e.logicalKey) != null && !ctrl && !alt) {
+            setState(
+              () => hint = tr(
+                'Die Ziffern sind für die Bundzahlen reserviert.',
+                'The digits are reserved for fret numbers.',
+              ),
+            );
+            return KeyEventResult.handled;
+          }
+          if (ctrl && !alt && (e.logicalKey == LogicalKeyboardKey.keyZ || e.logicalKey == LogicalKeyboardKey.keyY)) {
+            setState(
+              () => hint = tr(
+                'Strg+Z und Strg+Y sind für Rückgängig reserviert.',
+                'Ctrl+Z and Ctrl+Y are reserved for undo.',
+              ),
+            );
+            return KeyEventResult.handled;
+          }
+          Navigator.pop(c, KeyBinding(e.logicalKey, ctrl: ctrl, shift: shift, alt: alt));
+          return KeyEventResult.handled;
+        },
+        child: AlertDialog(
+          title: Text(action.label),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                tr(
+                  'Drücke jetzt die neue Taste (auch mit Strg, Umschalt oder Alt).',
+                  'Press the new key now (Ctrl, Shift or Alt allowed).',
+                ),
+              ),
+              if (hint != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(hint!, style: TextStyle(color: Theme.of(c).colorScheme.error)),
+                ),
+            ],
+          ),
+          actions: [
+            ExcludeFocus(
+              child: TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Abbrechen', 'Cancel'))),
+            ),
+          ],
+        ),
+      ),
+    );
+  },
+);

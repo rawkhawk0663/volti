@@ -12,6 +12,7 @@ import '../../core/ink/score_annotations.dart';
 import '../../core/ink/selection.dart';
 import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
+import '../../core/ink/tab_block.dart';
 import '../../core/ink/text_note.dart';
 import '../../core/ink/text_marks.dart';
 import '../../core/library/sidecar_store.dart';
@@ -31,7 +32,9 @@ class _UndoEntry {
     List<Stamp>? stampsBefore,
     List<Stroke>? strokesBefore,
     List<AnnotationLayer>? layersBefore,
-  }) : added = added ?? [],
+    List<TabBlock>? tabsBefore,
+  }) : tabsBefore = tabsBefore ?? [],
+       added = added ?? [],
        removed = removed ?? [],
        addedTexts = addedTexts ?? [],
        removedTexts = removedTexts ?? [],
@@ -62,6 +65,9 @@ class _UndoEntry {
   /// Ebenen vor einer Änderung. Neu angelegte stehen hier als gelöscht.
   final List<AnnotationLayer> layersBefore;
 
+  /// Tabulaturen vor einer Änderung. Neu angelegte stehen hier als gelöscht.
+  final List<TabBlock> tabsBefore;
+
   bool get isEmpty =>
       added.isEmpty &&
       removed.isEmpty &&
@@ -72,7 +78,8 @@ class _UndoEntry {
       removedStamps.isEmpty &&
       stampsBefore.isEmpty &&
       strokesBefore.isEmpty &&
-      layersBefore.isEmpty;
+      layersBefore.isEmpty &&
+      tabsBefore.isEmpty;
 }
 
 /// Verwaltet die Anmerkungen eines Stücks: Zeichnen, Radieren,
@@ -342,7 +349,11 @@ class InkController extends ChangeNotifier {
     final strokes = _annotations.visibleStrokesOn(page);
     final texts = _annotations.visibleTextsOn(page);
     final stamps = _annotations.visibleStampsOn(page);
-    if (strokes.isEmpty && texts.isEmpty && stamps.isEmpty) return;
+    final tabs = _annotations.visibleTabsOn(page);
+    if (strokes.isEmpty && texts.isEmpty && stamps.isEmpty && tabs.isEmpty) return;
+    for (final t in tabs) {
+      _annotations.putTab(t.copyWith(deleted: true, modifiedAt: now));
+    }
     for (final st in stamps) {
       _annotations.putStamp(st.copyWith(deleted: true, modifiedAt: now));
     }
@@ -352,13 +363,72 @@ class InkController extends ChangeNotifier {
     for (final t in texts) {
       _annotations.putText(t.copyWith(deleted: true, modifiedAt: now));
     }
-    _push(_UndoEntry(removed: strokes, removedTexts: texts, removedStamps: stamps));
+    _push(_UndoEntry(removed: strokes, removedTexts: texts, removedStamps: stamps, tabsBefore: tabs));
   }
 
   bool pageHasAnnotations(int page) =>
       _annotations.visibleStrokesOn(page).isNotEmpty ||
       _annotations.visibleTextsOn(page).isNotEmpty ||
-      _annotations.visibleStampsOn(page).isNotEmpty;
+      _annotations.visibleStampsOn(page).isNotEmpty ||
+      _annotations.visibleTabsOn(page).isNotEmpty;
+
+  // ------------------------------------------------------------ Tabulaturen
+
+  /// Neue, leere Tabulatur. Gibt ihre ID zurück.
+  String addTab({
+    required int page,
+    required double x,
+    required double y,
+    required double width,
+    double gap = TabBlock.defaultGap,
+    int background = TabBlock.noBackground,
+  }) {
+    final t = TabBlock(
+      id: _uuid.v4(),
+      page: page,
+      x: x,
+      y: y,
+      width: width,
+      gap: gap,
+      background: background,
+      createdAt: DateTime.now().toUtc(),
+      layer: _layerForNew(),
+    );
+    _annotations.putTab(t);
+    _push(_UndoEntry(tabsBefore: [t.copyWith(deleted: true)]));
+    return t.id;
+  }
+
+  /// Inhalt oder Lage einer Tabulatur ändern (ein Rückgängig-Schritt).
+  void updateTab(String id, {List<TabBeat>? beats, double? x, double? y, double? width, int? background}) {
+    final before = _annotations.tab(id);
+    if (before == null || before.deleted) return;
+    final after = before.copyWith(
+      beats: beats,
+      x: x,
+      y: y,
+      width: width,
+      background: background,
+      modifiedAt: DateTime.now().toUtc(),
+    );
+    if (after.background == before.background &&
+        after.x == before.x &&
+        after.y == before.y &&
+        after.width == before.width &&
+        after.beats.length == before.beats.length &&
+        after.beats.indexed.every((e) => e.$2 == before.beats[e.$1])) {
+      return;
+    }
+    _annotations.putTab(after);
+    _push(_UndoEntry(tabsBefore: [before]));
+  }
+
+  void deleteTab(String id) {
+    final before = _annotations.tab(id);
+    if (before == null || before.deleted) return;
+    _annotations.putTab(before.copyWith(deleted: true, modifiedAt: DateTime.now().toUtc()));
+    _push(_UndoEntry(tabsBefore: [before]));
+  }
 
   // ---------------------------------------------------------------- Stempel
   String addStamp({
@@ -1032,6 +1102,11 @@ class InkController extends ChangeNotifier {
       _annotations.put(before.copyWith(modifiedAt: now));
       inverse.strokesBefore.add(current);
     }
+    for (final before in entry.tabsBefore) {
+      final current = _annotations.tab(before.id) ?? before.copyWith(deleted: true);
+      _annotations.putTab(before.copyWith(modifiedAt: now));
+      inverse.tabsBefore.add(current);
+    }
     to.add(inverse);
     _changed();
   }
@@ -1079,6 +1154,9 @@ class InkController extends ChangeNotifier {
       // Nur den ältesten Stand einer Ebene im Bündel merken.
       for (final l in e.layersBefore) {
         if (!b.layersBefore.any((x) => x.id == l.id)) b.layersBefore.add(l);
+      }
+      for (final t in e.tabsBefore) {
+        if (!b.tabsBefore.any((x) => x.id == t.id)) b.tabsBefore.add(t);
       }
       _changed();
       return;

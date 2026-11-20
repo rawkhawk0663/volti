@@ -99,6 +99,12 @@ List<_HelpPage> get _pages => [
           'lasso, move and jump links. Each tool has its own window with settings and favourites.',
     ),
     tr(
+      'Mit „TAB“ ziehst du eine Tabulatur auf und tippst Bundzahlen und Rhythmus mit der Tastatur oder dem '
+          'Zahlenfeld (Tasten unter ⚙ → Noteneingabe).',
+      'With “TAB” you drag out a tablature and type frets and rhythm with the keyboard or the keypad '
+          '(keys under ⚙ → Note input).',
+    ),
+    tr(
       'Mit Ebenen trennst du z. B. Fingersätze von Probennotizen und blendest sie einzeln ein und aus.',
       'Layers let you separate e.g. fingerings from rehearsal notes and show or hide them one by one.',
     ),

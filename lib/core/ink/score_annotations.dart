@@ -2,6 +2,7 @@ import 'annotation_layer.dart';
 import 'navigation_marks.dart';
 import 'stamp.dart';
 import 'stroke.dart';
+import 'tab_block.dart';
 import 'text_note.dart';
 
 /// Alle Anmerkungen zu einem Notenstück (einem PDF).
@@ -16,7 +17,11 @@ class ScoreAnnotations {
     Iterable<AnnotationLayer> layers = const [],
     Iterable<JumpLink> links = const [],
     Iterable<Bookmark> bookmarks = const [],
+    Iterable<TabBlock> tabs = const [],
   ]) {
+    for (final t in tabs) {
+      _tabs[t.id] = t;
+    }
     for (final l in links) {
       _links[l.id] = l;
     }
@@ -45,6 +50,19 @@ class ScoreAnnotations {
   final Map<String, AnnotationLayer> _layers = {};
   final Map<String, JumpLink> _links = {};
   final Map<String, Bookmark> _bookmarks = {};
+  final Map<String, TabBlock> _tabs = {};
+
+  // ------------------------------------------------------------ Tabulaturen
+  /// Alle Tabulaturen inkl. gelöschter (für Speichern/Sync).
+  Iterable<TabBlock> get allTabs => _tabs.values;
+
+  /// Sichtbare Tabulaturen einer Seite (nicht gelöscht, Ebene eingeblendet).
+  List<TabBlock> visibleTabsOn(int page) =>
+      _tabs.values.where((t) => t.page == page && !t.deleted && _shown(t.layer)).toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  void putTab(TabBlock t) => _tabs[t.id] = t;
+  TabBlock? tab(String id) => _tabs[id];
 
   // ------------------------------------------------ Sprungmarken, Lesezeichen
   Iterable<JumpLink> get allLinks => _links.values;
@@ -184,7 +202,8 @@ class ScoreAnnotations {
   bool get isEmpty =>
       _strokes.values.every((s) => s.deleted) &&
       _texts.values.every((t) => t.deleted) &&
-      _stamps.values.every((s) => s.deleted);
+      _stamps.values.every((s) => s.deleted) &&
+      _tabs.values.every((t) => t.deleted);
 
   void put(Stroke stroke) => _strokes[stroke.id] = stroke;
 
@@ -200,8 +219,19 @@ class ScoreAnnotations {
   /// Das Ergebnis ist unabhängig von der Reihenfolge: `a.merge(b)` und
   /// `b.merge(a)` ergeben denselben Stand.
   static ScoreAnnotations merge(ScoreAnnotations a, ScoreAnnotations b) {
-    final result = ScoreAnnotations(a.allStrokes, a.allTexts, a.allStamps, a.allLayers, a.allLinks, a.allBookmarks)
-      ..viewScope = a.viewScope;
+    final result = ScoreAnnotations(
+      a.allStrokes,
+      a.allTexts,
+      a.allStamps,
+      a.allLayers,
+      a.allLinks,
+      a.allBookmarks,
+      a.allTabs,
+    )..viewScope = a.viewScope;
+    for (final other in b.allTabs) {
+      final mine = result._tabs[other.id];
+      result.putTab(mine == null ? other : _pickTab(mine, other));
+    }
     for (final other in b.allLinks) {
       final mine = result._links[other.id];
       result.putLink(
@@ -250,6 +280,15 @@ class ScoreAnnotations {
     return a.name.compareTo(b.name) >= 0 ? a : b;
   }
 
+  /// Tabulaturen: Die jüngste Fassung gewinnt als Ganzes, auch beim Löschen
+  /// (wie Ebenen) – „Rückgängig“ holt eine gelöschte mit derselben ID zurück.
+  static TabBlock _pickTab(TabBlock a, TabBlock b) {
+    final c = a.lastChange.compareTo(b.lastChange);
+    if (c != 0) return c > 0 ? a : b;
+    if (a.deleted != b.deleted) return a.deleted ? a : b;
+    return a.beats.length >= b.beats.length ? a : b;
+  }
+
   /// Gelöscht bleibt gelöscht, sonst gewinnt die jüngste Fassung.
   static T _latest<T>(T a, T b, DateTime ta, DateTime tb, bool da, bool db) {
     if (da != db) return da ? a : b;
@@ -284,6 +323,8 @@ class ScoreAnnotations {
       'layers': (_layers.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((l) => l.toJson()).toList(),
     if (_texts.isNotEmpty)
       'texts': (_texts.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((t) => t.toJson()).toList(),
+    if (_tabs.isNotEmpty)
+      'tabs': (_tabs.values.toList()..sort((a, b) => a.id.compareTo(b.id))).map((t) => t.toJson()).toList(),
   };
 
   static ScoreAnnotations fromJson(Map<String, dynamic> json) {
@@ -303,6 +344,9 @@ class ScoreAnnotations {
     final bookmarks = (json['bookmarks'] as List<dynamic>? ?? const []).map(
       (l) => Bookmark.fromJson(l as Map<String, dynamic>),
     );
-    return ScoreAnnotations(strokes, texts, stamps, layers, links, bookmarks);
+    final tabs = (json['tabs'] as List<dynamic>? ?? const []).map(
+      (t) => TabBlock.fromJson(t as Map<String, dynamic>),
+    );
+    return ScoreAnnotations(strokes, texts, stamps, layers, links, bookmarks, tabs);
   }
 }

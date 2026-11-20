@@ -82,7 +82,8 @@ Download **`Volti-Android.apk`** from the [latest version](https://github.com/ra
 - **Fingers never draw.** Your hand can rest on the screen while you write.
 - **Text notes** with three fonts, colours and background. Inside a note you can make single words bold, italic, underlined or coloured.
 - **Stamps** with more than a hundred music symbols in groups (dynamics, articulation, strings, winds, keys, guitar …), plus **your own stamps** from images.
-- **Shapes**: line, arrow, rectangle and ellipse (also filled, e.g. white to cover things up), crescendo/decrescendo, slur and staff lines.
+- **Shapes**: line, arrow, rectangle and ellipse (also filled, e.g. white to cover things up), crescendo/decrescendo, slur, staff lines and tablature lines.
+- **Write tablature**: drag a tablature onto the page with the “TAB” tool and type fret numbers with the keyboard (no number pad needed) or the on-screen keypad, with rhythm (whole to 32nd notes, dotted, rests), bar lines and a background colour. Keys can be changed under ⚙ → Note input.
 - **Ruler** for straight lines, moved and rotated with your fingers.
 - **Lasso** to move, resize, copy and recolour, plus a **move tool**.
 - **Copy bars**: cut out bars including your notes and paste them elsewhere, even into another piece.

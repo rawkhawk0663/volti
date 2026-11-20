@@ -1,0 +1,444 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../core/ink/tab_block.dart';
+import '../../core/ink/tool_settings.dart';
+import 'ink_controller.dart';
+import 'shapes.dart';
+import 'tab_keys.dart';
+import 'tab_paint.dart';
+import 'tab_session.dart';
+import 'tool_controller.dart';
+import '../../app/l10n.dart';
+
+/// Zeigt die Tabulaturen einer Seite. Mit dem Werkzeug „Tabulatur“:
+///
+/// * Mit Stift oder Maus ziehen (oder tippen) legt eine neue an – wie die Form
+///   „Tabulatur“: nur waagrecht gezogen übliche Höhe, nach unten gezogen höher.
+/// * Eine vorhandene antippen setzt den Cursor dorthin; dann schreibt man mit
+///   der Tastatur oder dem Zahlenfeld im Werkzeugfenster.
+/// * Griff links oben verschiebt, Griff rechts ändert die Breite.
+class TabLayer extends StatefulWidget {
+  const TabLayer({
+    super.key,
+    required this.page,
+    required this.controller,
+    required this.tools,
+    required this.onEditingChanged,
+  });
+
+  final int page;
+  final InkController controller;
+  final ToolController tools;
+
+  /// Meldet, ob gerade geschrieben wird (dann blättern Tasten nicht um).
+  final ValueChanged<bool> onEditingChanged;
+
+  @override
+  State<TabLayer> createState() => _TabLayerState();
+}
+
+class _TabLayerState extends State<TabLayer> {
+  final _focus = FocusNode(debugLabel: 'tab');
+
+  /// Neue Tabulatur wird gerade aufgezogen (Start und aktuelle Stelle).
+  Offset? _dragFrom, _dragTo;
+
+  /// Verschieben bzw. Breite ändern: bisherige Verschiebung in Pixeln.
+  Offset _moveDelta = Offset.zero;
+  double _widthDelta = 0;
+
+  bool _reported = false;
+
+  InkController get c => widget.controller;
+  ToolController get tools => widget.tools;
+
+  TabSession? get _session {
+    final s = tools.tabSession.value;
+    return s != null && identical(s.ink, c) && s.page == widget.page ? s : null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    tools.tabSession.addListener(_sessionChanged);
+  }
+
+  @override
+  void didUpdateWidget(TabLayer old) {
+    super.didUpdateWidget(old);
+    if (old.tools != widget.tools) {
+      old.tools.tabSession.removeListener(_sessionChanged);
+      widget.tools.tabSession.addListener(_sessionChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    tools.tabSession.removeListener(_sessionChanged);
+    if (_session != null) {
+      // Abbau: erst danach beenden (während des Abbaus nichts ändern).
+      final t = tools;
+      Future.microtask(() => t.tabSession.value = null);
+    }
+    if (_reported) {
+      final cb = widget.onEditingChanged;
+      Future.microtask(() => cb(false));
+    }
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _sessionChanged() {
+    final mine = _session != null;
+    if (mine != _reported) {
+      _reported = mine;
+      widget.onEditingChanged(mine);
+    }
+    if (mine) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _session != null) _focus.requestFocus();
+      });
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _start(TabBlock t, {int beat = 0, int string = 0}) {
+    tools.tabSession.value = TabSession(ink: c, id: t.id, page: widget.page, beat: beat, string: string);
+  }
+
+  void _finish() => tools.tabSession.value = null;
+
+  /// Getroffene Tabulatur (oberste zuerst).
+  TabBlock? _hit(Offset p, Size size) {
+    for (final t in c.annotations.visibleTabsOn(widget.page).reversed) {
+      if (layoutTab(t, size).bounds.contains(p)) return t;
+    }
+    return null;
+  }
+
+  void _tapUp(TapUpDetails d, Size size) {
+    final t = _hit(d.localPosition, size);
+    if (t != null) {
+      final l = layoutTab(t, size);
+      final slot = l.slotAt(d.localPosition.dx);
+      final s = _session;
+      if (s != null && s.id == t.id) {
+        s.moveTo(slot, l.stringAt(d.localPosition.dy));
+      } else {
+        _start(t, beat: slot, string: l.stringAt(d.localPosition.dy));
+      }
+      return;
+    }
+    if (_session != null) {
+      _finish();
+      return;
+    }
+    // Neue Tabulatur nur mit Stift oder Maus (der Finger zeichnet nie).
+    if (d.kind == PointerDeviceKind.touch) return;
+    final x = d.localPosition.dx;
+    _create(
+      Offset(x, d.localPosition.dy),
+      Offset(math.max(x + size.width * 0.3, size.width * 0.95), d.localPosition.dy),
+      size,
+    );
+  }
+
+  /// Wie die Form „Tabulatur“: Länge vom Ziehen nach links/rechts, Höhe vom
+  /// deutlichen Ziehen nach unten.
+  void _create(Offset a, Offset b, Size size) {
+    final geo = shapeGeometry(ShapeKind.tab, a, b, 1, pageWidth: size.width);
+    if (geo.length != TabBlock.strings) return;
+    final top = math.min(geo.first.points.first.dy, geo.last.points.first.dy);
+    final bottom = math.max(geo.first.points.first.dy, geo.last.points.first.dy);
+    final left = math.min(a.dx, b.dx), right = math.max(a.dx, b.dx);
+    final id = c.addTab(
+      page: widget.page,
+      x: left / size.width,
+      y: top / size.height,
+      width: (right - left) / size.width,
+      gap: (bottom - top) / (TabBlock.strings - 1) / size.width,
+      background: tools.tabBackground,
+    );
+    final t = c.annotations.tab(id);
+    if (t != null) _start(t);
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    final s = _session;
+    if (s == null) return KeyEventResult.ignored;
+    if (e is KeyUpEvent) return KeyEventResult.handled;
+    final hk = HardwareKeyboard.instance;
+    final ctrl = hk.isControlPressed || hk.isMetaPressed;
+    final shift = hk.isShiftPressed, alt = hk.isAltPressed;
+    final k = e.logicalKey;
+    // Rückgängig/Wiederholen gehen auch beim Schreiben.
+    if (ctrl && !alt && k == LogicalKeyboardKey.keyZ) {
+      shift ? c.redo() : c.undo();
+      return KeyEventResult.handled;
+    }
+    if (ctrl && !alt && k == LogicalKeyboardKey.keyY) {
+      c.redo();
+      return KeyEventResult.handled;
+    }
+    final action = tools.tabKeys.actionFor(k, ctrl: ctrl, shift: shift, alt: alt);
+    if (action != null) {
+      if (!s.perform(action)) _finish();
+      return KeyEventResult.handled;
+    }
+    final d = digitOf(k);
+    if (d != null && !ctrl && !alt) {
+      s.digit(d);
+      return KeyEventResult.handled;
+    }
+    // Alle anderen Tasten schlucken: Sie sollen weder umblättern noch
+    // Werkzeuge wechseln.
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+        return ListenableBuilder(
+          listenable: Listenable.merge([c, tools, ?_session]),
+          builder: (context, _) {
+            final active = tools.mode == ToolMode.tab;
+            final session = _session;
+            final tabs = c.annotations.visibleTabsOn(widget.page);
+            final editing = session?.block;
+            return Focus(
+              focusNode: _focus,
+              onKeyEvent: _onKey,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  IgnorePointer(
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: _TabsPainter(
+                          tabs,
+                          moving: editing?.id,
+                          moveDelta: _moveDelta,
+                          widthDelta: _widthDelta,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (active)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      // Die Tabulatur beginnt dort, wo der Stift aufsetzt.
+                      dragStartBehavior: DragStartBehavior.down,
+                      onTapUp: (d) => _tapUp(d, size),
+                      onPanStart: (d) {
+                        if (d.kind == PointerDeviceKind.touch) return;
+                        setState(() => _dragFrom = _dragTo = d.localPosition);
+                      },
+                      onPanUpdate: (d) {
+                        if (_dragFrom != null) setState(() => _dragTo = d.localPosition);
+                      },
+                      onPanEnd: (_) {
+                        final a = _dragFrom, b = _dragTo;
+                        setState(() => _dragFrom = _dragTo = null);
+                        if (a != null && b != null) {
+                          _finish();
+                          _create(a, b, size);
+                        }
+                      },
+                    ),
+                  if (_dragFrom != null && _dragTo != null)
+                    IgnorePointer(child: CustomPaint(painter: _PreviewPainter(_dragFrom!, _dragTo!, size.width))),
+                  if (session != null && editing != null) ..._editingOverlay(session, editing, size),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  List<Widget> _editingOverlay(TabSession s, TabBlock t, Size size) {
+    final l = layoutTab(t, size);
+    final scheme = Theme.of(context).colorScheme;
+    final g = l.gap;
+    final handle = math.max(22.0, g * 1.8);
+    return [
+      IgnorePointer(
+        child: CustomPaint(
+          painter: _CursorPainter(layout: l, beat: s.beat, string: s.string, color: scheme.primary, offset: _moveDelta),
+        ),
+      ),
+      // Griff zum Verschieben (links oben)
+      Positioned(
+        left: l.origin.dx - handle * 0.5 + _moveDelta.dx,
+        top: l.top - g * 1.2 - handle + _moveDelta.dy,
+        width: handle,
+        height: handle,
+        child: _Handle(
+          icon: Icons.open_with,
+          tooltip: tr('Tabulatur verschieben', 'Move tablature'),
+          cursor: SystemMouseCursors.move,
+          onDrag: (d) => setState(() => _moveDelta += d),
+          onEnd: () {
+            final dx = _moveDelta.dx / size.width, dy = _moveDelta.dy / size.height;
+            setState(() => _moveDelta = Offset.zero);
+            c.updateTab(t.id, x: (t.x + dx).clamp(0.0, 0.98), y: (t.y + dy).clamp(0.0, 0.98));
+          },
+        ),
+      ),
+      // Griff für die Breite (rechts)
+      Positioned(
+        left: l.endX + _widthDelta - handle * 0.5,
+        top: (l.top + l.bottom) / 2 - handle / 2,
+        width: handle,
+        height: handle,
+        child: _Handle(
+          icon: Icons.swap_horiz,
+          tooltip: tr('Breite ändern', 'Change width'),
+          cursor: SystemMouseCursors.resizeLeftRight,
+          onDrag: (d) => setState(() => _widthDelta += d.dx),
+          onEnd: () {
+            final w = (l.endX - l.origin.dx + _widthDelta) / size.width;
+            setState(() => _widthDelta = 0);
+            c.updateTab(t.id, width: w.clamp(0.08, 1.0 - t.x));
+          },
+        ),
+      ),
+    ];
+  }
+}
+
+class _Handle extends StatelessWidget {
+  const _Handle({
+    required this.icon,
+    required this.tooltip,
+    required this.cursor,
+    required this.onDrag,
+    required this.onEnd,
+  });
+  final IconData icon;
+  final String tooltip;
+  final MouseCursor cursor;
+  final ValueChanged<Offset> onDrag;
+  final VoidCallback onEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: MouseRegion(
+        cursor: cursor,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (d) => onDrag(d.delta),
+          onPanEnd: (_) => onEnd(),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            child: Icon(icon, color: Colors.white, size: 14),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TabsPainter extends CustomPainter {
+  _TabsPainter(this.tabs, {this.moving, this.moveDelta = Offset.zero, this.widthDelta = 0});
+  final List<TabBlock> tabs;
+  final String? moving;
+  final Offset moveDelta;
+  final double widthDelta;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final t in tabs) {
+      var shown = t;
+      if (t.id == moving && (moveDelta != Offset.zero || widthDelta != 0)) {
+        shown = t.copyWith(
+          x: t.x + moveDelta.dx / size.width,
+          y: t.y + moveDelta.dy / size.height,
+          width: math.max(0.08, t.width + widthDelta / size.width),
+        );
+      }
+      paintTabBlock(canvas, shown, size);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TabsPainter old) =>
+      !identical(old.tabs, tabs) || old.moving != moving || old.moveDelta != moveDelta || old.widthDelta != widthDelta;
+}
+
+/// Cursor: Kästchen auf Saite und Schlag, dazu die Spalte leicht hervorgehoben.
+class _CursorPainter extends CustomPainter {
+  _CursorPainter({
+    required this.layout,
+    required this.beat,
+    required this.string,
+    required this.color,
+    this.offset = Offset.zero,
+  });
+  final TabLayout layout;
+  final int beat, string;
+  final Color color;
+  final Offset offset;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final l = layout;
+    final g = l.gap;
+    final i = beat.clamp(0, l.xs.length - 1);
+    final cx = l.xs[i] + offset.dx;
+    final w = math.max(l.slotWidths[i] * 0.9, g * 1.5);
+    final column = Rect.fromLTRB(cx - w / 2, l.top - g * 0.7 + offset.dy, cx + w / 2, l.stemBottom + offset.dy);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(column, Radius.circular(g * 0.3)),
+      Paint()..color = color.withValues(alpha: 0.08),
+    );
+    final cell = Rect.fromCenter(center: Offset(cx, l.lineY(string) + offset.dy), width: w, height: g * 1.15);
+    final r = RRect.fromRectAndRadius(cell, Radius.circular(g * 0.25));
+    canvas.drawRRect(r, Paint()..color = color.withValues(alpha: 0.18));
+    canvas.drawRRect(
+      r,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(1.5, g * 0.12),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CursorPainter old) =>
+      old.beat != beat || old.string != string || old.layout != layout || old.offset != offset || old.color != color;
+}
+
+/// Vorschau beim Aufziehen einer neuen Tabulatur.
+class _PreviewPainter extends CustomPainter {
+  _PreviewPainter(this.a, this.b, this.pageWidth);
+  final Offset a, b;
+  final double pageWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0x997A3CF0)
+      ..strokeWidth = 1.2;
+    for (final piece in shapeGeometry(ShapeKind.tab, a, b, 1, pageWidth: pageWidth)) {
+      canvas.drawLine(piece.points.first, piece.points.last, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PreviewPainter old) => old.a != a || old.b != b;
+}

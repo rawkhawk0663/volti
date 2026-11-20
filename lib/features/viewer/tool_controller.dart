@@ -11,6 +11,9 @@ import 'ink_controller.dart';
 import 'rich_text.dart';
 import '../../app/l10n.dart';
 import 'shapes.dart';
+import 'tab_keys.dart';
+import 'tab_session.dart';
+import '../../core/ink/tab_block.dart';
 
 /// Was gerade aktiv ist.
 enum ToolMode {
@@ -36,6 +39,9 @@ enum ToolMode {
   /// Verschieben: ein Element (Strich, Stempel, Text) anfassen und ziehen –
   /// ohne es vorher einzukreisen.
   move,
+
+  /// Tabulatur: anlegen und mit Tastatur oder Zahlenfeld darin schreiben.
+  tab,
 }
 
 /// Ausgewählte Elemente auf einer Seite eines Stücks.
@@ -159,6 +165,29 @@ class ToolController extends ChangeNotifier {
   /// Teil). null = es wird keine Notiz getippt.
   final richText = ValueNotifier<RichTextTarget?>(null);
 
+  /// Die Tabulatur, in der gerade geschrieben wird (für das Zahlenfeld im
+  /// Werkzeugfenster). null = keine.
+  final tabSession = ValueNotifier<TabSession?>(null);
+
+  /// Tastenbelegung für Tabulaturen (nur auf diesem Gerät gemerkt, weil jede
+  /// Tastatur anders ist).
+  TabKeymap get tabKeys => _tabKeys ??= TabKeymap.fromJson(settings.text('tabKeys'));
+  TabKeymap? _tabKeys;
+
+  Future<void> setTabKeys(TabKeymap k) async {
+    _tabKeys = k;
+    await settings.setText('tabKeys', k.toJson());
+    notifyListeners();
+  }
+
+  /// Hintergrund für neue Tabulaturen (wie bei Text-Notizen; 0 = ohne).
+  int get tabBackground => int.tryParse(settings.text('tabBackground') ?? '') ?? TabBlock.noBackground;
+
+  Future<void> setTabBackground(int v) async {
+    await settings.setText('tabBackground', '$v');
+    notifyListeners();
+  }
+
   /// Startpunkt einer Sprungmarke, die noch auf ihr Ziel wartet.
   final linkStart = ValueNotifier<({InkController ink, int page, double x, double y})?>(null);
 
@@ -211,6 +240,7 @@ class ToolController extends ChangeNotifier {
     }
     if (m != ToolMode.lasso) clearSelection();
     if (m != ToolMode.link) linkStart.value = null;
+    if (m != ToolMode.tab) tabSession.value = null;
     // Lineal nur beim Bearbeiten (Wunsch des Besitzers): beim Verlassen weg.
     if (m == ToolMode.read && rulerVisible) {
       rulerVisible = false;

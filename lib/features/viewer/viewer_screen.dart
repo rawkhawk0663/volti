@@ -35,6 +35,7 @@ import '../../app/window_buttons.dart';
 import 'metronome.dart';
 import 'metronome_panel.dart';
 import 'audio_panel.dart';
+import 'tab_layer.dart';
 import 'score_audio_player.dart';
 import 'page_overview.dart';
 import 'page_strip.dart';
@@ -232,6 +233,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// Wird gerade eine Text-Notiz getippt? Dann blättern Tasten nicht um.
   bool _editingText = false;
+
+  /// Wird gerade in einer Tabulatur geschrieben? (Auch dann blättern Tasten nicht.)
+  bool _editingTab = false;
 
   /// Leiste oben/unten sichtbar (in der Spielansicht nur kurz).
   bool _controlsVisible = true;
@@ -937,7 +941,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   ];
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is KeyUpEvent || _editingText) return KeyEventResult.ignored;
+    if (event is KeyUpEvent || _editingText || _editingTab) return KeyEventResult.ignored;
     final key = event.logicalKey;
     final ctrl = HardwareKeyboard.instance.isControlPressed;
     final shift = HardwareKeyboard.instance.isShiftPressed;
@@ -989,6 +993,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
       tools.setMode(ToolMode.shape);
     } else if (down && key == LogicalKeyboardKey.keyJ) {
       tools.setMode(ToolMode.link);
+    } else if (down && !ctrl && key == LogicalKeyboardKey.keyB) {
+      tools.setMode(ToolMode.tab);
     } else if (down && !ctrl && key == LogicalKeyboardKey.keyV) {
       tools.setMode(ToolMode.move);
     } else if (down && !ctrl && key == LogicalKeyboardKey.keyA) {
@@ -1325,7 +1331,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// Beim Bearbeiten: zügig mit einem Finger wischen blättert (die Regeln
   /// stehen in [FingerSwipe]). Nicht beim Tippen einer Notiz und nicht am Lineal.
   void _onEditSwipe(int direction) {
-    if (!tools.swipeWhileEditing || _editingText || tools.rulerRecentlyUsed) return;
+    if (!tools.swipeWhileEditing || _editingText || _editingTab || tools.rulerRecentlyUsed) return;
     if (tools.mode == ToolMode.read) return;
     direction < 0 ? _next() : _prev();
   }
@@ -1520,6 +1526,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
                       controller: piece.ink,
                       tools: tools,
                       onEditingChanged: (v) => setState(() => _editingText = v),
+                    ),
+                  ),
+                  // Tabulaturen (mit Tastatur oder Zahlenfeld beschreibbar)
+                  RepaintBoundary(
+                    child: TabLayer(
+                      key: ValueKey('tabs/$key'),
+                      page: src,
+                      controller: piece.ink,
+                      tools: tools,
+                      onEditingChanged: (v) {
+                        if (mounted && _editingTab != v) setState(() => _editingTab = v);
+                      },
                     ),
                   ),
                   // Sprungmarken (blaue Punkte) und das Aufblinken am Ziel

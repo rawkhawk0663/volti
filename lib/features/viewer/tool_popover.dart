@@ -18,6 +18,9 @@ import 'stamp_paint.dart';
 import 'rich_text.dart';
 import 'text_layer.dart';
 import 'tool_controller.dart';
+import 'tab_keys.dart';
+import 'tab_session.dart';
+import '../../core/ink/tab_block.dart';
 import '../../app/l10n.dart';
 import '../../core/ink/stamp_names.dart';
 
@@ -51,6 +54,7 @@ String toolName(ToolMode m) => switch (m) {
   ToolMode.lasso => tr('Auswählen', 'Select'),
   ToolMode.link => tr('Sprungmarke', 'Jump link'),
   ToolMode.move => tr('Verschieben', 'Move'),
+  ToolMode.tab => tr('Tabulatur', 'Tablature'),
   _ => '',
 };
 
@@ -135,6 +139,7 @@ class ToolPopover extends StatelessWidget {
                         ToolMode.lasso => _LassoSettings(tools: tools, ink: ink, page: page),
                         ToolMode.link => _LinkSettings(tools: tools),
                         ToolMode.move => const _MoveSettings(),
+                        ToolMode.tab => _TabSettings(tools: tools),
                         _ => const SizedBox.shrink(),
                       },
               ),
@@ -1415,6 +1420,219 @@ class _MoveSettings extends StatelessWidget {
         ),
         style: theme.textTheme.bodyMedium,
       ),
+    );
+  }
+}
+
+// ----------------------------------------------------------------- Tabulatur
+/// Einstellungen und Zahlenfeld für Tabulaturen. Das Zahlenfeld schreibt in
+/// die Tabulatur, in der gerade der Cursor steht – so geht alles auch ohne
+/// Tastatur (oder ohne Ziffernblock).
+class _TabSettings extends StatelessWidget {
+  const _TabSettings({required this.tools});
+  final ToolController tools;
+
+  /// Notenwerte in der Notenschrift Bravura (ganze bis 32tel, Hals nach oben).
+  static const _noteGlyphs = {1: 0xE1D2, 2: 0xE1D3, 4: 0xE1D5, 8: 0xE1D7, 16: 0xE1D9, 32: 0xE1DB};
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return ValueListenableBuilder<TabSession?>(
+      valueListenable: tools.tabSession,
+      builder: (context, session, _) {
+        final block = session?.block;
+        final bg = block?.background ?? tools.tabBackground;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              session == null
+                  ? tr(
+                      'Mit Stift oder Maus auf der Seite ziehen (oder tippen), um eine Tabulatur anzulegen. '
+                          'Eine vorhandene antippen, um darin zu schreiben.',
+                      'Drag (or tap) on the page with the pen or mouse to add a tablature. '
+                          'Tap an existing one to write in it.',
+                    )
+                  : tr(
+                      'Bundzahl tippen (Ziffern-Reihe oben, Ziffernblock oder hier). Zweistellig: rasch hintereinander.',
+                      'Type the fret number (top row, number pad or here). Two digits: type them quickly.',
+                    ),
+              style: muted,
+            ),
+            if (session != null) ExcludeFocus(child: _TabKeypad(session: session, tools: tools)),
+            _Label(tr('Hintergrund', 'Background')),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final b in textBackgrounds)
+                  _Swatch(
+                    color: b == TabBlock.noBackground ? null : Color(b),
+                    tooltip: b == TabBlock.noBackground ? tr('Ohne Hintergrund', 'No background') : null,
+                    selected: bg == b,
+                    onTap: () {
+                      tools.setTabBackground(b);
+                      if (session != null) session.ink.updateTab(session.id, background: b);
+                    },
+                  ),
+              ],
+            ),
+            if (session != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      session.ink.deleteTab(session.id);
+                      tools.tabSession.value = null;
+                    },
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: Text(tr('Löschen', 'Delete')),
+                  ),
+                  const Spacer(),
+                  FilledButton(onPressed: () => tools.tabSession.value = null, child: Text(tr('Fertig', 'Done'))),
+                ],
+              ),
+            ],
+            const SizedBox(height: 6),
+            Text(tr('Tasten ändern: ⚙ → Noteneingabe', 'Change keys: ⚙ → Note input'), style: muted),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TabKeypad extends StatelessWidget {
+  const _TabKeypad({required this.session, required this.tools});
+  final TabSession session;
+  final ToolController tools;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: session,
+      builder: (context, _) {
+        final cur = session.current;
+        String tip(TabAction a) {
+          final k = tools.tabKeys[a];
+          return k == null ? a.label : '${a.label} (${k.label})';
+        }
+
+        Widget key(Widget child, VoidCallback onTap, {bool selected = false, String? tooltip, double width = 40}) =>
+            Tooltip(
+              message: tooltip ?? '',
+              child: SizedBox(
+                width: width,
+                height: 36,
+                child: Material(
+                  color: selected ? scheme.primaryContainer : scheme.surfaceContainerHigh,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: selected ? scheme.primary : scheme.outlineVariant),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: onTap,
+                    child: Center(child: child),
+                  ),
+                ),
+              ),
+            );
+        Widget glyph(int code) => Text(
+          String.fromCharCode(code),
+          style: TextStyle(fontFamily: 'Bravura', fontSize: 22, height: 1, color: scheme.onSurface),
+        );
+        final fret = cur == null || cur.bar ? null : cur.frets[session.string];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Label(tr('Notenwert', 'Note value')),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final v in tabValues)
+                  key(
+                    Padding(padding: const EdgeInsets.only(top: 6), child: glyph(_TabSettings._noteGlyphs[v]!)),
+                    () => session.setValue(v),
+                    selected: cur != null && !cur.bar && cur.value == v,
+                    tooltip: tip(TabAction.values.firstWhere((a) => a.noteValue == v)),
+                    width: 37,
+                  ),
+                key(
+                  const Text('·', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                  () => session.perform(TabAction.dot),
+                  selected: cur?.dotted ?? false,
+                  tooltip: tip(TabAction.dot),
+                  width: 37,
+                ),
+                key(glyph(0xE4E5), () => session.perform(TabAction.rest), tooltip: tip(TabAction.rest), width: 37),
+                key(
+                  const Text('|', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                  () => session.perform(TabAction.bar),
+                  tooltip: tip(TabAction.bar),
+                  width: 37,
+                ),
+              ],
+            ),
+            _Label(tr('Bund', 'Fret')),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (var f = 0; f <= TabEditor.maxFret; f++)
+                  key(Text('$f'), () => session.setFret(f), selected: fret == f, width: 44),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                key(
+                  const Icon(Icons.arrow_back, size: 18),
+                  () => session.perform(TabAction.left),
+                  tooltip: tip(TabAction.left),
+                ),
+                key(
+                  const Icon(Icons.arrow_upward, size: 18),
+                  () => session.perform(TabAction.up),
+                  tooltip: tip(TabAction.up),
+                ),
+                key(
+                  const Icon(Icons.arrow_downward, size: 18),
+                  () => session.perform(TabAction.down),
+                  tooltip: tip(TabAction.down),
+                ),
+                key(
+                  const Icon(Icons.arrow_forward, size: 18),
+                  () => session.perform(TabAction.right),
+                  tooltip: tip(TabAction.right),
+                ),
+                key(
+                  const Icon(Icons.backspace_outlined, size: 18),
+                  () => session.perform(TabAction.clearNote),
+                  tooltip: tip(TabAction.clearNote),
+                ),
+                key(
+                  const Icon(Icons.playlist_remove, size: 18),
+                  () => session.perform(TabAction.deleteBeat),
+                  tooltip: tip(TabAction.deleteBeat),
+                ),
+                key(
+                  const Icon(Icons.playlist_add, size: 18),
+                  () => session.perform(TabAction.insertBeat),
+                  tooltip: tip(TabAction.insertBeat),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 }

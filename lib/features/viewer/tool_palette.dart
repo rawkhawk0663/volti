@@ -205,6 +205,13 @@ class _ToolOverlayState extends State<ToolOverlay> {
               tool(ToolMode.shape, Icons.category_outlined, tr('Formen (F)', 'Shapes (F)')),
               tool(ToolMode.link, Icons.turn_right, tr('Sprungmarke (J)', 'Jump link (J)')),
               _BarButton(
+                icon: Icons.music_note,
+                label: 'TAB',
+                tooltip: tr('Tabulatur (B)', 'Tablature (B)'),
+                selected: mode == ToolMode.tab,
+                onTap: () => tools.tapTool(ToolMode.tab),
+              ),
+              _BarButton(
                 icon: Icons.layers_outlined,
                 tooltip: activeLayerLabel(ink) == null
                     ? tr('Ebenen', 'Layers')
@@ -261,8 +268,18 @@ class _Sep extends StatelessWidget {
 
 /// Knopf in der Leiste; [dot] zeigt die aktuelle Farbe des Werkzeugs.
 class _BarButton extends StatelessWidget {
-  const _BarButton({required this.icon, required this.tooltip, this.onTap, this.selected = false, this.dot});
+  const _BarButton({
+    required this.icon,
+    required this.tooltip,
+    this.onTap,
+    this.selected = false,
+    this.dot,
+    this.label,
+  });
   final IconData icon;
+
+  /// Kurze Aufschrift statt Symbol (z. B. „TAB“).
+  final String? label;
   final String tooltip;
   final VoidCallback? onTap;
   final bool selected;
@@ -275,7 +292,9 @@ class _BarButton extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onTap,
       isSelected: selected,
-      icon: Icon(icon),
+      icon: label == null
+          ? Icon(icon)
+          : Text(label!, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, letterSpacing: 0.4)),
       style: IconButton.styleFrom(
         backgroundColor: selected ? scheme.primaryContainer : null,
         foregroundColor: selected ? scheme.onPrimaryContainer : null,

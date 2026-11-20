@@ -15,6 +15,7 @@ import '../../core/library/sidecar_store.dart';
 import '../../core/pdf/paper.dart';
 import 'ink_layer.dart';
 import 'stamp_paint.dart';
+import 'tab_paint.dart';
 import 'text_layer.dart';
 
 /// Ein Stück für den Export: das geöffnete PDF, seine Anmerkungen und welche
@@ -95,6 +96,10 @@ void paintAnnotations(Canvas canvas, Size size, ScoreAnnotations a, int page) {
   }
   for (final t in a.visibleTextsOn(page)) {
     paintTextNote(canvas, t, size);
+  }
+  // Tabulaturen liegen wie in der Notenansicht zuoberst.
+  for (final t in a.visibleTabsOn(page)) {
+    paintTabBlock(canvas, t, size);
   }
 }
 
