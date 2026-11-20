@@ -244,6 +244,59 @@ void main() {
     });
   });
 
+  group('Wiederholungen, Haltebogen, Staccato, Akzent', () {
+    const q = TabBeat(frets: {0: 1});
+    test('Wiederholung Anfang und Ende hängen am Takt mit dem Cursor', () {
+      final e = TabEditor(const [q, q, TabBeat.bar(), q, q]);
+      e.beat = 3; // zweiter Takt
+      e.repeatStart();
+      expect(e.beats[2].kind, BarKind.repeatStart);
+      e.repeatEnd(); // letzter Takt: Taktstrich hinten
+      expect(e.beats.last.kind, BarKind.repeatEnd);
+      e.beat = 0;
+      e.repeatEnd(); // Ende des ersten Takts = Anfang des zweiten → beides
+      expect(e.beats[2].kind, BarKind.repeatBoth);
+      e.repeatEnd();
+      expect(e.beats[2].kind, BarKind.repeatStart, reason: 'nochmals = Ende wieder weg');
+      e.repeatStart(); // erster Takt: Zeichen ganz am Anfang
+      expect(e.beats.first.bar, isTrue);
+      expect(e.beats.first.kind, BarKind.repeatStart);
+      expect(e.beat, 1, reason: 'Cursor bleibt beim selben Schlag');
+      e.beat = e.beats.length - 2;
+      e.finalBar();
+      expect(e.beats.last.kind, BarKind.last);
+      final back = TabBeat.fromJson(const TabBeat.bar(kind: BarKind.repeatBoth).toJson());
+      expect(back.kind, BarKind.repeatBoth);
+    });
+
+    test('Haltebogen setzt die gleiche Bundzahl beim nächsten Schlag, gehaltene in Klammern', () {
+      final e = TabEditor(const [TabBeat(frets: {2: 5}), TabBeat(frets: {0: 1})]);
+      e.string = 2;
+      e.toggleTie();
+      expect(e.beats[0].ties, {2});
+      expect(e.beats[1].frets, {0: 1, 2: 5});
+      expect(tieTargets(e.beats), {(1, 2)});
+      e.toggleTie();
+      expect(e.beats[0].ties, isEmpty);
+    });
+
+    test('Staccato und Akzent pro Schlag, nicht bei Pausen, gespeichert', () {
+      final e = TabEditor(const [TabBeat(frets: {0: 3}), TabBeat()]);
+      e.toggleStaccato();
+      e.toggleAccent();
+      expect(e.beats[0].staccato, isTrue);
+      expect(e.beats[0].accent, isTrue);
+      e.beat = 1;
+      e.toggleStaccato();
+      expect(e.beats[1].staccato, isFalse, reason: 'Pause hat keine Artikulation');
+      final back = TabBeat.fromJson(e.beats[0].toJson());
+      expect(back, e.beats[0]);
+      e.beat = 0;
+      e.rest();
+      expect(e.beats[0].staccato, isFalse, reason: 'zur Pause gemacht = weg');
+    });
+  });
+
   group('Verschobene Taktstriche', () {
     const page = Size(1000, 1400);
     final beats = const [
@@ -343,16 +396,16 @@ void main() {
       expect(d.actionFor(LogicalKeyboardKey.keyA, ctrl: true, shift: false, alt: false), isNull);
       expect(digitOf(LogicalKeyboardKey.digit7), 7);
       expect(digitOf(LogicalKeyboardKey.numpad7), 7);
-      // E für Achtel: E gehörte niemandem
-      final r = d.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.keyE));
+      // M für Achtel: M gehörte niemandem
+      final r = d.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.keyM));
       expect(r.swapped, isNull);
-      // S (Sechzehntel) für Achtel: getauscht, Sechzehntel bekommt E
+      // S (Sechzehntel) für Achtel: getauscht, Sechzehntel bekommt M
       final r2 = r.map.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.keyS));
       expect(r2.swapped, TabAction.sixteenth);
-      expect(r2.map[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyE);
+      expect(r2.map[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyM);
       final back = TabKeymap.fromJson(r2.map.toJson());
       expect(back[TabAction.eighth]!.key, LogicalKeyboardKey.keyS);
-      expect(back[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyE);
+      expect(back[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyM);
       expect(back[TabAction.bar]!.key, LogicalKeyboardKey.keyT);
       expect(TabKeymap.fromJson('kaputt')[TabAction.rest]!.key, LogicalKeyboardKey.keyP);
       expect(const KeyBinding(LogicalKeyboardKey.keyK, ctrl: true).label, contains('K'));

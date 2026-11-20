@@ -3,6 +3,28 @@ import 'annotation_layer.dart';
 /// Notenwerte für Tabulatur-Schläge (Nenner: 1 = ganze, 4 = Viertel …).
 const tabValues = [1, 2, 4, 8, 16, 32];
 
+/// Arten von Taktstrichen.
+enum BarKind {
+  normal,
+
+  /// Wiederholung Anfang (dick, dünn, zwei Punkte).
+  repeatStart,
+
+  /// Wiederholung Ende (zwei Punkte, dünn, dick).
+  repeatEnd,
+
+  /// Ende und gleich wieder Anfang einer Wiederholung.
+  repeatBoth,
+
+  /// Schlussstrich (dünn, dick).
+  last;
+
+  static BarKind fromName(String? n) => BarKind.values.firstWhere((k) => k.name == n, orElse: () => normal);
+
+  bool get startsRepeat => this == repeatStart || this == repeatBoth;
+  bool get endsRepeat => this == repeatEnd || this == repeatBoth;
+}
+
 /// Bending-Stufen in Vierteltönen: ¼, ½, 1 (ganzer Ton) und 1½.
 const tabBends = [1, 2, 4, 6];
 
@@ -25,16 +47,26 @@ class TabBeat {
     this.bar = false,
     this.bends = const {},
     this.slides = const {},
-  }) : at = null;
+    this.ties = const {},
+    this.staccato = false,
+    this.accent = false,
+  }) : at = null,
+       kind = BarKind.normal;
 
   /// Taktstrich; [at] = von Hand gesetzte Lage (sonst automatisch).
-  const TabBeat.bar({this.at})
+  const TabBeat.bar({this.at, this.kind = BarKind.normal})
     : frets = const {},
       value = 4,
       dotted = false,
       bar = true,
       bends = const {},
-      slides = const {};
+      slides = const {},
+      ties = const {},
+      staccato = false,
+      accent = false;
+
+  /// Art des Taktstrichs (Wiederholung, Schlussstrich …).
+  final BarKind kind;
 
   /// Von Hand verschobener Taktstrich: Lage im Schreibbereich der Tabulatur
   /// (0 = gleich nach „TAB“, 1 = rechtes Ende). null = automatisch. Die
@@ -51,6 +83,13 @@ class TabBeat {
   /// rutscht (gibt es keine, ein kurzer Slide nach unten).
   final Set<int> slides;
 
+  /// Haltebögen: Saiten, deren Ton zur nächsten Bundzahl auf derselben Saite
+  /// gehalten wird (die gehaltene steht in Klammern).
+  final Set<int> ties;
+
+  /// Staccato (Punkt über dem Schlag) und Akzent („>“).
+  final bool staccato, accent;
+
   /// Notenwert als Nenner (1, 2, 4, 8, 16, 32).
   final int value;
   final bool dotted;
@@ -64,7 +103,16 @@ class TabBeat {
   /// Dauer in ganzen Noten (Viertel = 0,25).
   double get length => bar ? 0 : (1 / value) * (dotted ? 1.5 : 1);
 
-  TabBeat copyWith({Map<int, int>? frets, int? value, bool? dotted, Map<int, int>? bends, Set<int>? slides}) {
+  TabBeat copyWith({
+    Map<int, int>? frets,
+    int? value,
+    bool? dotted,
+    Map<int, int>? bends,
+    Set<int>? slides,
+    Set<int>? ties,
+    bool? staccato,
+    bool? accent,
+  }) {
     final f = frets ?? this.frets;
     // Bendings und Slides nur dort, wo es eine Bundzahl gibt.
     return TabBeat(
@@ -80,23 +128,33 @@ class TabBeat {
         for (final st in slides ?? this.slides)
           if (f.containsKey(st)) st,
       },
+      ties: {
+        for (final st in ties ?? this.ties)
+          if (f.containsKey(st)) st,
+      },
+      // Ohne Bundzahl (Pause) keine Artikulation.
+      staccato: f.isNotEmpty && (staccato ?? this.staccato),
+      accent: f.isNotEmpty && (accent ?? this.accent),
     );
   }
 
   Map<String, dynamic> toJson() => bar
-      ? {'bar': true, if (at != null) 'at': at}
+      ? {'bar': true, if (at != null) 'at': at, if (kind != BarKind.normal) 'k': kind.name}
       : {
           if (frets.isNotEmpty) 'f': {for (final e in frets.entries) '${e.key}': e.value},
           'v': value,
           if (dotted) 'dot': true,
           if (bends.isNotEmpty) 'bend': {for (final e in bends.entries) '${e.key}': e.value},
           if (slides.isNotEmpty) 'slide': (slides.toList()..sort()),
+          if (ties.isNotEmpty) 'tie': (ties.toList()..sort()),
+          if (staccato) 'stacc': true,
+          if (accent) 'acc': true,
         };
 
   static TabBeat fromJson(Map<String, dynamic> j) {
     if (j['bar'] == true) {
       final at = (j['at'] as num?)?.toDouble();
-      return TabBeat.bar(at: at?.clamp(0.0, 1.0));
+      return TabBeat.bar(at: at?.clamp(0.0, 1.0), kind: BarKind.fromName(j['k'] as String?));
     }
     final f = j['f'] as Map<String, dynamic>? ?? const {};
     final v = j['v'] as int? ?? 4;
@@ -117,6 +175,12 @@ class TabBeat {
         for (final st in j['slide'] as List<dynamic>? ?? const [])
           if (st is int && frets.containsKey(st)) st,
       },
+      ties: {
+        for (final st in j['tie'] as List<dynamic>? ?? const [])
+          if (st is int && frets.containsKey(st)) st,
+      },
+      staccato: frets.isNotEmpty && j['stacc'] == true,
+      accent: frets.isNotEmpty && j['acc'] == true,
     );
   }
 
@@ -128,22 +192,31 @@ class TabBeat {
       other is TabBeat &&
       other.bar == bar &&
       other.at == at &&
+      other.kind == kind &&
       other.value == value &&
       other.dotted == dotted &&
       _sameMap(other.frets, frets) &&
       _sameMap(other.bends, bends) &&
       other.slides.length == slides.length &&
-      other.slides.containsAll(slides);
+      other.slides.containsAll(slides) &&
+      other.ties.length == ties.length &&
+      other.ties.containsAll(ties) &&
+      other.staccato == staccato &&
+      other.accent == accent;
 
   @override
   int get hashCode => Object.hash(
     bar,
     at,
+    kind,
     value,
     dotted,
     Object.hashAllUnordered(frets.entries.map((e) => e.key * 100 + e.value)),
     Object.hashAllUnordered(bends.entries.map((e) => e.key * 100 + e.value)),
     Object.hashAllUnordered(slides),
+    Object.hashAllUnordered(ties),
+    staccato,
+    accent,
   );
 }
 
@@ -582,6 +655,44 @@ class TabEditor {
     _resetDigits();
   }
 
+  /// Haltebogen zur nächsten Note auf dieser Saite ein/aus. Hat der nächste
+  /// Schlag dort noch keine Bundzahl, bekommt er dieselbe.
+  void toggleTie() {
+    final b = current;
+    if (b == null || b.bar) return;
+    final fret = b.frets[string];
+    if (fret == null) return;
+    final ties = {...b.ties};
+    if (ties.remove(string)) {
+      beats[beat] = b.copyWith(ties: ties);
+    } else {
+      beats[beat] = b.copyWith(ties: ties..add(string));
+      for (var k = beat + 1; k < beats.length; k++) {
+        if (beats[k].bar) continue;
+        if (!beats[k].frets.containsKey(string)) {
+          beats[k] = beats[k].copyWith(frets: {...beats[k].frets, string: fret});
+        }
+        break;
+      }
+    }
+    _resetDigits();
+  }
+
+  /// Staccato bzw. Akzent für den Schlag unter dem Cursor ein/aus.
+  void toggleStaccato() {
+    final b = current;
+    if (b == null || b.bar || b.frets.isEmpty) return;
+    beats[beat] = b.copyWith(staccato: !b.staccato);
+    _resetDigits();
+  }
+
+  void toggleAccent() {
+    final b = current;
+    if (b == null || b.bar || b.frets.isEmpty) return;
+    beats[beat] = b.copyWith(accent: !b.accent);
+    _resetDigits();
+  }
+
   /// Ganzen Schlag (oder Taktstrich) unter dem Cursor entfernen.
   void deleteBeat() {
     if (beat >= beats.length) {
@@ -600,6 +711,61 @@ class TabEditor {
       if (beat >= m.start && beat <= m.end) return m;
     }
     return all.last;
+  }
+
+  /// Taktstrich mit einer anderen Art (Lage bleibt).
+  TabBeat _withKind(TabBeat bar, BarKind kind) => TabBeat.bar(at: bar.at, kind: kind);
+
+  /// Wiederholung Anfang vor dem Takt mit dem Cursor ein/aus.
+  void repeatStart() {
+    final cur = _currentMeasure;
+    final i = cur.start - 1;
+    if (i >= 0 && beats[i].bar) {
+      final k = beats[i].kind;
+      beats[i] = _withKind(beats[i], switch (k) {
+        BarKind.repeatStart => BarKind.normal,
+        BarKind.repeatBoth => BarKind.repeatEnd,
+        BarKind.repeatEnd => BarKind.repeatBoth,
+        _ => BarKind.repeatStart,
+      });
+    } else {
+      // Erster Takt: das Zeichen steht ganz am Anfang.
+      beats.insert(cur.start, const TabBeat.bar(kind: BarKind.repeatStart));
+      if (beat >= cur.start) beat++;
+    }
+    _resetDigits();
+  }
+
+  /// Wiederholung Ende nach dem Takt mit dem Cursor ein/aus.
+  void repeatEnd() => _setEnd(BarKind.repeatEnd);
+
+  /// Schlussstrich nach dem Takt mit dem Cursor ein/aus.
+  void finalBar() => _setEnd(BarKind.last);
+
+  void _setEnd(BarKind want) {
+    final cur = _currentMeasure;
+    // Steht der Cursor im leeren Platz hinter dem letzten Taktstrich, gilt
+    // dieser Taktstrich (der Takt davor endet dort).
+    final idx = cur.end < beats.length ? cur.end : (cur.start == cur.end && cur.start > 0 ? cur.start - 1 : null);
+    if (idx != null) {
+      final k = beats[idx].kind;
+      final BarKind next;
+      if (want == BarKind.repeatEnd) {
+        next = switch (k) {
+          BarKind.repeatEnd => BarKind.normal,
+          BarKind.repeatBoth => BarKind.repeatStart,
+          BarKind.repeatStart => BarKind.repeatBoth,
+          _ => BarKind.repeatEnd,
+        };
+      } else {
+        next = k == want ? BarKind.normal : want;
+      }
+      beats[idx] = _withKind(beats[idx], next);
+    } else {
+      // Letzter Takt: Taktstrich hinten anfügen.
+      beats.add(TabBeat.bar(kind: want));
+    }
+    _resetDigits();
   }
 
   /// Leeren Takt (Pausen) vor dem Takt mit dem Cursor einfügen. Alles danach

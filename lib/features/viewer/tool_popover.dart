@@ -1638,6 +1638,39 @@ class _TabKeypad extends StatelessWidget {
                   ),
               ],
             ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  key(
+                    const Text('⌒', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    () => session.perform(TabAction.tie),
+                    selected: cur?.ties.contains(session.string) ?? false,
+                    tooltip: tip(TabAction.tie),
+                    width: 37,
+                  ),
+                  key(
+                    Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A2)),
+                    () => session.perform(TabAction.staccato),
+                    selected: cur?.staccato ?? false,
+                    tooltip: tip(TabAction.staccato),
+                    width: 37,
+                  ),
+                  key(
+                    Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A0)),
+                    () => session.perform(TabAction.accent),
+                    selected: cur?.accent ?? false,
+                    tooltip: tip(TabAction.accent),
+                    width: 37,
+                  ),
+                  key(glyph(0xE040), () => session.perform(TabAction.repeatStart), tooltip: tip(TabAction.repeatStart), width: 37),
+                  key(glyph(0xE041), () => session.perform(TabAction.repeatEnd), tooltip: tip(TabAction.repeatEnd), width: 37),
+                  key(glyph(0xE032), () => session.perform(TabAction.finalBar), tooltip: tip(TabAction.finalBar), width: 37),
+                ],
+              ),
+            ),
             _Label(tr('Bund', 'Fret')),
             Wrap(
               spacing: 4,

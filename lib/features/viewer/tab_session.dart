@@ -147,6 +147,18 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.toggleSlide());
       case TabAction.bend:
         _edit((e) => e.cycleBend());
+      case TabAction.tie:
+        _edit((e) => e.toggleTie());
+      case TabAction.staccato:
+        _edit((e) => e.toggleStaccato());
+      case TabAction.accent:
+        _edit((e) => e.toggleAccent());
+      case TabAction.repeatStart:
+        _edit((e) => e.repeatStart());
+      case TabAction.repeatEnd:
+        _edit((e) => e.repeatEnd());
+      case TabAction.finalBar:
+        _edit((e) => e.finalBar());
       case TabAction.clearNote:
         _edit((e) => e.deleteSelection() ? null : e.clearNote());
       case TabAction.deleteBeat:
