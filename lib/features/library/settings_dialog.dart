@@ -671,6 +671,17 @@ class _UpdateSectionState extends State<UpdateSection> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(_message!, style: theme.textTheme.bodySmall),
           ),
+        if (Platform.isAndroid)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              tr(
+                'Tipp: Mit der App „Obtainium“ kommen Updates von selbst. Dort „App hinzufügen“ wählen und diese Adresse eintragen: github.com/rawkhawk0663/volti-releases',
+                'Tip: with the “Obtainium” app, updates arrive by themselves. Choose “Add app” there and enter this address: github.com/rawkhawk0663/volti-releases',
+              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
       ],
     );
   }

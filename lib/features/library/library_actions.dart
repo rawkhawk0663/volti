@@ -3,12 +3,14 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/library/backup.dart';
 import '../../app/error_log.dart';
 import '../../app/open_url.dart';
+import '../../app/visuals.dart';
 import '../../app/window_buttons.dart';
 import 'library_controller.dart';
 import 'settings_dialog.dart';
@@ -22,13 +24,13 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
 
   /// Sync-Knopf und Zahnrad für die Kopfzeile.
   List<Widget> headerActions() => [
-    if (canSync) SyncButton(sync: syncController, onSetup: setupSync),
+    SyncButton(sync: syncController, onSetup: setupSync),
     IconButton(
       tooltip: tr('Einstellungen', 'Settings'),
       icon: const Icon(Icons.settings_outlined),
       onPressed: () => showSettingsDialog(
         context,
-        sync: canSync ? syncController : null,
+        sync: syncController,
         onSetupSync: setupSync,
         onStopSync: stopSync,
         dataFolder: library.root,
@@ -43,8 +45,8 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
     const WindowButtons(),
   ];
 
-  /// Sync über einen Ordner gibt es vorerst nur am Computer.
-  bool get canSync => !Platform.isAndroid && !Platform.isIOS;
+  /// Am Computer (Datei-Fenster zum Speichern, Ordner als Sync-Ziel).
+  bool get isDesktop => !Platform.isAndroid && !Platform.isIOS;
 
   /// Sync einrichten: Dropbox, Google Drive oder ein Ordner (z. B. Proton Drive).
   Future<void> setupSync() async {
@@ -86,8 +88,8 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
                   Icons.cloud_outlined,
                   tr('Dropbox (empfohlen)', 'Dropbox (recommended)'),
                   tr(
-                    'Volti spricht direkt mit Dropbox, auch später auf Android. Die Daten liegen im Ordner „Apps“ von Dropbox.',
-                    'Volti talks to Dropbox directly, later on Android too. The data lives in Dropbox’s “Apps” folder.',
+                    'Volti spricht direkt mit Dropbox, am Computer und auf Android. Die Daten liegen im Ordner „Apps“ von Dropbox.',
+                    'Volti talks to Dropbox directly, on the computer and on Android. The data lives in Dropbox’s “Apps” folder.',
                   ),
                 ),
                 // Google Drive nur, wenn es eingerichtet ist (der Besitzer nutzt Dropbox).
@@ -101,15 +103,17 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
                       'Volti talks to Google Drive directly. The data lives in the folder “Volti”.',
                     ),
                   ),
-                option(
-                  SyncKind.folder,
-                  Icons.folder_outlined,
-                  tr('Ordner (z. B. Proton Drive)', 'Folder (e.g. Proton Drive)'),
-                  tr(
-                    'Ein Ordner, den ein Cloud-Programm auf diesem Computer abgleicht. Nur unter Windows.',
-                    'A folder that a cloud program keeps in sync on this computer. Windows only.',
+                // Ein Ordner als Ziel geht nur am Computer.
+                if (SyncController.folderPossible)
+                  option(
+                    SyncKind.folder,
+                    Icons.folder_outlined,
+                    tr('Ordner (z. B. Proton Drive)', 'Folder (e.g. Proton Drive)'),
+                    tr(
+                      'Ein Ordner, den ein Cloud-Programm auf diesem Computer abgleicht. Nur unter Windows.',
+                      'A folder that a cloud program keeps in sync on this computer. Windows only.',
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -125,12 +129,19 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
       if (mounted) setState(() {});
       return;
     }
+    // Android: Anmeldung mit Code (die Rückmeldung an das Gerät geht dort nicht).
+    if (choice == SyncKind.dropbox && SyncController.prefersCode) {
+      await _connectWithCode();
+      return;
+    }
     await _connectCloud(choice);
   }
 
   /// Anmeldung im Browser, solange ein Hinweis mit „Abbrechen“ steht.
+  /// Bei Dropbox gibt es dort „Geht nicht? Mit Code verbinden“.
   Future<void> _connectCloud(SyncKind kind) async {
     final cancel = Completer<void>();
+    var useCode = false;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -155,6 +166,14 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
             ],
           ),
           actions: [
+            if (kind == SyncKind.dropbox)
+              TextButton(
+                onPressed: () {
+                  useCode = true;
+                  if (!cancel.isCompleted) cancel.complete();
+                },
+                child: Text(tr('Geht nicht? Mit Code verbinden', 'Not working? Connect with a code')),
+              ),
             TextButton(
               onPressed: () {
                 if (!cancel.isCompleted) cancel.complete();
@@ -179,7 +198,28 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
     await bringWindowToFront();
     if (!mounted) return;
     setState(() {});
+    if (useCode) {
+      await _connectWithCode();
+      return;
+    }
     if (cancel.isCompleted && failed == null && !syncController.configured) return;
+    _connectedMessage(failed);
+  }
+
+  /// Anmeldung mit Code: Dropbox zeigt nach der Anmeldung einen Code, den man
+  /// hier einfügt (Android, und am Computer als Ersatz).
+  Future<void> _connectWithCode() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DropboxCodeDialog(sync: syncController),
+    );
+    if (!mounted) return;
+    setState(() {});
+    if (ok == true) _connectedMessage(null);
+  }
+
+  void _connectedMessage(String? failed) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 8),
@@ -236,7 +276,7 @@ mixin LibraryActions<T extends StatefulWidget> on State<T> {
     String two(int n) => n.toString().padLeft(2, '0');
     final name = 'Volti-Sicherung-${d.year}-${two(d.month)}-${two(d.day)}.zip';
     String path;
-    if (canSync) {
+    if (isDesktop) {
       final loc = await getSaveLocation(suggestedName: name, acceptedTypeGroups: [_zipType]);
       if (loc == null) return;
       path = loc.path.toLowerCase().endsWith('.zip') ? loc.path : '${loc.path}.zip';
@@ -424,6 +464,157 @@ class SyncButton extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Mit Dropbox verbinden per Code: 1. anmelden (Browser), 2. Code kopieren,
+/// 3. hier einfügen und verbinden.
+class _DropboxCodeDialog extends StatefulWidget {
+  const _DropboxCodeDialog({required this.sync});
+  final SyncController sync;
+
+  @override
+  State<_DropboxCodeDialog> createState() => _DropboxCodeDialogState();
+}
+
+class _DropboxCodeDialogState extends State<_DropboxCodeDialog> {
+  final _code = TextEditingController();
+  bool _started = false;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _guard(Future<void> Function() job) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await job();
+    } catch (e, st) {
+      ErrorLog.record(e, st, where: 'Sync verbinden');
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _start() => _guard(() async {
+    final url = widget.sync.beginCodeSignIn();
+    await openUrl(url);
+    if (mounted) setState(() => _started = true);
+  });
+
+  Future<void> _finish() => _guard(() async {
+    await widget.sync.finishCodeSignIn(_code.text);
+    if (mounted) Navigator.of(context).pop(true);
+  });
+
+  Future<void> _paste() async {
+    final d = await Clipboard.getData(Clipboard.kTextPlain);
+    final t = d?.text?.trim();
+    if (t != null && t.isNotEmpty) setState(() => _code.text = t);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    Widget step(int n, String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 12,
+            backgroundColor: theme.colorScheme.primaryContainer,
+            child: Text('$n', style: TextStyle(fontSize: 12, color: theme.colorScheme.onPrimaryContainer)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+    return AlertDialog(
+      title: Text(tr('Mit Dropbox verbinden', 'Connect to Dropbox')),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              step(
+                1,
+                tr(
+                  '„Bei Dropbox anmelden“ tippen. Der Browser öffnet sich.',
+                  'Tap “Sign in to Dropbox”. Your browser opens.',
+                ),
+              ),
+              step(
+                2,
+                tr(
+                  'Anmelden und Volti den Zugriff erlauben. Dropbox zeigt danach einen Code: auf „Kopieren“ tippen.',
+                  'Sign in and allow Volti access. Dropbox then shows a code: tap “Copy”.',
+                ),
+              ),
+              step(
+                3,
+                tr(
+                  'Zurück zu Volti wechseln, „Einfügen“ und dann „Verbinden“ tippen.',
+                  'Switch back to Volti, tap “Paste”, then “Connect”.',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _start,
+                  icon: const Icon(Icons.open_in_new),
+                  label: Text(tr('Bei Dropbox anmelden', 'Sign in to Dropbox')),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _code,
+                enabled: _started,
+                decoration: InputDecoration(
+                  labelText: tr('Code von Dropbox', 'Code from Dropbox'),
+                  suffixIcon: IconButton(
+                    tooltip: tr('Einfügen', 'Paste'),
+                    icon: const Icon(Icons.content_paste),
+                    onPressed: _started ? _paste : null,
+                  ),
+                ),
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _finish(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+              ],
+              if (_busy) ...[const SizedBox(height: 12), const LinearProgressIndicator()],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: Text(tr('Abbrechen', 'Cancel')),
+        ),
+        GradientButton(
+          compact: true,
+          icon: const Icon(Icons.link),
+          label: tr('Verbinden', 'Connect'),
+          onPressed: _busy || !_started || _code.text.trim().isEmpty ? null : _finish,
+        ),
+      ],
     );
   }
 }

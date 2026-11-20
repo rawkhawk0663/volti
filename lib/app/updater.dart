@@ -6,6 +6,7 @@ import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'open_url.dart';
 import 'version.dart';
 import 'l10n.dart';
 
@@ -353,8 +354,9 @@ class Updater {
     try {
       if (Platform.isWindows) {
         await Process.run('explorer.exe', [u.page.toString()]);
-      } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [u.page.toString()]);
+      } else {
+        // Android: Browser bzw. System öffnet die Download-Seite.
+        await openUrl(u.page);
       }
     } catch (_) {}
   }

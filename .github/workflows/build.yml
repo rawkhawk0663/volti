@@ -111,14 +111,19 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      # Bricht beim Herunterladen von Android-Teilen die Verbindung ab, einmal
-      # nochmals versuchen (bereits Geladenes bleibt erhalten).
+      # Mit festem Schlüssel signieren, damit Updates über die installierte
+      # App gehen, auch mit Obtainium (Geheimnisse VOLTI_KEYSTORE und
+      # VOLTI_KEYSTORE_PASSWORD). Bricht beim Herunterladen von Android-Teilen
+      # die Verbindung ab, einmal nochmals versuchen.
       - name: Android-App bauen
         env:
+          VOLTI_KEYSTORE: ${{ secrets.VOLTI_KEYSTORE }}
+          VOLTI_KEYSTORE_PASSWORD: ${{ secrets.VOLTI_KEYSTORE_PASSWORD }}
           DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
+          if [ -z "$VOLTI_KEYSTORE" ]; then echo "::warning::Kein Signier-Schlüssel hinterlegt – Test-Schlüssel wird verwendet."; fi
           ARGS="--release --build-name=${{ env.VERSION_PREFIX }}.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=VOLTI_VERSION=v${{ env.VERSION_PREFIX }}.${{ github.run_number }} --dart-define=DROPBOX_APP_KEY=$DROPBOX_APP_KEY --dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID --dart-define=GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET"
           flutter build apk $ARGS || (echo "Zweiter Versuch …" && sleep 30 && flutter build apk $ARGS)
       - run: mkdir -p dist && cp build/app/outputs/flutter-apk/app-release.apk dist/Volti-Android.apk
@@ -188,7 +193,9 @@ jobs:
           Download and run **\`Volti-Setup.exe\`**. If Windows says "Windows protected your PC": *More info → Run anyway*. Without installing: unzip \`Volti-Windows.zip\` and run \`Volti.exe\`.
           If Volti is already installed, update right in the app: ⚙ → *About Volti* → *Check for updates*.
 
-          \`Volti-Android.apk\`: Android-Testversion / Android test version.
+          ### Android
+          \`Volti-Android.apk\` herunterladen und öffnen. Automatische Updates: In der App *Obtainium* „App hinzufügen“ wählen und \`https://github.com/rawkhawk0663/volti-releases\` eintragen.
+          Download and open \`Volti-Android.apk\`. Automatic updates: in the *Obtainium* app choose "Add app" and enter \`https://github.com/rawkhawk0663/volti-releases\`.
           EOT
           sed -i 's/^          //' notes.md
           gh release create "$TAG" dist/* \

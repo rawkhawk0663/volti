@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 
 import '../../app/error_log.dart';
@@ -38,9 +38,9 @@ enum SyncKind {
 
 /// Steuert den Abgleich: wann er läuft, welcher Zustand angezeigt wird.
 ///
-/// Abgeglichen wird beim Start, alle zwei Minuten, kurz nach jeder Änderung
-/// und wenn man es von Hand auslöst.
-class SyncController extends ChangeNotifier {
+/// Abgeglichen wird beim Start, alle zwei Minuten, 4 Sekunden nach jeder
+/// Änderung, wenn Volti wieder in den Vordergrund kommt, und von Hand.
+class SyncController extends ChangeNotifier with WidgetsBindingObserver {
   SyncController({required this.library, required this.settings, required this.deviceDataDir});
 
   final LibraryController library;
@@ -121,8 +121,20 @@ class SyncController extends ChangeNotifier {
   File _baseFor(SyncKind? k) =>
       File(p.join(deviceDataDir, k == null || k == SyncKind.folder ? 'sync_base.json' : 'sync_base_${k.name}.json'));
 
+  bool _observing = false;
+
+  /// Unter Android geht die Rückmeldung an das Gerät nicht, dort mit Code.
+  static bool get prefersCode => Platform.isAndroid || Platform.isIOS;
+
+  /// Ein Ordner als Ziel geht nur am Computer.
+  static bool get folderPossible => !Platform.isAndroid && !Platform.isIOS;
+
   void start() {
     library.onLocalChange = scheduleSoon;
+    if (!_observing) {
+      WidgetsBinding.instance.addObserver(this);
+      _observing = true;
+    }
     if (!configured) return;
     _status = SyncStatus.idle;
     _periodic = Timer.periodic(const Duration(minutes: 2), (_) => syncNow());
@@ -144,9 +156,14 @@ class SyncController extends ChangeNotifier {
     start();
   }
 
-  /// Mit Dropbox oder Google Drive verbinden: Anmeldung im Browser
-  /// ([openBrowser]), danach wird Volti dort eingerichtet. [cancel] bricht ab.
-  Future<void> connectCloud(SyncKind k, {required Future<void> Function(Uri) openBrowser, Future<void>? cancel}) async {
+  /// Wieder im Vordergrund (z. B. nach dem Wechsel zu einer anderen App):
+  /// gleich abgleichen.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && configured) syncNow();
+  }
+
+  void _requireAvailable(SyncKind k) {
     if (!k.available) {
       throw CloudAuthException(
         tr(
@@ -155,9 +172,44 @@ class SyncController extends ChangeNotifier {
         ),
       );
     }
-    final key = '${k.name}Token';
+  }
+
+  /// Mit Dropbox oder Google Drive verbinden: Anmeldung im Browser
+  /// ([openBrowser]), die Antwort kommt von selbst zurück (am Computer).
+  /// [cancel] bricht ab.
+  Future<void> connectCloud(SyncKind k, {required Future<void> Function(Uri) openBrowser, Future<void>? cancel}) async {
+    _requireAvailable(k);
     final auth = k == SyncKind.dropbox ? OAuthClient.dropbox() : OAuthClient.google();
     await auth.signIn(openBrowser, cancel: cancel);
+    await _connected(k, auth);
+  }
+
+  /// Anmeldung mit Code (Dropbox), Schritt 1: Adresse zum Öffnen im Browser.
+  Uri beginCodeSignIn() {
+    _requireAvailable(SyncKind.dropbox);
+    final auth = OAuthClient.dropbox();
+    _pending = auth;
+    return auth.codeSignInUrl();
+  }
+
+  OAuthClient? _pending;
+
+  /// Schritt 2: den von Dropbox gezeigten Code einlösen und verbinden.
+  Future<void> finishCodeSignIn(String code) async {
+    final auth = _pending;
+    if (auth == null) {
+      throw CloudAuthException(
+        tr('Bitte zuerst „Bei Dropbox anmelden“ tippen.', 'Please tap “Sign in to Dropbox” first.'),
+      );
+    }
+    await auth.finishCodeSignIn(code);
+    _pending = null;
+    await _connected(SyncKind.dropbox, auth);
+  }
+
+  /// Nach der Anmeldung: Volti beim Dienst einrichten, Zugang merken, abgleichen.
+  Future<void> _connected(SyncKind k, OAuthClient auth) async {
+    final key = '${k.name}Token';
     final api = _api(k, auth);
     // Google: den Ordner „Volti“ neu suchen (anderes Konto möglich).
     if (api is GoogleDriveApi) {
@@ -330,6 +382,7 @@ class SyncController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_observing) WidgetsBinding.instance.removeObserver(this);
     _periodic?.cancel();
     _debounce?.cancel();
     super.dispose();

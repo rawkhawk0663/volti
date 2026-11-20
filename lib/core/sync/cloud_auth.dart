@@ -28,6 +28,12 @@ class CloudAuthException implements Exception {
 /// Anmeldung bei einem Cloud-Dienst (OAuth mit PKCE) und Verwaltung der
 /// Zugangsschlüssel. Der langlebige Schlüssel ([refreshToken]) wird auf dem
 /// Gerät gespeichert, der kurzlebige ([_access]) nur im Speicher gehalten.
+///
+/// Zwei Wege:
+/// - [signIn]: Der Browser meldet sich nach der Anmeldung bei einem kleinen
+///   Empfänger auf diesem Gerät zurück (Windows, Linux).
+/// - [codeSignInUrl] + [finishCodeSignIn]: Dropbox zeigt nach der Anmeldung
+///   einen Code, den man in Volti einfügt (Android, und als Ersatz überall).
 class OAuthClient {
   OAuthClient({
     required this.authorizeUrl,
@@ -52,6 +58,7 @@ class OAuthClient {
 
   String? _access;
   DateTime _accessUntil = DateTime(2000);
+  String? _codeVerifier;
 
   static OAuthClient dropbox({String? refreshToken, Future<void> Function(String)? onRefreshToken}) => OAuthClient(
     authorizeUrl: 'https://www.dropbox.com/oauth2/authorize',
@@ -109,8 +116,8 @@ class OAuthClient {
     if (servers.isEmpty) {
       throw CloudAuthException(
         tr(
-          'Der Anschluss $oauthPort ist belegt. Bitte Volti neu starten und nochmals versuchen.',
-          'Port $oauthPort is in use. Please restart Volti and try again.',
+          'Der Anschluss $oauthPort ist belegt. Bitte Volti neu starten oder „Mit Code verbinden“ wählen.',
+          'Port $oauthPort is in use. Please restart Volti or choose “Connect with a code”.',
         ),
       );
     }
@@ -165,10 +172,47 @@ class OAuthClient {
     }
   }
 
+  /// Adresse für die Anmeldung mit Code (ohne Rückmeldung an das Gerät).
+  /// Danach zeigt der Dienst einen Code, der mit [finishCodeSignIn]
+  /// eingelöst wird.
+  Uri codeSignInUrl() {
+    final verifier = _randomUrlSafe(48);
+    _codeVerifier = verifier;
+    final challenge = base64Url.encode(sha256.convert(ascii.encode(verifier)).bytes).replaceAll('=', '');
+    return Uri.parse(authorizeUrl).replace(
+      queryParameters: {
+        'client_id': clientId,
+        'response_type': 'code',
+        'code_challenge': challenge,
+        'code_challenge_method': 'S256',
+        'scope': ?scope,
+        ...extraAuthParams,
+      },
+    );
+  }
+
+  Future<void> finishCodeSignIn(String code) async {
+    final verifier = _codeVerifier;
+    if (verifier == null) {
+      throw CloudAuthException(
+        tr('Bitte zuerst „Bei Dropbox anmelden“ tippen.', 'Please tap “Sign in to Dropbox” first.'),
+      );
+    }
+    final c = code.trim();
+    if (c.isEmpty) throw CloudAuthException(tr('Bitte den Code einfügen.', 'Please paste the code.'));
+    await _token({'grant_type': 'authorization_code', 'code': c, 'code_verifier': verifier});
+    _codeVerifier = null;
+    if (refreshToken == null) {
+      throw CloudAuthException(
+        tr('Der Dienst hat keinen dauerhaften Zugang erteilt.', 'The service did not grant lasting access.'),
+      );
+    }
+  }
+
   static String _page(bool ok) =>
       '<!doctype html><meta charset="utf-8"><title>Volti</title>'
-      '<body style="font-family:sans-serif;background:#1f2a28;color:#fff;display:grid;place-items:center;height:90vh">'
-      '<div style="text-align:center"><h1 style="color:#5CC8B4">Volti</h1><p>'
+      '<body style="font-family:sans-serif;background:#0D0E11;color:#F3F4F6;display:grid;place-items:center;height:90vh">'
+      '<div style="text-align:center"><h1 style="background:linear-gradient(90deg,#FF7AC6,#9A6BFF);-webkit-background-clip:text;color:transparent">Volti</h1><p>'
       '${ok ? 'Verbunden – du kannst dieses Fenster schliessen.<br>Connected – you can close this window.' : 'Die Anmeldung hat nicht geklappt. / Sign-in failed.'}'
       '</p></div></body>';
 
@@ -183,10 +227,15 @@ class OAuthClient {
       final text = await res.transform(utf8.decoder).join();
       if (res.statusCode != 200) {
         throw CloudAuthException(
-          tr(
-            'Anmeldung beim Dienst fehlgeschlagen (${res.statusCode}): $text',
-            'Sign-in failed (${res.statusCode}): $text',
-          ),
+          text.contains('invalid_grant') && params['grant_type'] == 'authorization_code'
+              ? tr(
+                  'Der Code stimmt nicht oder ist abgelaufen. Bitte nochmals anmelden.',
+                  'The code is wrong or has expired. Please sign in again.',
+                )
+              : tr(
+                  'Anmeldung beim Dienst fehlgeschlagen (${res.statusCode}): $text',
+                  'Sign-in failed (${res.statusCode}): $text',
+                ),
         );
       }
       final j = jsonDecode(text) as Map<String, dynamic>;
