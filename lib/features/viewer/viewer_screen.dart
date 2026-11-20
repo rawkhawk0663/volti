@@ -1192,7 +1192,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     ),
                   ),
                 ),
-              if (_showDiagnostics)
+              if (_showDiagnostics && tools.developerMode)
                 Positioned(
                   right: 12,
                   bottom: 72,
@@ -1258,7 +1258,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       behavior: HitTestBehavior.translucent,
       onPointerDown: _diagnostics.record,
       onPointerMove: _diagnostics.record,
-      onPointerHover: _showDiagnostics ? _diagnostics.record : null,
+      onPointerHover: _showDiagnostics && tools.developerMode ? _diagnostics.record : null,
       onPointerUp: _diagnostics.record,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -1786,11 +1786,13 @@ class _TopBar extends StatelessWidget {
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
-                        CheckedPopupMenuItem(
-                          value: state._toggleDiagnostics,
-                          checked: state._showDiagnostics,
-                          child: Text(tr('Stift-Test anzeigen', 'Show pen test')),
-                        ),
+                        // Nur im Entwickler-Modus (⚙ → Über Volti).
+                        if (tools.developerMode)
+                          CheckedPopupMenuItem(
+                            value: state._toggleDiagnostics,
+                            checked: state._showDiagnostics,
+                            child: Text(tr('Stift-Test anzeigen', 'Show pen test')),
+                          ),
                       ],
                     ),
                     const WindowButtons(),

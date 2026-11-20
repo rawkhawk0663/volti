@@ -143,6 +143,10 @@ class ToolController extends ChangeNotifier {
   bool get teaching => settings.flag('teaching', orElse: false);
   Future<void> setTeaching(bool v) => _setFlag('teaching', v);
 
+  /// Entwickler-Modus: zeigt Hilfen zur Fehlersuche (z. B. den Stift-Test).
+  bool get developerMode => settings.flag('developerMode', orElse: false);
+  Future<void> setDeveloperMode(bool v) => _setFlag('developerMode', v);
+
   /// Kammerton für Stimmgerät und Stimmton (nur auf diesem Gerät gemerkt).
   double get tuningA4 => double.tryParse(settings.text('tuningA4') ?? '') ?? 440;
   Future<void> setTuningA4(double v) => settings.setText('tuningA4', '$v');

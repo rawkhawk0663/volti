@@ -551,6 +551,18 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     ),
     const SizedBox(height: 8),
     const UpdateSection(),
+    SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(tr('Entwickler-Modus', 'Developer mode')),
+      subtitle: Text(
+        tr(
+          'Zeigt Hilfen zur Fehlersuche, z. B. „Stift-Test anzeigen“ im ⋮-Menü der Notenansicht.',
+          'Shows troubleshooting aids, e.g. “Show pen test” in the ⋮ menu of the music view.',
+        ),
+      ),
+      value: tools.developerMode,
+      onChanged: tools.setDeveloperMode,
+    ),
     const SizedBox(height: 8),
     Wrap(
       spacing: 8,
