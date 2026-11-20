@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
+import '../../app/scaled_box.dart';
 import '../../app/theme.dart';
 import '../../app/visuals.dart';
 import '../../core/pdf/page_image_cache.dart';
@@ -1003,7 +1004,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
                 child: ExcludeFocus(
                   child: RepaintBoundary(
-                    child: TunerPanel(tuner: _tuner, onClose: () => setState(() => _tunerOpen = false)),
+                    child: ScaledBox(
+                      scale: compactScale(MediaQuery.sizeOf(context)),
+                      child: TunerPanel(tuner: _tuner, onClose: () => setState(() => _tunerOpen = false)),
+                    ),
                   ),
                 ),
               ),
@@ -1013,12 +1017,15 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
                 child: ExcludeFocus(
                   child: RepaintBoundary(
-                    child: MetronomePanel(
-                      metronome: _metronome,
-                      onClose: () => setState(() => _metronomeOpen = false),
-                      onRemember: _leftPiece?.cache == null ? null : _rememberTempo,
-                      songTempo: _leftPiece?.tempo,
-                      songTitle: _leftPiece?.item.title,
+                    child: ScaledBox(
+                      scale: compactScale(MediaQuery.sizeOf(context)),
+                      child: MetronomePanel(
+                        metronome: _metronome,
+                        onClose: () => setState(() => _metronomeOpen = false),
+                        onRemember: _leftPiece?.cache == null ? null : _rememberTempo,
+                        songTempo: _leftPiece?.tempo,
+                        songTitle: _leftPiece?.item.title,
+                      ),
                     ),
                   ),
                 ),

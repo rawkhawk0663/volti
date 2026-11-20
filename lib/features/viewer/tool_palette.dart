@@ -6,6 +6,7 @@ import 'tool_controller.dart';
 import 'freeze.dart';
 import 'tool_popover.dart';
 import '../../app/l10n.dart';
+import '../../app/scaled_box.dart';
 import '../../app/visuals.dart';
 
 /// Werkzeuge beim Bearbeiten: eine feste, schmale Leiste am Seitenrand und
@@ -30,14 +31,21 @@ class ToolOverlay extends StatefulWidget {
 }
 
 class _ToolOverlayState extends State<ToolOverlay> {
-  static const _barWidth = 60.0, _margin = 10.0;
+  static const _barWidth = 60.0;
 
   ToolController get tools => widget.tools;
+
+  /// Auf dem Handy werden Leiste und Fenster verkleinert ([compactScale]).
+  double _scale = 1;
+  double get _margin => _scale < 1 ? 4 : 10;
+  double get _popoverWidth => ToolPopover.width * _scale;
 
   /// Position während des Ziehens (danach in tools.popoverOffset gemerkt).
   final _dragOffset = ValueNotifier<Offset?>(null);
 
   void _drag(Offset delta, Size screen) {
+    // Die Verschiebung kommt aus dem (verkleinerten) Fenster.
+    delta = delta * _scale;
     final from = _dragOffset.value ?? tools.popoverOffset ?? _defaultOffset(screen);
     final to = _clamp(from + delta, screen);
     _dragOffset.value = to;
@@ -52,14 +60,14 @@ class _ToolOverlayState extends State<ToolOverlay> {
 
   Offset _defaultOffset(Size screen) {
     final x = tools.paletteLeft
-        ? _margin + _barWidth + 12
-        : screen.width - _margin - _barWidth - 12 - ToolPopover.width;
-    return Offset(x, 64);
+        ? _margin + _barWidth * _scale + 12 * _scale
+        : screen.width - _margin - _barWidth * _scale - 12 * _scale - _popoverWidth;
+    return Offset(x, 64 * _scale);
   }
 
   /// Fenster innerhalb des Bildschirms halten.
   Offset _clamp(Offset o, Size screen) => Offset(
-    o.dx.clamp(0, (screen.width - ToolPopover.width).clamp(0, double.infinity)),
+    o.dx.clamp(0, (screen.width - _popoverWidth).clamp(0, double.infinity)),
     o.dy.clamp(0, (screen.height - 120).clamp(0, double.infinity)),
   );
 
@@ -90,6 +98,7 @@ class _ToolOverlayState extends State<ToolOverlay> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final screen = constraints.biggest;
+        _scale = compactScale(MediaQuery.sizeOf(context));
         return ListenableBuilder(
           listenable: Listenable.merge([tools, widget.ink]),
           builder: (context, _) {
@@ -105,7 +114,10 @@ class _ToolOverlayState extends State<ToolOverlay> {
                   right: tools.paletteLeft ? null : _margin,
                   child: Center(
                     child: RepaintBoundary(
-                      child: FreezeWhileDrawing(drawing: tools.isDrawing, child: _buildBar(context)),
+                      child: FreezeWhileDrawing(
+                        drawing: tools.isDrawing,
+                        child: ScaledBox(scale: _scale, child: _buildBar(context)),
+                      ),
                     ),
                   ),
                 ),
@@ -117,12 +129,15 @@ class _ToolOverlayState extends State<ToolOverlay> {
                     child: RepaintBoundary(
                       child: FreezeWhileDrawing(
                         drawing: tools.isDrawing,
-                        child: ToolPopover(
-                          key: ValueKey(tools.layersOpen ? 'layers' : mode),
-                          tools: tools,
-                          ink: widget.ink,
-                          page: widget.page,
-                          onDrag: (d) => _drag(d, screen),
+                        child: ScaledBox(
+                          scale: _scale,
+                          child: ToolPopover(
+                            key: ValueKey(tools.layersOpen ? 'layers' : mode),
+                            tools: tools,
+                            ink: widget.ink,
+                            page: widget.page,
+                            onDrag: (d) => _drag(d, screen),
+                          ),
                         ),
                       ),
                     ),

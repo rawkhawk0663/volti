@@ -211,6 +211,11 @@ flutter test
 ## Bedienung nur mit Finger/Stift
 - Die App soll vollständig als reine Tablet-App bedienbar sein (Wunsch des Besitzers). **Langes Drücken ist überall der Rechtsklick.** Wo es ein Rechtsklick-Menü gibt, braucht es auch `onLongPress`. Hinweise (`Tooltip`) erscheinen deshalb nur beim Darüberfahren mit der Maus (`TooltipTriggerMode.manual` im Theme), damit sie das lange Drücken nicht abfangen.
 
+## Kleine Bildschirme (Handy, Wunsch des Besitzers)
+- Werkzeugleiste, Werkzeugfenster, Metronom und Stimmgerät werden auf dem Handy verkleinert (`compactScale` in `lib/app/scaled_box.dart`: kürzere Seite unter 600 Punkten → 0,78). `ScaledBox` verkleinert samt Platzbedarf und Berührungen; Verschiebungen aus dem Fenster (`onDrag`) kommen in seinen eigenen Massen und werden mit dem Faktor umgerechnet.
+- Das Einstellungsfenster ist auf schmalen oder niedrigen Bildschirmen (Breite unter 640 oder Höhe unter 520) ganzseitig, die Kategorien stehen oben als waagrechte Leiste.
+- Auswahl aus wenigen Möglichkeiten über `AdaptiveChoice` (`lib/app/adaptive_choice.dart`): nebeneinander, wenn Platz ist, sonst untereinander. Auf dem Handy brachen die Wörter im `SegmentedButton` sonst Buchstabe für Buchstabe um.
+
 ## Stolperfallen
 - **Schrift in selbst erzeugten PDFs:** nie die variablen Schriften aus `assets/fonts` einbetten, sondern die festen Schnitte `assets/fonts/pdf/RobotoPdf-Regular/Bold/Italic/BoldItalic.ttf` (`voltiPdfTheme`, erzeugt mit `tool/make_pdf_fonts.py`). Variable Schriften zeigen manche PDF-Programme nicht an.
 - In `pw.Page` (eine Seite) darf nichts über die Seite hinausragen, sonst lässt das `pdf`-Paket den Inhalt ganz weg. Lange Listen in `pw.MultiPage` oder passend verkleinern.

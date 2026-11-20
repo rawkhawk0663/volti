@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../app/adaptive_choice.dart';
 import '../../app/error_log.dart';
 import '../../app/updater.dart';
 import '../../app/version.dart';
@@ -136,13 +137,79 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     final size = MediaQuery.sizeOf(context);
     final pages = _pages;
     if (!pages.contains(_page)) _page = pages.first;
+    // Handy (hoch oder quer): ganzer Bildschirm statt Fenster mit Menüleiste.
+    final narrow = size.width < 640 || size.height < 520;
+    Widget content() => ListView(
+      padding: EdgeInsets.fromLTRB(narrow ? 16 : 24, 8, narrow ? 16 : 24, 24),
+      children: switch (_page) {
+        _Page.appearance => _appearance(context, theme),
+        _Page.music => _music(context, theme),
+        _Page.teaching => _teaching(context, theme),
+        _Page.sync => _syncSection(context, sync!),
+        _Page.backup => _backup(context, theme),
+        _Page.about => _about(context, theme),
+      },
+    );
+    final listenable = Listenable.merge([tools, tools.themeMode, ?sync]);
+    if (narrow) {
+      // Handy: ganzer Bildschirm, Kategorien oben als waagrechte Leiste.
+      return Dialog.fullscreen(
+        backgroundColor: theme.colorScheme.surface,
+        child: SafeArea(
+          child: ListenableBuilder(
+            listenable: listenable,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 4, 4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings_outlined, color: theme.colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(tr('Einstellungen', 'Settings'), style: theme.textTheme.titleLarge)),
+                      IconButton(
+                        tooltip: tr('Schliessen', 'Close'),
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                  child: Row(
+                    children: [
+                      for (final p in pages)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: ChoiceChip(
+                            avatar: _icon(p, selected: p == _page),
+                            label: Text(_label(p)),
+                            selected: p == _page,
+                            showCheckmark: false,
+                            onSelected: (_) => setState(() => _page = p),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(child: content()),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: 820, maxHeight: math.min(size.height - 32, 640)),
         child: ListenableBuilder(
-          listenable: Listenable.merge([tools, tools.themeMode, ?sync]),
+          listenable: listenable,
           builder: (context, _) => Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -183,19 +250,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                        children: switch (_page) {
-                          _Page.appearance => _appearance(context, theme),
-                          _Page.music => _music(context, theme),
-                          _Page.teaching => _teaching(context, theme),
-                          _Page.sync => _syncSection(context, sync!),
-                          _Page.backup => _backup(context, theme),
-                          _Page.about => _about(context, theme),
-                        },
-                      ),
-                    ),
+                    Expanded(child: content()),
                   ],
                 ),
               ),
@@ -207,45 +262,42 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   }
 
   List<Widget> _appearance(BuildContext context, ThemeData theme) => [
-    SegmentedButton<ThemeMode>(
-      segments: [
-        ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_outlined), label: Text(tr('Hell', 'Light'))),
-        ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_outlined), label: Text(tr('Dunkel', 'Dark'))),
-        ButtonSegment(
-          value: ThemeMode.system,
-          icon: const Icon(Icons.brightness_auto_outlined),
-          label: Text(Platform.isWindows ? tr('Wie Windows', 'Like Windows') : tr('Wie das System', 'Like the system')),
+    AdaptiveChoice<ThemeMode>(
+      options: [
+        ChoiceOption(ThemeMode.light, tr('Hell', 'Light'), icon: Icons.light_mode_outlined),
+        ChoiceOption(ThemeMode.dark, tr('Dunkel', 'Dark'), icon: Icons.dark_mode_outlined),
+        ChoiceOption(
+          ThemeMode.system,
+          Platform.isWindows ? tr('Wie Windows', 'Like Windows') : tr('Wie das System', 'Like the system'),
+          icon: Icons.brightness_auto_outlined,
         ),
       ],
-      selected: {tools.themeMode.value},
-      onSelectionChanged: (s) => tools.setThemeMode(s.first),
+      selected: tools.themeMode.value,
+      onChanged: tools.setThemeMode,
     ),
     const SizedBox(height: 16),
     // Absichtlich zweisprachig, damit man die Sprache auch findet,
     // wenn man die eingestellte nicht versteht.
     Text('Sprache · Language', style: theme.textTheme.bodyMedium),
     const SizedBox(height: 8),
-    SegmentedButton<AppLanguage>(
-      segments: [
-        for (final l in AppLanguage.values)
-          ButtonSegment(value: l, icon: const Icon(Icons.translate), label: Text(l.label)),
-      ],
-      selected: {L10n.language.value},
-      onSelectionChanged: (s) => tools.setLanguage(s.first),
+    AdaptiveChoice<AppLanguage>(
+      options: [for (final l in AppLanguage.values) ChoiceOption(l, l.label, icon: Icons.translate)],
+      selected: L10n.language.value,
+      onChanged: tools.setLanguage,
     ),
   ];
 
   List<Widget> _music(BuildContext context, ThemeData theme) => [
     Text(tr('Seiten nebeneinander', 'Pages side by side'), style: theme.textTheme.bodyMedium),
     const SizedBox(height: 8),
-    SegmentedButton<PageLayout>(
-      segments: [
-        ButtonSegment(value: PageLayout.auto, label: Text(tr('Automatisch', 'Automatic'))),
-        ButtonSegment(value: PageLayout.single, label: Text(tr('Immer eine', 'Always one'))),
-        ButtonSegment(value: PageLayout.double, label: Text(tr('Immer zwei', 'Always two'))),
+    AdaptiveChoice<PageLayout>(
+      options: [
+        ChoiceOption(PageLayout.auto, tr('Automatisch', 'Automatic')),
+        ChoiceOption(PageLayout.single, tr('Immer eine', 'Always one')),
+        ChoiceOption(PageLayout.double, tr('Immer zwei', 'Always two')),
       ],
-      selected: {tools.pageLayout},
-      onSelectionChanged: (s) => tools.setPageLayout(s.first),
+      selected: tools.pageLayout,
+      onChanged: tools.setPageLayout,
     ),
     Padding(
       padding: const EdgeInsets.only(top: 4),
