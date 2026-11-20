@@ -65,6 +65,7 @@ class TabSession extends ChangeNotifier {
   void digit(int d) => _edit((e) => e.digit(d));
   void setFret(int f) => _edit((e) => e.setFret(f));
   void setValue(int v) => _edit((e) => e.setValue(v));
+  void bend(int quarters) => _edit((e) => e.bend(quarters));
 
   /// Eine Aktion (Taste oder Knopf). Gibt false zurück bei [TabAction.finish] –
   /// das Beenden erledigt der Aufrufer.
@@ -93,6 +94,10 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.rest());
       case TabAction.bar:
         _edit((e) => e.bar());
+      case TabAction.slide:
+        _edit((e) => e.toggleSlide());
+      case TabAction.bend:
+        _edit((e) => e.cycleBend());
       case TabAction.clearNote:
         _edit((e) => e.clearNote());
       case TabAction.deleteBeat:

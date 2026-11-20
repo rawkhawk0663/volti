@@ -51,6 +51,40 @@ class _TabLayerState extends State<TabLayer> {
   Offset _moveDelta = Offset.zero;
   double _widthDelta = 0;
 
+  /// Taktstrich, der gerade gezogen wird, und seine Stelle in Pixeln.
+  int? _barIndex;
+  double _barX = 0;
+
+  /// Die bearbeitete Tabulatur, mit dem gerade gezogenen Taktstrich an der
+  /// neuen Stelle (nur Anzeige, gespeichert wird beim Loslassen).
+  TabBlock _preview(TabBlock t, Size size) {
+    final i = _barIndex;
+    if (i == null || i >= t.beats.length || !t.beats[i].bar) return t;
+    final l = layoutTab(t, size);
+    final beats = [...t.beats];
+    beats[i] = TabBeat.bar(at: l.fractionAt(_barX));
+    return t.copyWith(beats: beats);
+  }
+
+  /// Wie weit ein Taktstrich gezogen werden darf: nicht über die Nachbarn
+  /// (vorheriger bzw. nächster Taktstrich, Anfang und Ende) hinaus.
+  (double, double) _barLimits(TabBlock t, TabLayout l, int i) {
+    var lo = l.contentStart, hi = l.contentEnd;
+    for (var k = i - 1; k >= 0; k--) {
+      if (t.beats[k].bar) {
+        lo = l.xs[k];
+        break;
+      }
+    }
+    for (var k = i + 1; k < t.beats.length; k++) {
+      if (t.beats[k].bar) {
+        hi = l.xs[k];
+        break;
+      }
+    }
+    return (lo + l.gap * 1.5, math.max(lo + l.gap * 1.5, hi - l.gap * 1.5));
+  }
+
   bool _reported = false;
 
   InkController get c => widget.controller;
@@ -155,16 +189,26 @@ class _TabLayerState extends State<TabLayer> {
     final top = math.min(geo.first.points.first.dy, geo.last.points.first.dy);
     final bottom = math.max(geo.first.points.first.dy, geo.last.points.first.dy);
     final left = math.min(a.dx, b.dx), right = math.max(a.dx, b.dx);
+    // Nur waagrecht gezogen (übliche Höhe): die im Fenster gewählte Grösse.
+    var gap = (bottom - top) / (TabBlock.strings - 1) / size.width;
+    if ((gap - TabBlock.defaultGap).abs() < 1e-6) gap = tools.tabGap;
     final id = c.addTab(
       page: widget.page,
       x: left / size.width,
       y: top / size.height,
       width: (right - left) / size.width,
-      gap: (bottom - top) / (TabBlock.strings - 1) / size.width,
+      gap: gap,
       background: tools.tabBackground,
     );
     final t = c.annotations.tab(id);
     if (t != null) _start(t);
+  }
+
+  void _resetBar(TabBlock t, int i) {
+    if (i >= t.beats.length || t.beats[i].at == null) return;
+    final beats = [...t.beats];
+    beats[i] = const TabBeat.bar();
+    c.updateTab(t.id, beats: beats);
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
@@ -222,6 +266,7 @@ class _TabLayerState extends State<TabLayer> {
                       child: CustomPaint(
                         painter: _TabsPainter(
                           tabs,
+                          preview: editing == null ? null : _preview(editing, size),
                           moving: editing?.id,
                           moveDelta: _moveDelta,
                           widthDelta: _widthDelta,
@@ -263,7 +308,8 @@ class _TabLayerState extends State<TabLayer> {
     );
   }
 
-  List<Widget> _editingOverlay(TabSession s, TabBlock t, Size size) {
+  List<Widget> _editingOverlay(TabSession s, TabBlock saved, Size size) {
+    final t = _preview(saved, size);
     final l = layoutTab(t, size);
     final scheme = Theme.of(context).colorScheme;
     final g = l.gap;
@@ -292,6 +338,47 @@ class _TabLayerState extends State<TabLayer> {
           },
         ),
       ),
+      // Griffe an den Taktstrichen: ziehen verschiebt den Taktstrich, die
+      // Schläge davor und danach verteilen sich neu. Lange drücken (oder
+      // Rechtsklick) = wieder automatisch.
+      for (var i = 0; i < t.beats.length; i++)
+        if (t.beats[i].bar)
+          Positioned(
+            left: l.xs[i] - handle * 0.4 + _moveDelta.dx,
+            top: l.top - g * 0.9 - handle * 0.8 + _moveDelta.dy,
+            width: handle * 0.8,
+            height: handle * 0.8,
+            child: GestureDetector(
+              onLongPress: () => _resetBar(saved, i),
+              onSecondaryTap: () => _resetBar(saved, i),
+              child: _Handle(
+                icon: Icons.swap_horiz,
+                tooltip: tr(
+                  'Taktstrich verschieben (lange drücken: wieder automatisch)',
+                  'Move bar line (long-press: automatic again)',
+                ),
+                cursor: SystemMouseCursors.resizeLeftRight,
+                small: true,
+                filled: t.beats[i].at != null,
+                onDrag: (d) {
+                  final base = layoutTab(saved, size);
+                  final (lo, hi) = _barLimits(saved, base, i);
+                  setState(() {
+                    if (_barIndex != i) {
+                      _barIndex = i;
+                      _barX = base.xs[i];
+                    }
+                    _barX = (_barX + d.dx).clamp(lo, hi);
+                  });
+                },
+                onEnd: () {
+                  final moved = _preview(saved, size);
+                  setState(() => _barIndex = null);
+                  c.updateTab(saved.id, beats: moved.beats);
+                },
+              ),
+            ),
+          ),
       // Griff für die Breite (rechts)
       Positioned(
         left: l.endX + _widthDelta - handle * 0.5,
@@ -316,6 +403,8 @@ class _TabLayerState extends State<TabLayer> {
 
 class _Handle extends StatelessWidget {
   const _Handle({
+    this.small = false,
+    this.filled = true,
     required this.icon,
     required this.tooltip,
     required this.cursor,
@@ -328,11 +417,19 @@ class _Handle extends StatelessWidget {
   final ValueChanged<Offset> onDrag;
   final VoidCallback onEnd;
 
+  /// Kleiner Griff (Taktstriche).
+  final bool small;
+
+  /// Ausgefüllt; sonst nur umrandet (Taktstrich noch automatisch).
+  final bool filled;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: tooltip,
+      // Nur beim Darüberfahren mit der Maus: langes Drücken ist der Rechtsklick.
+      triggerMode: TooltipTriggerMode.manual,
       child: MouseRegion(
         cursor: cursor,
         child: GestureDetector(
@@ -341,11 +438,11 @@ class _Handle extends StatelessWidget {
           onPanEnd: (_) => onEnd(),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: scheme.primary,
+              color: filled ? scheme.primary : Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 1.5),
+              border: Border.all(color: filled ? Colors.white : scheme.primary, width: 1.5),
             ),
-            child: Icon(icon, color: Colors.white, size: 14),
+            child: Icon(icon, color: filled ? Colors.white : scheme.primary, size: small ? 11 : 14),
           ),
         ),
       ),
@@ -354,15 +451,19 @@ class _Handle extends StatelessWidget {
 }
 
 class _TabsPainter extends CustomPainter {
-  _TabsPainter(this.tabs, {this.moving, this.moveDelta = Offset.zero, this.widthDelta = 0});
+  _TabsPainter(this.tabs, {this.preview, this.moving, this.moveDelta = Offset.zero, this.widthDelta = 0});
   final List<TabBlock> tabs;
+
+  /// Bearbeitete Tabulatur mit Änderungen, die noch nicht gespeichert sind.
+  final TabBlock? preview;
   final String? moving;
   final Offset moveDelta;
   final double widthDelta;
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final t in tabs) {
+    for (final saved in tabs) {
+      final t = preview != null && preview!.id == saved.id ? preview! : saved;
       var shown = t;
       if (t.id == moving && (moveDelta != Offset.zero || widthDelta != 0)) {
         shown = t.copyWith(
@@ -377,7 +478,7 @@ class _TabsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TabsPainter old) =>
-      !identical(old.tabs, tabs) || old.moving != moving || old.moveDelta != moveDelta || old.widthDelta != widthDelta;
+      !identical(old.tabs, tabs) || !identical(old.preview, preview) || old.moving != moving || old.moveDelta != moveDelta || old.widthDelta != widthDelta;
 }
 
 /// Cursor: Kästchen auf Saite und Schlag, dazu die Spalte leicht hervorgehoben.

@@ -11,6 +11,7 @@ import 'package:volti/features/viewer/ink_controller.dart';
 import 'package:volti/features/viewer/tab_keys.dart';
 import 'package:volti/features/viewer/tab_layer.dart';
 import 'package:volti/features/viewer/tab_paint.dart';
+import 'package:volti/features/viewer/tab_session.dart';
 import 'package:volti/features/viewer/tool_controller.dart';
 
 import 'helpers/tools.dart';
@@ -125,6 +126,84 @@ void main() {
     });
   });
 
+  group('Slides und Bendings', () {
+    test('Setzen, durchschalten, entfernen – nur wo eine Bundzahl steht', () {
+      final e = TabEditor(const []);
+      e.cycleBend();
+      expect(e.beats, isEmpty, reason: 'ohne Bundzahl nichts');
+      e.setFret(7);
+      e.cycleBend();
+      expect(e.beats.single.bends, {0: 1});
+      e.cycleBend();
+      e.cycleBend();
+      e.cycleBend();
+      expect(e.beats.single.bends, {0: 6});
+      e.cycleBend();
+      expect(e.beats.single.bends, isEmpty, reason: 'nach 1½ wieder aus');
+      e.bend(4);
+      expect(e.beats.single.bends, {0: 4});
+      e.bend(4);
+      expect(e.beats.single.bends, isEmpty, reason: 'gleiche Stufe nochmals = aus');
+      e.toggleSlide();
+      expect(e.beats.single.slides, {0});
+      e.bend(2);
+      e.clearNote();
+      expect(e.beats.single.slides, isEmpty, reason: 'Bundzahl weg = Technik weg');
+      expect(e.beats.single.bends, isEmpty);
+    });
+
+    test('Speichern und Lesen', () {
+      const b = TabBeat(frets: {0: 7, 2: 5}, bends: {0: 6}, slides: {2});
+      final back = TabBeat.fromJson(b.toJson());
+      expect(back, b);
+      expect(back.bends, {0: 6});
+      expect(back.slides, {2});
+      expect(bendLabel(4), 'full');
+    });
+  });
+
+  group('Verschobene Taktstriche', () {
+    const page = Size(1000, 1400);
+    final beats = const [
+      TabBeat(frets: {0: 1}),
+      TabBeat(frets: {0: 2}),
+      TabBeat.bar(),
+      TabBeat(frets: {0: 3}),
+      TabBeat(frets: {0: 4}),
+    ];
+
+    test('Taktstrich steht, wo er hingezogen wurde, die Schläge verteilen sich', () {
+      final auto = layoutTab(block('a', beats: beats), page);
+      final moved = [...beats]..[2] = const TabBeat.bar(at: 0.6);
+      final l = layoutTab(block('a', beats: moved), page);
+      expect(l.xs[2], closeTo(l.contentStart + 0.6 * (l.contentEnd - l.contentStart), 0.001));
+      expect(l.xs[2], greaterThan(auto.xs[2]), reason: 'weiter rechts als automatisch');
+      // Schläge davor gestreckt, in der richtigen Reihenfolge
+      expect(l.xs[0], lessThan(l.xs[1]));
+      expect(l.xs[1], lessThan(l.xs[2]));
+      expect(l.xs[1] - l.xs[0], greaterThan(auto.xs[1] - auto.xs[0]));
+      // Schläge danach rücken mit
+      expect(l.xs[3], greaterThan(l.xs[2]));
+      expect(l.xs[4], greaterThan(l.xs[3]));
+      expect(l.fractionAt(l.xs[2]), closeTo(0.6, 0.001));
+    });
+
+    test('Lage wird gespeichert, ein automatischer Taktstrich bleibt automatisch', () {
+      final back = TabBeat.fromJson(const TabBeat.bar(at: 0.42).toJson());
+      expect(back.at, 0.42);
+      expect(back, const TabBeat.bar(at: 0.42));
+      expect(TabBeat.fromJson(const TabBeat.bar().toJson()).at, isNull);
+      expect(const TabBeat.bar(at: 0.4) == const TabBeat.bar(), isFalse);
+    });
+
+    test('Grösse ändern: Linienabstand wächst mit', () {
+      final small = layoutTab(block('a', beats: beats), page);
+      final big = layoutTab(block('a', beats: beats).copyWith(gap: TabBlock.defaultGap * 2), page);
+      expect(big.gap, closeTo(small.gap * 2, 1e-9));
+      expect(big.bottom - big.top, closeTo((small.bottom - small.top) * 2, 1e-9));
+    });
+  });
+
   group('Zusammenführen und Rückgängig', () {
     test('Jüngste Fassung gewinnt als Ganzes, auch beim Löschen', () {
       final a = ScoreAnnotations()..putTab(block('t', beats: const [TabBeat(frets: {0: 1})], at: DateTime.utc(2026, 2)));
@@ -150,6 +229,10 @@ void main() {
       final c = InkController(pdfPath: '${dir.path}/x.pdf');
       final id = c.addTab(page: 1, x: 0.1, y: 0.1, width: 0.8);
       c.updateTab(id, beats: const [TabBeat(frets: {0: 5})]);
+      c.updateTab(id, gap: TabBlock.defaultGap * 1.5);
+      expect(c.annotations.tab(id)!.gap, TabBlock.defaultGap * 1.5);
+      c.undo();
+      expect(c.annotations.tab(id)!.gap, TabBlock.defaultGap);
       c.deleteTab(id);
       expect(c.annotations.visibleTabsOn(1), isEmpty);
       expect(c.pageHasAnnotations(1), isFalse);
@@ -251,6 +334,30 @@ void main() {
       expect(beats[2].bar, isTrue);
       await t.sendKeyEvent(LogicalKeyboardKey.escape);
       expect(tools.tabSession.value, isNull);
+      ink.dispose();
+    });
+
+    testWidgets('Taktstrich am Griff ziehen und mit langem Drücken zurücksetzen', (t) async {
+      await pump(t);
+      final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
+      ink.updateTab(id, beats: const [TabBeat(frets: {0: 1}), TabBeat.bar(), TabBeat(frets: {0: 2})]);
+      tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
+      await t.pump();
+      await t.pump();
+      final handle = find.byTooltip('Taktstrich verschieben (lange drücken: wieder automatisch)');
+      expect(handle, findsOneWidget);
+      final before = layoutTab(ink.annotations.tab(id)!, const Size(800, 600)).xs[1];
+      await t.drag(handle, const Offset(150, 0), kind: PointerDeviceKind.mouse);
+      await t.pump();
+      final bar = ink.annotations.tab(id)!.beats[1];
+      expect(bar.at, isNotNull);
+      final after = layoutTab(ink.annotations.tab(id)!, const Size(800, 600)).xs[1];
+      expect(after, greaterThan(before + 100));
+      await t.longPress(handle);
+      await t.pump();
+      expect(ink.annotations.tab(id)!.beats[1].at, isNull);
+      tools.tabSession.value = null;
+      await t.pump();
       ink.dispose();
     });
 

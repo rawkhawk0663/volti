@@ -1461,7 +1461,23 @@ class _TabSettings extends StatelessWidget {
                     ),
               style: muted,
             ),
-            if (session != null) ExcludeFocus(child: _TabKeypad(session: session, tools: tools)),
+            if (session != null)
+              ExcludeFocus(
+                child: _TabKeypad(session: session, tools: tools),
+              ),
+            _TabSize(tools: tools, session: session, gap: block?.gap ?? tools.tabGap),
+            if (block != null && block.beats.any((b) => b.at != null))
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => session!.ink.updateTab(
+                    block.id,
+                    beats: [for (final b in block.beats) b.bar ? const TabBeat.bar() : b],
+                  ),
+                  icon: const Icon(Icons.auto_fix_high, size: 18),
+                  label: Text(tr('Taktstriche wieder automatisch', 'Bar lines automatic again')),
+                ),
+              ),
             _Label(tr('Hintergrund', 'Background')),
             _TabBackground(tools: tools, session: session, background: bg),
             if (session != null) ...[
@@ -1564,6 +1580,37 @@ class _TabKeypad extends StatelessWidget {
                 ),
               ],
             ),
+            _Label(tr('Technik', 'Technique')),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                key(
+                  const Text('/', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  () => session.perform(TabAction.slide),
+                  selected: cur?.slides.contains(session.string) ?? false,
+                  tooltip: tip(TabAction.slide),
+                  width: 44,
+                ),
+                for (final q in tabBends)
+                  key(
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.north_east, size: 12),
+                        Text(q == 4 ? '1' : bendLabel(q), style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    () => session.bend(q),
+                    selected: cur?.bends[session.string] == q,
+                    tooltip: tr(
+                      'Bending ${bendLabel(q)} (${tools.tabKeys[TabAction.bend]?.label ?? ''})',
+                      'Bend ${bendLabel(q)} (${tools.tabKeys[TabAction.bend]?.label ?? ''})',
+                    ),
+                    width: 46,
+                  ),
+              ],
+            ),
             _Label(tr('Bund', 'Fret')),
             Wrap(
               spacing: 4,
@@ -1621,7 +1668,6 @@ class _TabKeypad extends StatelessWidget {
     );
   }
 }
-
 
 /// Hintergrund einer Tabulatur: Farbe (standardmässig ganz deckend) und
 /// Deckkraft. Beides steckt in der gespeicherten Farbe (ARGB).
@@ -1690,6 +1736,49 @@ class _TabBackgroundState extends State<_TabBackground> {
             },
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// Grösse einer Tabulatur: Linienabstand, Zahlen und Rhythmus wachsen mit.
+class _TabSize extends StatefulWidget {
+  const _TabSize({required this.tools, required this.session, required this.gap});
+  final ToolController tools;
+  final TabSession? session;
+  final double gap;
+
+  static const min = 0.6, max = 2.0;
+
+  @override
+  State<_TabSize> createState() => _TabSizeState();
+}
+
+class _TabSizeState extends State<_TabSize> {
+  double? _dragging;
+
+  @override
+  Widget build(BuildContext context) {
+    final factor = _dragging ?? (widget.gap / TabBlock.defaultGap).clamp(_TabSize.min, _TabSize.max);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Label(tr('Grösse ${(factor * 100).round()} %', 'Size ${(factor * 100).round()} %')),
+        Slider(
+          min: _TabSize.min,
+          max: _TabSize.max,
+          divisions: 28,
+          value: factor.toDouble(),
+          onChanged: (v) => setState(() => _dragging = v),
+          // Erst beim Loslassen speichern: ein einziger Rückgängig-Schritt.
+          onChangeEnd: (v) {
+            setState(() => _dragging = null);
+            final gap = TabBlock.defaultGap * v;
+            widget.tools.setTabGap(gap);
+            final s = widget.session;
+            if (s != null) s.ink.updateTab(s.id, gap: gap);
+          },
+        ),
       ],
     );
   }

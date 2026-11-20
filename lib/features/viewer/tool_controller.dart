@@ -184,6 +184,14 @@ class ToolController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Grösse (Linienabstand relativ zur Seitenbreite) für neue Tabulaturen.
+  double get tabGap => double.tryParse(settings.text('tabGap') ?? '') ?? TabBlock.defaultGap;
+
+  Future<void> setTabGap(double v) async {
+    await settings.setText('tabGap', '$v');
+    notifyListeners();
+  }
+
   /// Hintergrund für neue Tabulaturen (wie bei Text-Notizen; 0 = ohne).
   int get tabBackground => int.tryParse(settings.text('tabBackground') ?? '') ?? TabBlock.noBackground;
 

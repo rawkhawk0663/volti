@@ -13,7 +13,16 @@ class TabLayout {
     required this.xs,
     required this.slotWidths,
     required this.endX,
+    required this.contentStart,
+    required this.contentEnd,
   });
+
+  /// Schreibbereich (gleich nach „TAB“ bis zum rechten Ende): Darin liegen
+  /// verschobene Taktstriche ([TabBeat.at] 0 … 1).
+  final double contentStart, contentEnd;
+
+  /// Lage im Schreibbereich (0 … 1) zur Stelle [dx].
+  double fractionAt(double dx) => ((dx - contentStart) / (contentEnd - contentStart)).clamp(0.0, 1.0);
 
   /// Linke obere Ecke (oberste Linie).
   final Offset origin;
@@ -83,27 +92,78 @@ double _naturalWidth(TabBeat b) {
   };
   final w = base * (b.dotted ? 1.2 : 1);
   final twoDigits = b.frets.values.any((f) => f >= 10);
-  return math.max(w, twoDigits ? 2.3 : 1.6);
+  // Platz für den Bending-Pfeil rechts neben der Zahl.
+  final bend = b.bends.isNotEmpty ? 1.0 : 0.0;
+  return math.max(w, twoDigits ? 2.3 : 1.6) + bend;
 }
 
 TabLayout layoutTab(TabBlock t, Size page) {
   final gap = t.gap * page.width;
   final origin = Offset(t.x * page.width, t.y * page.height);
   final width = math.max(t.width * page.width, gap * (_clef + _tail + 2));
-  final natural = [for (final b in t.beats) _naturalWidth(b) * gap];
-  final sum = natural.fold(0.0, (a, b) => a + b);
-  final room = width - gap * (_clef + _tail);
-  // Zu viel für die Breite: alles gleichmässig enger (nie breiter).
-  final scale = sum > room && sum > 0 ? math.max(0.35, room / sum) : 1.0;
-  final xs = <double>[], widths = <double>[];
-  var x = origin.dx + gap * _clef;
-  for (final w in natural) {
-    final s = w * scale;
-    xs.add(x + s / 2);
-    widths.add(s);
-    x += s;
+  final start = origin.dx + gap * _clef;
+  final contentEnd = origin.dx + width;
+
+  // 1. Natürliche Lage (ohne Enge): Mitte und Breite jedes Eintrags.
+  final nw = [for (final b in t.beats) _naturalWidth(b) * gap];
+  final nx = <double>[];
+  var x = start;
+  for (final w in nw) {
+    nx.add(x + w / 2);
+    x += w;
   }
-  xs.add(x + gap * 1.1);
+  final naturalEnd = x; // Ende des letzten Eintrags
+
+  // 2. Von Hand verschobene Taktstriche sind Fixpunkte: Was dazwischen liegt,
+  //    wird passend gestreckt oder gestaucht.
+  final anchors = <({int index, double from, double to})>[(index: -1, from: start, to: start)];
+  for (var i = 0; i < t.beats.length; i++) {
+    final at = t.beats[i].at;
+    if (!t.beats[i].bar || at == null) continue;
+    final to = start + at * (contentEnd - start);
+    // Nur in der richtigen Reihenfolge und mit etwas Platz dazwischen.
+    if (to <= anchors.last.to + gap) continue;
+    anchors.add((index: i, from: nx[i], to: to));
+  }
+
+  // Hinter dem letzten Fixpunkt: wie gewohnt, aber zu viel → enger (nie breiter).
+  final last = anchors.last;
+  final tailFrom = last.index < 0 ? start : nx[last.index] + nw[last.index] / 2;
+  final tailTo = last.index < 0 ? start : last.to + nw[last.index] / 2;
+  final tailRoom = contentEnd - gap * _tail - tailTo;
+  final tailNatural = naturalEnd - tailFrom;
+  final tailScale = tailNatural > tailRoom && tailNatural > 0 ? math.max(0.35, tailRoom / tailNatural) : 1.0;
+
+  double map(int i, double v) {
+    // Fixpunkt davor und danach suchen.
+    for (var k = 0; k < anchors.length - 1; k++) {
+      final a = anchors[k], b = anchors[k + 1];
+      if (i > a.index && i <= b.index) {
+        final f = (b.from - a.from).abs() < 1e-6 ? 1.0 : (b.to - a.to) / (b.from - a.from);
+        return a.to + (v - a.from) * f;
+      }
+    }
+    if (last.index < 0) return start + (v - start) * tailScale;
+    return tailTo + (v - tailFrom) * tailScale;
+  }
+
+  double factor(int i) {
+    for (var k = 0; k < anchors.length - 1; k++) {
+      final a = anchors[k], b = anchors[k + 1];
+      if (i > a.index && i <= b.index) {
+        return (b.from - a.from).abs() < 1e-6 ? 1.0 : (b.to - a.to) / (b.from - a.from);
+      }
+    }
+    return tailScale;
+  }
+
+  final xs = <double>[], widths = <double>[];
+  for (var i = 0; i < nx.length; i++) {
+    xs.add(map(i, nx[i]));
+    widths.add(nw[i] * factor(i));
+  }
+  final endOfLast = xs.isEmpty ? start : xs.last + widths.last / 2;
+  xs.add(endOfLast + gap * 1.1);
   widths.add(gap * 2.2);
   return TabLayout(
     origin: origin,
@@ -111,7 +171,9 @@ TabLayout layoutTab(TabBlock t, Size page) {
     width: width,
     xs: xs,
     slotWidths: widths,
-    endX: math.max(origin.dx + width, x + gap * _tail),
+    endX: math.max(contentEnd, endOfLast + gap * _tail),
+    contentStart: start,
+    contentEnd: contentEnd,
   );
 }
 
@@ -194,7 +256,9 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   // Hintergrund (falls gewählt) hinter allem, mit etwas Rand.
   final bg = t.background != TabBlock.noBackground ? Color(t.background) : null;
   if (bg != null) {
-    final r = Rect.fromLTRB(l.origin.dx - g * 0.6, l.top - g * 1.0, l.endX + g * 0.6, l.stemBottom + g * 0.8);
+    // Mit Bendings ragt der Pfeil samt Stufe über die oberste Linie hinaus.
+    final above = t.beats.any((b) => b.bends.isNotEmpty) ? 2.4 : 1.0;
+    final r = Rect.fromLTRB(l.origin.dx - g * 0.6, l.top - g * above, l.endX + g * 0.6, l.stemBottom + g * 0.8);
     canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(g * 0.5)), Paint()..color = bg);
   }
   // Hinter Zahlen und „TAB“: der Hintergrund bzw. Weiss (die Seite).
@@ -266,6 +330,8 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     }
   }
 
+  _paintTechniques(canvas, t, l, color, thin.strokeWidth);
+
   // Balken und Fähnchen
   final beam = Paint()..color = color;
   final thick = g * 0.38, step = g * 0.6;
@@ -304,6 +370,85 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
           bar(l.xs[i], l.xs[i] + dir * g * 0.9, level);
         }
       }
+    }
+  }
+}
+
+/// Halbe Breite einer Bundzahl (für den Abstand von Slides und Bendings).
+double _halfNumber(int fret, double g) => (fret >= 10 ? 1.25 : 0.65) * g * 0.5;
+
+/// Slides (schräge Linie zur nächsten Note auf derselben Saite) und
+/// Bendings (gebogener Pfeil nach oben, darüber die Stufe).
+void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, double lineWidth) {
+  final g = l.gap;
+  final line = Paint()
+    ..color = color
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeWidth = math.max(0.9, lineWidth * 1.4);
+  for (var i = 0; i < t.beats.length; i++) {
+    final b = t.beats[i];
+    if (b.bar) continue;
+    final cx = l.xs[i];
+    for (final st in b.slides) {
+      final fret = b.frets[st];
+      if (fret == null) continue;
+      final y = l.lineY(st);
+      final x1 = cx + _halfNumber(fret, g) + g * 0.15;
+      // Nächste Bundzahl auf dieser Saite (auch über Taktstriche hinweg).
+      int? j;
+      for (var k = i + 1; k < t.beats.length; k++) {
+        if (!t.beats[k].bar && t.beats[k].frets.containsKey(st)) {
+          j = k;
+          break;
+        }
+      }
+      if (j != null) {
+        final to = t.beats[j].frets[st]!;
+        final x2 = l.xs[j] - _halfNumber(to, g) - g * 0.15;
+        // Aufwärts (höherer Bund) steigt die Linie, abwärts fällt sie.
+        final up = to >= fret;
+        final dy = g * 0.3;
+        canvas.drawLine(
+          Offset(x1, up ? y + dy : y - dy),
+          Offset(math.max(x1 + g * 0.4, x2), up ? y - dy : y + dy),
+          line,
+        );
+      } else {
+        // Kein Ziel: kurzer Slide nach unten.
+        canvas.drawLine(Offset(x1, y - g * 0.25), Offset(x1 + g * 1.0, y + g * 0.35), line);
+      }
+    }
+    for (final e in b.bends.entries) {
+      final fret = b.frets[e.key];
+      if (fret == null) continue;
+      final y = l.lineY(e.key);
+      final x0 = cx + _halfNumber(fret, g) + g * 0.12;
+      final x1 = x0 + g * 0.85;
+      final top = l.top - g * 1.1;
+      final path = Path()
+        ..moveTo(x0, y)
+        ..quadraticBezierTo(x1, y, x1, top + g * 0.45);
+      canvas.drawPath(path, line);
+      // Pfeilspitze nach oben
+      final head = g * 0.45;
+      canvas.drawPath(
+        Path()
+          ..moveTo(x1, top)
+          ..lineTo(x1 - head * 0.5, top + head)
+          ..lineTo(x1 + head * 0.5, top + head)
+          ..close(),
+        Paint()..color = color,
+      );
+      final label = TextPainter(
+        text: TextSpan(
+          text: bendLabel(e.value),
+          style: TextStyle(fontFamily: 'VoltiSans', fontSize: g * 0.95, color: color, height: 1),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      label.paint(canvas, Offset(x1 - label.width / 2, top - g * 0.1 - label.height));
+      label.dispose();
     }
   }
 }

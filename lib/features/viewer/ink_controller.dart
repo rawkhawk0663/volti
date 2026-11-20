@@ -400,7 +400,15 @@ class InkController extends ChangeNotifier {
   }
 
   /// Inhalt oder Lage einer Tabulatur ändern (ein Rückgängig-Schritt).
-  void updateTab(String id, {List<TabBeat>? beats, double? x, double? y, double? width, int? background}) {
+  void updateTab(
+    String id, {
+    List<TabBeat>? beats,
+    double? x,
+    double? y,
+    double? width,
+    double? gap,
+    int? background,
+  }) {
     final before = _annotations.tab(id);
     if (before == null || before.deleted) return;
     final after = before.copyWith(
@@ -408,10 +416,12 @@ class InkController extends ChangeNotifier {
       x: x,
       y: y,
       width: width,
+      gap: gap,
       background: background,
       modifiedAt: DateTime.now().toUtc(),
     );
-    if (after.background == before.background &&
+    if (after.gap == before.gap &&
+        after.background == before.background &&
         after.x == before.x &&
         after.y == before.y &&
         after.width == before.width &&
