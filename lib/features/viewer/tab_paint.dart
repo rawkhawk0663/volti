@@ -348,7 +348,9 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     }
     // Bundzahlen auf den Linien, mit weissem Grund (die Linie läuft nicht durch).
     for (final e in b.frets.entries) {
-      final p = _text(held.contains((i, e.key)) ? '(${e.value})' : '${e.value}', g * 1.15, color);
+      // Ghost Note: ein „x“ statt der Bundzahl.
+      final label = e.value == ghostNote ? 'x' : '${e.value}';
+      final p = _text(held.contains((i, e.key)) ? '($label)' : label, g * 1.15, color);
       final cy = l.lineY(e.key);
       final r = Rect.fromCenter(center: Offset(cx, cy), width: p.width + g * 0.3, height: g * 0.95);
       canvas.drawRect(r, knockout);

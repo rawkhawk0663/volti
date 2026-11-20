@@ -1627,12 +1627,6 @@ class _TabKeypad extends StatelessWidget {
                   width: 37,
                 ),
                 key(glyph(0xE4E5), () => session.perform(TabAction.rest), tooltip: tip(TabAction.rest), width: 37),
-                key(
-                  const Text('|', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                  () => session.perform(TabAction.bar),
-                  tooltip: tip(TabAction.bar),
-                  width: 37,
-                ),
               ],
             ),
             _Label(tr('Technik', 'Technique')),
@@ -1697,6 +1691,13 @@ class _TabKeypad extends StatelessWidget {
                 runSpacing: 4,
                 children: [
                   key(
+                    const Text('x', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    () => session.perform(TabAction.ghost),
+                    selected: fret == ghostNote,
+                    tooltip: tip(TabAction.ghost),
+                    width: 37,
+                  ),
+                  key(
                     const Text('⌒', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                     () => session.perform(TabAction.tie),
                     selected: cur?.ties.contains(session.string) ?? false,
@@ -1717,7 +1718,9 @@ class _TabKeypad extends StatelessWidget {
                     tooltip: tip(TabAction.accent),
                     width: 37,
                   ),
+                  // Taktstriche: normal (fügt einen ein), dann die besonderen Arten.
                   for (final (kind, action) in [
+                    (BarKind.normal, TabAction.bar),
                     (BarKind.repeatStart, TabAction.repeatStart),
                     (BarKind.repeatEnd, TabAction.repeatEnd),
                     (BarKind.doubleLine, TabAction.doubleBar),

@@ -197,6 +197,27 @@ void main() {
       expect(e.beats.single.slideOuts, isEmpty);
     });
 
+    test('Ghost Note: x statt Bundzahl, ohne Bending, speichern und lesen', () {
+      final e = TabEditor(const []);
+      e.toggleGhost();
+      expect(e.beats.single.frets, {0: ghostNote}, reason: 'legt auch einen neuen Schlag an');
+      e.cycleBend();
+      e.bend(2);
+      expect(e.beats.single.bends, isEmpty, reason: 'kein Bending auf einer Ghost Note');
+      e.toggleGhost();
+      expect(e.beats.single.frets, isEmpty, reason: 'nochmals = weg');
+      e.setFret(5);
+      e.bend(2);
+      e.toggleGhost();
+      expect(e.beats.single.frets, {0: ghostNote}, reason: 'ersetzt die Bundzahl');
+      expect(e.beats.single.bends, isEmpty, reason: 'Bending geht mit');
+      e.setFret(7);
+      expect(e.beats.single.frets, {0: 7}, reason: 'eine Zahl ersetzt das x');
+      const b = TabBeat(frets: {2: ghostNote, 3: 5});
+      expect(TabBeat.fromJson(b.toJson()), b);
+      expect(TabKeymap.defaults.actionFor(LogicalKeyboardKey.keyX, ctrl: false, shift: true, alt: false), TabAction.ghost);
+    });
+
     test('Slides davor/danach speichern, lesen und zeichnen', () {
       const b = TabBeat(frets: {1: 5, 3: 7}, slideIns: {1: -1}, slideOuts: {3: 1});
       final back = TabBeat.fromJson(b.toJson());

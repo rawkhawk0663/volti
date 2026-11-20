@@ -171,6 +171,8 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.toggleStaccato());
       case TabAction.accent:
         _edit((e) => e.toggleAccent());
+      case TabAction.ghost:
+        _edit((e) => e.toggleGhost());
       case TabAction.repeatStart:
         _edit((e) => e.repeatStart());
       case TabAction.repeatEnd:

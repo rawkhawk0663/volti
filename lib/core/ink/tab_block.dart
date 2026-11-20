@@ -40,6 +40,10 @@ String bendLabel(int quarters) => switch (quarters) {
   _ => '',
 };
 
+/// Ghost Note: gedämpfter Ton ohne Tonhöhe, als „x“ auf der Linie. Steht
+/// statt einer Bundzahl in [TabBeat.frets].
+const ghostNote = -1;
+
 /// Ein Eintrag in einer Tabulatur: ein Schlag (Bundzahlen auf einzelnen
 /// Saiten, mit Notenwert) oder ein Taktstrich.
 class TabBeat {
@@ -82,7 +86,7 @@ class TabBeat {
   /// Schläge davor und danach verteilen sich dann auf den Platz dazwischen.
   final double? at;
 
-  /// Saite (0 = oberste Linie, hohe E-Saite) → Bund.
+  /// Saite (0 = oberste Linie, hohe E-Saite) → Bund ([ghostNote] = „x“).
   final Map<int, int> frets;
 
   /// Bendings: Saite → Stufe in Vierteltönen ([tabBends]).
@@ -146,9 +150,10 @@ class TabBeat {
       value: value ?? this.value,
       dotted: dotted ?? this.dotted,
       bar: bar,
+      // Eine Ghost Note hat keine Tonhöhe, also kein Bending.
       bends: {
         for (final e in (bends ?? this.bends).entries)
-          if (f.containsKey(e.key)) e.key: e.value,
+          if ((f[e.key] ?? ghostNote) >= 0) e.key: e.value,
       },
       slides: {
         for (final st in slides ?? this.slides)
@@ -198,7 +203,8 @@ class TabBeat {
     final v = j['v'] as int? ?? 4;
     Map<int, int> strings(Map<String, dynamic> m) => {
       for (final e in m.entries)
-        if (int.tryParse(e.key) case final s? when s >= 0 && s < TabBlock.strings) s: (e.value as num).toInt(),
+        if (int.tryParse(e.key) case final s? when s >= 0 && s < TabBlock.strings)
+          s: (e.value as num).toInt().clamp(ghostNote, 99),
     };
     final frets = strings(f);
     // Richtungen: nur +1/−1 und nur, wo eine Bundzahl steht.
@@ -212,7 +218,7 @@ class TabBeat {
       dotted: j['dot'] == true,
       bends: {
         for (final e in strings(j['bend'] as Map<String, dynamic>? ?? const {}).entries)
-          if (frets.containsKey(e.key) && tabBends.contains(e.value)) e.key: e.value,
+          if ((frets[e.key] ?? ghostNote) >= 0 && tabBends.contains(e.value)) e.key: e.value,
       },
       slides: {
         for (final st in j['slide'] as List<dynamic>? ?? const [])
@@ -772,11 +778,24 @@ class TabEditor {
     _resetDigits();
   }
 
+  /// Ghost Note („x“) auf der Saite unter dem Cursor setzen; steht schon
+  /// eine, wird sie wieder entfernt. Ersetzt eine Bundzahl.
+  void toggleGhost() {
+    final cur = current;
+    if (cur != null && !cur.bar && cur.frets[string] == ghostNote) {
+      beats[beat] = cur.copyWith(frets: {...cur.frets}..remove(string));
+    } else {
+      final b = _ensureBeat();
+      beats[beat] = b.copyWith(frets: {...b.frets, string: ghostNote});
+    }
+    _resetDigits();
+  }
+
   /// Bending auf der Saite unter dem Cursor: setzen bzw. (gleiche Stufe
-  /// nochmals) entfernen. Nur wo eine Bundzahl steht.
+  /// nochmals) entfernen. Nur wo eine Bundzahl steht (keine Ghost Note).
   void bend(int quarters) {
     final b = current;
-    if (b == null || b.bar || !b.frets.containsKey(string) || !tabBends.contains(quarters)) return;
+    if (b == null || b.bar || (b.frets[string] ?? ghostNote) < 0 || !tabBends.contains(quarters)) return;
     final bends = {...b.bends};
     bends[string] == quarters ? bends.remove(string) : bends[string] = quarters;
     beats[beat] = b.copyWith(bends: bends);
@@ -786,7 +805,7 @@ class TabEditor {
   /// Nächste Bending-Stufe (¼ → ½ → 1 → 1½ → keine).
   void cycleBend() {
     final b = current;
-    if (b == null || b.bar || !b.frets.containsKey(string)) return;
+    if (b == null || b.bar || (b.frets[string] ?? ghostNote) < 0) return;
     final now = b.bends[string];
     final i = now == null ? 0 : tabBends.indexOf(now) + 1;
     final bends = {...b.bends};
