@@ -38,7 +38,7 @@ Download **`Volti-Android.apk`** from the [latest version](https://github.com/ra
 ## Features
 
 ### Library
-- **Import PDFs**, one at a time or a whole folder. Volti keeps its own copy and leaves your originals untouched.
+- **Import PDFs**, one at a time or a whole folder, or simply drag them from File Explorer into the window. Volti keeps its own copy and leaves your originals untouched.
 - **Folders** for projects, services or ensembles, including subfolders.
 - **Details** for every piece: title, composer, **key**, tempo, time signature, genre, tags and notes. The key is clearly visible everywhere, and versions of the same song in different keys are listed together.
 - **Search** by title, composer, key, genre and tags.
@@ -74,6 +74,7 @@ Download **`Volti-Android.apk`** from the [latest version](https://github.com/ra
 - **Continuous scroll**: the staves are lined up across the full width so you can scroll through them.
 - **Page strip** floating at the bottom centre: every page as a small picture, tap to jump there. Plus a **page overview** of all pages, song by song in a setlist.
 - **Metronome** with a pleasant click. It picks up the tempo and time signature of every song.
+- **Play-along recording:** attach an audio file to any piece (MP3, M4A, WAV, OGG, FLAC). It is loaded whenever you open the piece. Slow it down without changing the pitch, transpose by up to six semitones and loop a passage.
 - **Tuner** (using the microphone) and **pitch pipe** for giving the note, with adjustable concert pitch.
 
 ### Writing with the pen

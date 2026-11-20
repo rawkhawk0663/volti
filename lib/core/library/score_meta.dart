@@ -33,6 +33,12 @@ class ScoreMeta {
   /// Schläge pro Takt (für die Betonung im Metronom, z. B. 4 bei 4/4).
   static const beats = 'beats';
 
+  /// Zugeordnete Aufnahme: Dateiname in `.volti/audio/` (z. B. `<id>.mp3`).
+  static const audio = 'audio';
+
+  /// Ursprünglicher Name der Aufnahme (nur zur Anzeige).
+  static const audioName = 'audioName';
+
   Map<String, MetaValue> get fields => Map.unmodifiable(_fields);
 
   bool get isEmpty => _fields.isEmpty;

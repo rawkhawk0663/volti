@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../library/score_audio.dart';
+
 /// Ein Speicherort, mit dem Volti seinen Datenordner abgleicht.
 ///
 /// Heute ist das ein Ordner (z. B. in Proton Drive). Später kann hier eine
@@ -38,6 +40,8 @@ bool isSyncedPath(String rel) {
   if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'students') return parts[2].endsWith('.json');
   // Bilder der eigenen Stempel
   if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'stamps') return parts[2].endsWith('.png');
+  // Aufnahmen zu Stücken
+  if (parts.length == 3 && parts[0] == '.volti' && parts[1] == 'audio') return isAudioFile(rel);
   return rel == '.volti/library.json' ||
       rel == '.volti/presets.json' ||
       rel == '.volti/stamps.json' ||

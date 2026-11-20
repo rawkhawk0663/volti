@@ -103,9 +103,16 @@ class GradientFab extends StatelessWidget {
 
 /// Runder Symbol-Knopf mit Verlauf (z. B. in schwebenden Leisten).
 class GradientIconButton extends StatelessWidget {
-  const GradientIconButton({super.key, required this.icon, required this.tooltip, required this.onPressed});
+  const GradientIconButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.size = 40,
+  });
 
   final IconData icon;
+  final double size;
   final String tooltip;
   final VoidCallback? onPressed;
 
@@ -124,9 +131,9 @@ class GradientIconButton extends StatelessWidget {
             child: InkWell(
               onTap: onPressed,
               child: SizedBox(
-                width: 40,
-                height: 40,
-                child: Icon(icon, size: 20, color: Colors.white),
+                width: size,
+                height: size,
+                child: Icon(icon, size: size / 2, color: Colors.white),
               ),
             ),
           ),

@@ -38,7 +38,7 @@ Lade **`Volti-Android.apk`** aus der [neuesten Version](https://github.com/rawkh
 ## Was Volti kann
 
 ### Bibliothek
-- **PDFs importieren**, einzeln oder als ganzer Ordner. Volti legt eine Kopie an, deine Originale bleiben unverändert.
+- **PDFs importieren**, einzeln oder als ganzer Ordner, oder einfach aus dem Datei-Explorer ins Fenster ziehen. Volti legt eine Kopie an, deine Originale bleiben unverändert.
 - **Ordner** für Projekte, Gottesdienste oder Ensembles, mit Unterordnern.
 - **Infos** zu jedem Stück: Titel, Komponist, **Tonart**, Tempo, Taktart, Genre, Tags und Notizen. Die Tonart ist überall gut sichtbar, und gleiche Lieder in verschiedenen Tonarten stehen geordnet untereinander.
 - **Suche** nach Titel, Komponist, Tonart, Genre und Tags.
@@ -74,6 +74,7 @@ Lade **`Volti-Android.apk`** aus der [neuesten Version](https://github.com/rawkh
 - **Endlosband**: Die Notenzeilen erscheinen untereinander über die ganze Breite und lassen sich durchscrollen.
 - **Bildleiste** unten, schwebend in der Mitte: alle Seiten als kleine Bilder, antippen springt hin. Dazu eine **Seitenübersicht** über alle Seiten, in einer Setlist Song für Song.
 - **Metronom** mit angenehmem Klang. Es übernimmt das Tempo und die Taktart jedes Songs.
+- **Aufnahme zum Mitspielen:** Ordne jedem Stück eine Audio-Datei zu (MP3, M4A, WAV, OGG, FLAC). Sie wird beim Öffnen mitgeladen. Langsamer abspielen ohne andere Tonhöhe, transponieren um bis zu sechs Halbtöne und eine Stelle als Schleife üben.
 - **Stimmgerät** (über das Mikrofon) und **Stimmton** zum Anstimmen, mit einstellbarem Kammerton.
 
 ### Schreiben mit dem Stift

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/visuals.dart';
@@ -47,6 +48,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   /// Nochmals auf den gewählten Punkt tippen = zurück zur Übersicht.
   final _reset = [ValueNotifier(0), ValueNotifier(0), ValueNotifier(0)];
+
+  /// Bibliothek (für PDFs, die ins Fenster gezogen werden).
+  final _scoresKey = GlobalKey<_ScoresViewState>();
+
+  /// Wird gerade eine Datei über das Fenster gezogen?
+  bool _dragging = false;
+
+  /// PDFs (oder ganze Ordner) aus dem Datei-Explorer ins Fenster gezogen:
+  /// importieren, in den offenen Ordner der Bibliothek.
+  Future<void> _onDrop(DropDoneDetails d) async {
+    setState(() => _dragging = false);
+    // Nur, wenn die Bibliothek vorne liegt (nicht unter der Notenansicht
+    // oder einem offenen Fenster).
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    final paths = [for (final f in d.files) f.path].where((p) => p.isNotEmpty).toList();
+    if (paths.isEmpty) return;
+    if (_tab != 0) setState(() => _tab = 0);
+    await _scoresKey.currentState?.importDropped(paths);
+  }
 
   LibraryController get lib => widget.library;
 
@@ -125,7 +145,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         final body = IndexedStack(
           index: _tab,
           children: [
-            _ScoresView(library: lib, sync: widget.sync, reset: _reset[0], active: _tab == 0),
+            _ScoresView(key: _scoresKey, library: lib, sync: widget.sync, reset: _reset[0], active: _tab == 0),
             SetlistsView(library: lib, sync: widget.sync, reset: _reset[1], active: _tab == 1),
             if (teaching)
               TeachingView(library: lib, sync: widget.sync, reset: _reset[2], active: _tab == 2)
@@ -139,45 +159,93 @@ class _LibraryScreenState extends State<LibraryScreen> {
           if (teaching) (Icons.school_outlined, Icons.school, tr('Unterricht', 'Teaching')),
         ];
         if (wide) {
-          return Scaffold(
-            body: SafeArea(
-              child: Row(
-                children: [
-                  NavigationRail(
-                    selectedIndex: _tab,
-                    onDestinationSelected: _select,
-                    labelType: NavigationRailLabelType.all,
-                    // Am Logo lässt sich das Fenster verschieben (keine Titelleiste).
-                    leading: WindowDragArea(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                        child: const VoltiMark(height: 34),
+          return _dropZone(
+            Scaffold(
+              body: SafeArea(
+                child: Row(
+                  children: [
+                    NavigationRail(
+                      selectedIndex: _tab,
+                      onDestinationSelected: _select,
+                      labelType: NavigationRailLabelType.all,
+                      // Am Logo lässt sich das Fenster verschieben (keine Titelleiste).
+                      leading: WindowDragArea(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                          child: const VoltiMark(height: 34),
+                        ),
                       ),
+                      destinations: [
+                        for (final (icon, sel, label) in destinations)
+                          NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: Text(label)),
+                      ],
                     ),
-                    destinations: [
-                      for (final (icon, sel, label) in destinations)
-                        NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: Text(label)),
-                    ],
-                  ),
-                  const VerticalDivider(width: 1),
-                  Expanded(child: body),
-                ],
+                    const VerticalDivider(width: 1),
+                    Expanded(child: body),
+                  ],
+                ),
               ),
             ),
           );
         }
-        return Scaffold(
-          body: SafeArea(child: body),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _tab,
-            onDestinationSelected: _select,
-            destinations: [
-              for (final (icon, sel, label) in destinations)
-                NavigationDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: label),
-            ],
+        return _dropZone(
+          Scaffold(
+            body: SafeArea(child: body),
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: _select,
+              destinations: [
+                for (final (icon, sel, label) in destinations)
+                  NavigationDestination(icon: Icon(icon), selectedIcon: Icon(sel), label: label),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+
+  /// Das ganze Fenster nimmt hineingezogene PDFs an; solange etwas darüber
+  /// schwebt, zeigt ein Hinweis, dass Loslassen importiert.
+  Widget _dropZone(Widget child) {
+    final scheme = Theme.of(context).colorScheme;
+    return DropTarget(
+      onDragEntered: (_) {
+        if (ModalRoute.of(context)?.isCurrent ?? true) setState(() => _dragging = true);
+      },
+      onDragExited: (_) => setState(() => _dragging = false),
+      onDragDone: _onDrop,
+      child: Stack(
+        children: [
+          child,
+          if (_dragging)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  margin: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: scheme.primary, width: 3),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.file_download_outlined, size: 56, color: scheme.onPrimaryContainer),
+                        const SizedBox(height: 12),
+                        Text(
+                          tr('Loslassen, um die PDFs zu importieren', 'Drop to import the PDFs'),
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: scheme.onPrimaryContainer),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -249,7 +317,7 @@ class _EmptyLibrary extends StatelessWidget {
 }
 
 class _ScoresView extends StatefulWidget {
-  const _ScoresView({required this.library, required this.sync, required this.reset, required this.active});
+  const _ScoresView({super.key, required this.library, required this.sync, required this.reset, required this.active});
 
   /// Gerade sichtbar? (Nur dann wirkt die Zurück-Taste hier.)
   final bool active;
@@ -357,6 +425,40 @@ class _ScoresViewState extends State<_ScoresView> with LibraryActions {
     final dir = await getDirectoryPath(confirmButtonText: tr('Diesen Ordner importieren', 'Import this folder'));
     if (dir == null) return;
     _showResult(await lib.importFolder(dir, folder: _current));
+  }
+
+  /// Ins Fenster gezogene Dateien und Ordner importieren (nur PDFs).
+  Future<void> importDropped(List<String> paths) async {
+    final files = <String>[], dirs = <String>[];
+    for (final path in paths) {
+      if (await FileSystemEntity.isDirectory(path)) {
+        dirs.add(path);
+      } else if (path.toLowerCase().endsWith('.pdf')) {
+        files.add(path);
+      }
+    }
+    if (files.isEmpty && dirs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tr('Volti kann hier nur PDF-Dateien importieren.', 'Volti can only import PDF files here.')),
+          ),
+        );
+      }
+      return;
+    }
+    final total = ImportResult();
+    void add(ImportResult r) {
+      total.added.addAll(r.added);
+      total.alreadyThere.addAll(r.alreadyThere);
+      total.failed.addAll(r.failed);
+    }
+
+    if (files.isNotEmpty) add(await lib.importPdfs(files, folder: _current));
+    for (final d in dirs) {
+      add(await lib.importFolder(d, folder: _current));
+    }
+    _showResult(total);
   }
 
   void _showResult(ImportResult r) {

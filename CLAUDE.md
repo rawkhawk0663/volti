@@ -198,6 +198,11 @@ assets/brand/     Logo (eingefärbt mit tool/make_brand.py)
    **Geburtstag und Klasse** (`Student.birthday`, `level`/`levelYear`/`track`, `core/teaching/school_level.dart`): Die Klasse wird mit dem Schuljahr gespeichert, in dem sie eingetragen wurde; die heutige berechnet `SchoolLevel.current` (Schuljahr beginnt am **15. Juli**). P1–P6, danach Oberstufe 1–3 als R (Realschule), S (Sekundarschule) oder B (Bezirksschule); ohne Zug „Oberstufe 1“ (`O1`), danach keine Stufe mehr. Alter und Klasse stehen im Kopf der Kartei. Geburtstage: `BirthdayBanner` (heute und nächste 7 Tage) in „Unterrichten“ und „Schüler:innen“, dazu einmal pro Tag beim Start ein Hinweis (`_remindBirthdays` in `library_screen.dart`, Gerätevorliebe `birthdayReminder`). 29. Februar: in gewöhnlichen Jahren am 28.
    Hausaufgaben senden (`homework_share.dart`): E-Mail (`mailto:` mit Betreff und Text), WhatsApp (`wa.me/<nummer>?text=`, Schweizer 07x-Nummern bekommen +41) und „Mit Noten teilen“: PDF (erste Seite Hausaufgaben, dann die gewählten Stücke mit den Notizen für diese Person, `buildExportPdf(leading:)`) über das Windows-Teilen-Fenster (`share_plus`, dort WhatsApp/Mail/Outlook). PDFs mit Text nutzen Roboto (`voltiPdfTheme`). Stundenplan als PDF (`buildTimetablePdf`) ist ein Zeitraster (eine Spalte pro Tag), das sich immer der Seite anpasst: Die frühere Liste lief bei vielen Lektionen über die Seite hinaus, und das PDF zeigte nur noch den Titel. PDFs öffnen über `openPdfBytes` im Standard-Programm.
 
+47. **Aufnahme zum Mitspielen** (Wunsch des Besitzers): Ein Stück kann eine Audio-Datei haben (MP3, M4A, AAC, WAV, OGG, FLAC; `core/library/score_audio.dart`). Beim Zuordnen wird sie nach `Bibliothek/.volti/audio/<id>.<endung>` kopiert, Info-Felder `audio` (Dateiname) und `audioName` (Originalname, Anzeige). Abgleich wie Stempel-Bilder: neu oder gelöscht, nie verändert (`isSyncedPath`, `isStampImage` in `SyncEngine`); eine neue Aufnahme bekommt eine neue ID, die alte wird gelöscht. Beim Löschen eines Stücks wird seine Aufnahme mitgelöscht (`deleteScores`).
+   Notenansicht: Kopfhörer-Knopf oben bzw. Taste K (spielt/hält an, ohne Aufnahme öffnet es das Fenster), `AudioPanel` am Ort von Metronom und Stimmgerät (immer nur eines offen). `ScoreAudioPlayer` (`flutter_soloud`): Beim Öffnen bzw. Songwechsel wird die Aufnahme vorgeladen (`_adoptTempo`), ein anderes Stück beendet die bisherige. Tempo 50–150 % über `setRelativePlaySpeed`; die dadurch verschobene Tonhöhe gleicht der Pitch-Shift-Filter aus (Faktor 2^(Halbtöne/12)/Tempo, nur aktiv, wenn nötig; Filter müssen vor `play` aktiviert sein, deshalb startet eine Änderung die Stimme an derselben Stelle neu). Tonhöhe ±6 Halbtöne, Schleife A–B (Abfrage alle 50 ms). Audio-Datei auf die Notenseite ziehen ordnet sie zu.
+48. **Drag-and-drop** (Wunsch des Besitzers, `desktop_drop`, Apache-2.0): PDFs oder ganze Ordner aus dem Datei-Explorer ins Hauptfenster ziehen importiert sie in den offenen Ordner der Bibliothek (`_dropZone`, `importDropped` in `library_screen.dart`, Hinweis-Fläche beim Darüberziehen). Nur wenn die Bibliothek vorne liegt (`ModalRoute.isCurrent`), sonst würde z. B. eine Audio-Datei auf der Notenansicht auch hier landen.
+   Handy: Die obere Leiste der Notenansicht zeigt nur Bearbeiten, Metronom, Aufnahme und ⋮; Stimmgerät, Seitenübersicht, Teilen und Lesezeichen stehen dann im ⋮-Menü (Breite unter 600).
+
 ## Prüfen
 ```bash
 flutter analyze
@@ -232,7 +237,6 @@ flutter test
 - Bausteine in `lib/app/visuals.dart`: `GradientButton`, `GradientFab`, `GradientIconButton`, `VoltiMark` (Bildmarke im Verlauf). Karten-Symbole der Übersicht ebenfalls im Verlauf (`ShaderMask`).
 
 ## Offene Ideen (noch nicht umsetzen)
-- **Audio zum Mitspielen** (MP3 an ein Stück hängen): später besprechen.
 - **Android:** Der Besitzer hat noch kein Android-Tablet (plant ein Galaxy Tab S12 Ultra). Ordner-Sync geht dort so nicht.
 
 ## Vereinbarte Richtung für Bearbeitungsfunktionen (eigenes Design)

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../library/folders.dart';
+import '../library/score_audio.dart';
 import '../library/setlist.dart';
 import '../library/sidecar_store.dart';
 import '../teaching/school_calendar.dart';
@@ -108,7 +109,8 @@ class SyncEngine {
 
     bool isPdf(String rel) => rel.startsWith('Noten/') && rel.toLowerCase().endsWith('.pdf');
     // Bilder eigener Stempel: wie PDFs (neu oder gelöscht, nie verändert).
-    bool isStampImage(String rel) => rel.startsWith('.volti/stamps/') && rel.endsWith('.png');
+    bool isStampImage(String rel) =>
+        (rel.startsWith('.volti/stamps/') && rel.endsWith('.png')) || isAudioFile(rel);
     // Setlists, Stift-Vorlagen, Liste der eigenen Stempel: ganze Datei, die
     // jüngste Fassung gewinnt.
     bool isSetlist(String rel) =>

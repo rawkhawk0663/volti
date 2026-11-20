@@ -45,6 +45,10 @@ List<_HelpPage> get _pages => [
       '“Import” brings PDFs into the library. Volti makes a copy, your originals stay untouched.',
     ),
     tr(
+      'Am Computer kannst du PDFs auch einfach aus dem Datei-Explorer ins Volti-Fenster ziehen.',
+      'On a computer you can also simply drag PDFs from File Explorer into the Volti window.',
+    ),
+    tr(
       'Mit Ordnern ordnest du deine Noten, z. B. nach Projekt. Jedes Stück liegt in genau einem Ordner.',
       'Folders let you organise your music, e.g. by project. Each piece lives in exactly one folder.',
     ),
@@ -71,6 +75,12 @@ List<_HelpPage> get _pages => [
     tr(
       'Im Querformat stehen zwei Seiten nebeneinander, jedes Umblättern geht eine Seite weiter.',
       'In landscape, two pages sit side by side, and each turn moves one page on.',
+    ),
+    tr(
+      'Mit dem Kopfhörer-Knopf oben ordnest du einem Stück eine Aufnahme zu und spielst mit, auch langsamer oder '
+          'als Schleife. Taste K startet und hält an.',
+      'The headphones button at the top attaches a recording to a piece so you can play along, also slower or '
+          'as a loop. The K key starts and stops it.',
     ),
   ]),
   _HelpPage(Icons.edit_outlined, tr('Mit dem Stift schreiben', 'Writing with the pen'), [

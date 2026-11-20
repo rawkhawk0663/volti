@@ -34,12 +34,20 @@ import 'zoom_area.dart';
 import '../../app/window_buttons.dart';
 import 'metronome.dart';
 import 'metronome_panel.dart';
+import 'audio_panel.dart';
+import 'score_audio_player.dart';
 import 'page_overview.dart';
 import 'page_strip.dart';
 import 'paper_picker.dart';
 import 'tuner.dart';
 import 'tuner_panel.dart';
 import '../../core/library/score_meta.dart';
+import '../../core/library/score_audio.dart';
+
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_selector/file_selector.dart';
+import 'package:path/path.dart' as p;
+
 import '../library/settings_dialog.dart';
 import '../../app/keep_awake.dart';
 import '../../app/l10n.dart';
@@ -206,6 +214,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// Stimmgerät und Stimmton (Kammerton wird auf dem Gerät gemerkt).
   late final _tuner = Tuner(a4: tools.tuningA4, onA4Changed: tools.setTuningA4);
   bool _tunerOpen = false;
+
+  /// Aufnahme des Stücks zum Mitspielen (wird beim Öffnen mitgeladen).
+  final _audio = ScoreAudioPlayer();
+  bool _audioOpen = false;
 
   /// Kleine Seitenbilder für die Bildleiste unten.
   final _stripThumbs = StripThumbs();
@@ -506,6 +518,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     _zoom.dispose();
     _metronome.dispose();
     _tuner.dispose();
+    _audio.dispose();
     _stripThumbs.dispose();
     tools.viewScale = 1;
     tools.setMode(ToolMode.read);
@@ -694,7 +707,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// Kommt ein anderes Stück dran, sein Tempo übernehmen (falls eingetragen).
   void _adoptTempo() {
     final p = _leftPiece;
-    if (p == null || p.cache == null || _metronomePiece == _left.piece) return;
+    if (p == null || p.cache == null) return;
+    // Aufnahme des Stücks bereithalten (ein anderes Stück beendet die bisherige).
+    final audio = audioPathOf(p.item.path, p.meta);
+    if (audio != _audio.path) _audio.load(audio);
+    if (_metronomePiece == _left.piece) return;
     _metronomePiece = _left.piece;
     _metronome.adopt(bpm: p.tempo, beats: p.beats);
   }
@@ -703,14 +720,122 @@ class _ViewerScreenState extends State<ViewerScreen> {
     _adoptTempo();
     setState(() {
       _metronomeOpen = !_metronomeOpen;
-      if (_metronomeOpen) _tunerOpen = false; // beide stehen am selben Ort
+      // Alle drei Fenster stehen am selben Ort.
+      if (_metronomeOpen) _tunerOpen = _audioOpen = false;
     });
   }
 
   void _toggleTuner() => setState(() {
     _tunerOpen = !_tunerOpen;
-    if (_tunerOpen) _metronomeOpen = false;
+    if (_tunerOpen) _metronomeOpen = _audioOpen = false;
   });
+
+  void _toggleAudio() {
+    _adoptTempo();
+    setState(() {
+      _audioOpen = !_audioOpen;
+      if (_audioOpen) _metronomeOpen = _tunerOpen = false;
+    });
+  }
+
+  /// Audio-Datei auswählen und dem Stück zuordnen.
+  Future<void> _pickAudio() async {
+    final file = await openFile(
+      acceptedTypeGroups: [
+        XTypeGroup(label: tr('Audio', 'Audio'), extensions: audioExtensions, mimeTypes: const ['audio/*']),
+      ],
+    );
+    if (file == null) return;
+    await _assignAudio(file.path);
+  }
+
+  /// Ordnet dem aktuellen Stück die Aufnahme [source] zu (als Kopie in der
+  /// Bibliothek); eine bisherige wird ersetzt.
+  Future<void> _assignAudio(String source) async {
+    final piece = _leftPiece;
+    if (piece == null || piece.cache == null) return;
+    if (!canPlayAudio(source)) {
+      _snack(
+        tr(
+          'Dieses Format kann Volti nicht abspielen (MP3, M4A, WAV, OGG oder FLAC).',
+          'Volti cannot play this format (MP3, M4A, WAV, OGG or FLAC).',
+        ),
+      );
+      return;
+    }
+    try {
+      final name = await importAudioFile(libraryRootOf(piece.item.path), source);
+      final old = ScoreMeta(piece.meta.fields);
+      final meta = ScoreMeta(piece.meta.fields)
+        ..set(ScoreMeta.audio, name)
+        ..set(ScoreMeta.audioName, p.basename(source));
+      final saved = await const SidecarStore().save(piece.item.path, meta: meta);
+      piece.meta = saved.meta;
+      await deleteAudioOf(piece.item.path, old);
+      await _audio.load(audioPathOf(piece.item.path, piece.meta));
+      if (!mounted) return;
+      setState(() {
+        _audioOpen = true;
+        _metronomeOpen = _tunerOpen = false;
+      });
+      _snack(tr('Aufnahme zu „${piece.item.title}“ hinzugefügt', 'Recording added to “${piece.item.title}”'));
+    } catch (e) {
+      _snack(tr('Die Aufnahme konnte nicht übernommen werden: $e', 'The recording could not be added: $e'));
+    }
+  }
+
+  Future<void> _removeAudio() async {
+    final piece = _leftPiece;
+    if (piece == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(tr('Aufnahme entfernen?', 'Remove recording?')),
+        content: Text(
+          tr(
+            'Die Aufnahme wird von „${piece.item.title}“ entfernt, auch auf deinen anderen Geräten. '
+                'Die Originaldatei bleibt erhalten.',
+            'The recording will be removed from “${piece.item.title}”, also on your other devices. '
+                'The original file is kept.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Entfernen', 'Remove'))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final old = ScoreMeta(piece.meta.fields);
+    final meta = ScoreMeta(piece.meta.fields)
+      ..set(ScoreMeta.audio, '')
+      ..set(ScoreMeta.audioName, '');
+    final saved = await const SidecarStore().save(piece.item.path, meta: meta);
+    piece.meta = saved.meta;
+    await deleteAudioOf(piece.item.path, old);
+    await _audio.load(null);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _onDrop(DropDoneDetails d) async {
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    final audio = [for (final f in d.files) f.path].where(canPlayAudio).toList();
+    if (audio.isEmpty) {
+      _snack(
+        tr(
+          'Hier kannst du eine Audio-Datei auf das Stück ziehen (MP3, M4A, WAV, OGG oder FLAC).',
+          'Drop an audio file here to attach it to the piece (MP3, M4A, WAV, OGG or FLAC).',
+        ),
+      );
+      return;
+    }
+    await _assignAudio(audio.first);
+  }
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
 
   /// Seitenübersicht: alle Seiten als kleine Bilder, antippen springt hin.
   Future<void> _openOverview() async {
@@ -871,6 +996,14 @@ class _ViewerScreenState extends State<ViewerScreen> {
     } else if (down && key == LogicalKeyboardKey.keyM) {
       _adoptTempo();
       _metronome.toggle();
+    } else if (down && key == LogicalKeyboardKey.keyK) {
+      // Aufnahme abspielen/anhalten (ohne Aufnahme: Fenster zum Zuordnen).
+      _adoptTempo();
+      if (_audio.ready) {
+        _audio.toggle();
+      } else {
+        _toggleAudio();
+      }
     } else if (down && key == LogicalKeyboardKey.keyO) {
       _openOverview();
     } else if (down && key == LogicalKeyboardKey.keyL) {
@@ -906,147 +1039,171 @@ class _ViewerScreenState extends State<ViewerScreen> {
     return Focus(
       autofocus: true,
       onKeyEvent: _onKey,
-      child: Scaffold(
-        backgroundColor: VoltiColors.pageSurround,
-        body: Stack(
-          children: [
-            Positioned.fill(child: _buildPageArea()),
-            // Vergrössert: Anzeige und Knopf zurück auf die ganze Seite.
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: showBars && _pageCount > 1 ? PageStrip.height + 12 : 16,
-              child: Center(
-                child: ValueListenableBuilder<Matrix4>(
-                  valueListenable: _zoom.matrix,
-                  builder: (context, _, _) => !_zoom.isZoomed
-                      ? const SizedBox.shrink()
-                      : ExcludeFocus(
-                          child: ActionChip(
-                            avatar: const Icon(Icons.fit_screen_outlined, size: 18),
-                            label: Text('${(_zoom.scale * 100).round()} %'),
-                            tooltip: tr('Ganze Seite zeigen (Esc)', 'Show whole page (Esc)'),
-                            onPressed: _zoom.reset,
+      // Audio-Datei aus dem Datei-Explorer auf die Seite ziehen = Aufnahme zuordnen.
+      child: DropTarget(
+        onDragDone: _onDrop,
+        child: Scaffold(
+          backgroundColor: VoltiColors.pageSurround,
+          body: Stack(
+            children: [
+              Positioned.fill(child: _buildPageArea()),
+              // Vergrössert: Anzeige und Knopf zurück auf die ganze Seite.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: showBars && _pageCount > 1 ? PageStrip.height + 12 : 16,
+                child: Center(
+                  child: ValueListenableBuilder<Matrix4>(
+                    valueListenable: _zoom.matrix,
+                    builder: (context, _, _) => !_zoom.isZoomed
+                        ? const SizedBox.shrink()
+                        : ExcludeFocus(
+                            child: ActionChip(
+                              avatar: const Icon(Icons.fit_screen_outlined, size: 18),
+                              label: Text('${(_zoom.scale * 100).round()} %'),
+                              tooltip: tr('Ganze Seite zeigen (Esc)', 'Show whole page (Esc)'),
+                              onPressed: _zoom.reset,
+                            ),
                           ),
-                        ),
-                ),
-              ),
-            ),
-            // Am Computer: Maus an den oberen Rand → Leiste erscheint.
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 10,
-              child: MouseRegion(opaque: false, onEnter: (_) => editing ? null : _showControlsBriefly()),
-            ),
-            // ExcludeFocus: Buttons sollen nie den Tastatur-Fokus "stehlen",
-            // sonst würde z. B. die Leertaste eines Pedals einen Button auslösen.
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: ExcludeFocus(
-                child: RepaintBoundary(
-                  child: _Slide(
-                    visible: showBars,
-                    fromTop: true,
-                    child: _TopBar(state: this),
                   ),
                 ),
               ),
-            ),
-            if (_pageCount > 1)
+              // Am Computer: Maus an den oberen Rand → Leiste erscheint.
               Positioned(
-                bottom: 0,
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 10,
+                child: MouseRegion(opaque: false, onEnter: (_) => editing ? null : _showControlsBriefly()),
+              ),
+              // ExcludeFocus: Buttons sollen nie den Tastatur-Fokus "stehlen",
+              // sonst würde z. B. die Leertaste eines Pedals einen Button auslösen.
+              Positioned(
+                top: 0,
                 left: 0,
                 right: 0,
                 child: ExcludeFocus(
                   child: RepaintBoundary(
                     child: _Slide(
                       visible: showBars,
-                      fromTop: false,
-                      child: _buildStrip(visible: showBars),
+                      fromTop: true,
+                      child: _TopBar(state: this),
                     ),
                   ),
                 ),
               ),
-            // Lineal über den Noten (unter der Werkzeugleiste).
-            if (tools.rulerVisible && _leftPiece?.cache != null) Positioned.fill(child: RulerOverlay(tools: tools)),
-            if (editing && _leftPiece?.cache != null)
-              Positioned.fill(
-                child: SafeArea(
-                  // TextFieldTapRegion: Antippen des Einstellungsfensters beendet
-                  // das Schreiben einer Text-Notiz nicht.
+              if (_pageCount > 1)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
                   child: ExcludeFocus(
-                    child: TextFieldTapRegion(
-                      child: ToolOverlay(tools: tools, ink: _activePiece.ink, page: _activePage),
-                    ),
-                  ),
-                ),
-              ),
-            // Nach einem Sprung: zurück, woher man kam (ein paar Sekunden lang)
-            if (_returnTo != null)
-              Positioned(
-                left: 16,
-                bottom: 24,
-                child: ExcludeFocus(
-                  child: FilledButton.tonalIcon(
-                    onPressed: _jumpBack,
-                    icon: const Icon(Icons.undo),
-                    label: Text(tr('Zurück', 'Back')),
-                  ),
-                ),
-              ),
-            if (_tunerOpen)
-              Positioned(
-                right: 12,
-                top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
-                child: ExcludeFocus(
-                  child: RepaintBoundary(
-                    child: ScaledBox(
-                      scale: compactScale(MediaQuery.sizeOf(context)),
-                      child: TunerPanel(tuner: _tuner, onClose: () => setState(() => _tunerOpen = false)),
-                    ),
-                  ),
-                ),
-              ),
-            if (_metronomeOpen)
-              Positioned(
-                right: 12,
-                top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
-                child: ExcludeFocus(
-                  child: RepaintBoundary(
-                    child: ScaledBox(
-                      scale: compactScale(MediaQuery.sizeOf(context)),
-                      child: MetronomePanel(
-                        metronome: _metronome,
-                        onClose: () => setState(() => _metronomeOpen = false),
-                        onRemember: _leftPiece?.cache == null ? null : _rememberTempo,
-                        songTempo: _leftPiece?.tempo,
-                        songTitle: _leftPiece?.item.title,
+                    child: RepaintBoundary(
+                      child: _Slide(
+                        visible: showBars,
+                        fromTop: false,
+                        child: _buildStrip(visible: showBars),
                       ),
                     ),
                   ),
                 ),
-              ),
-            if (_showDiagnostics)
-              Positioned(
-                right: 12,
-                bottom: 72,
-                child: IgnorePointer(child: PenDiagnosticsPanel(diagnostics: _diagnostics)),
-              ),
-            if (_leftPiece?.ink.saveError != null)
-              Positioned(
-                left: 12,
-                bottom: 12,
-                child: Material(
-                  color: Theme.of(context).colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(padding: const EdgeInsets.all(8), child: Text(_leftPiece!.ink.saveError!)),
+              // Lineal über den Noten (unter der Werkzeugleiste).
+              if (tools.rulerVisible && _leftPiece?.cache != null) Positioned.fill(child: RulerOverlay(tools: tools)),
+              if (editing && _leftPiece?.cache != null)
+                Positioned.fill(
+                  child: SafeArea(
+                    // TextFieldTapRegion: Antippen des Einstellungsfensters beendet
+                    // das Schreiben einer Text-Notiz nicht.
+                    child: ExcludeFocus(
+                      child: TextFieldTapRegion(
+                        child: ToolOverlay(tools: tools, ink: _activePiece.ink, page: _activePage),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-          ],
+              // Nach einem Sprung: zurück, woher man kam (ein paar Sekunden lang)
+              if (_returnTo != null)
+                Positioned(
+                  left: 16,
+                  bottom: 24,
+                  child: ExcludeFocus(
+                    child: FilledButton.tonalIcon(
+                      onPressed: _jumpBack,
+                      icon: const Icon(Icons.undo),
+                      label: Text(tr('Zurück', 'Back')),
+                    ),
+                  ),
+                ),
+              if (_tunerOpen)
+                Positioned(
+                  right: 12,
+                  top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
+                  child: ExcludeFocus(
+                    child: RepaintBoundary(
+                      child: ScaledBox(
+                        scale: compactScale(MediaQuery.sizeOf(context)),
+                        child: TunerPanel(tuner: _tuner, onClose: () => setState(() => _tunerOpen = false)),
+                      ),
+                    ),
+                  ),
+                ),
+              if (_audioOpen)
+                Positioned(
+                  right: 12,
+                  top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
+                  child: ExcludeFocus(
+                    child: RepaintBoundary(
+                      child: ScaledBox(
+                        scale: compactScale(MediaQuery.sizeOf(context)),
+                        child: AudioPanel(
+                          player: _audio,
+                          onClose: () => setState(() => _audioOpen = false),
+                          onPick: _leftPiece?.cache == null ? null : _pickAudio,
+                          onRemove: _leftPiece?.cache == null ? null : _removeAudio,
+                          fileName: _leftPiece?.meta.text(ScoreMeta.audioName),
+                          songTitle: _leftPiece?.item.title,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (_metronomeOpen)
+                Positioned(
+                  right: 12,
+                  top: (showBars ? 64 : 12) + MediaQuery.paddingOf(context).top,
+                  child: ExcludeFocus(
+                    child: RepaintBoundary(
+                      child: ScaledBox(
+                        scale: compactScale(MediaQuery.sizeOf(context)),
+                        child: MetronomePanel(
+                          metronome: _metronome,
+                          onClose: () => setState(() => _metronomeOpen = false),
+                          onRemember: _leftPiece?.cache == null ? null : _rememberTempo,
+                          songTempo: _leftPiece?.tempo,
+                          songTitle: _leftPiece?.item.title,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (_showDiagnostics)
+                Positioned(
+                  right: 12,
+                  bottom: 72,
+                  child: IgnorePointer(child: PenDiagnosticsPanel(diagnostics: _diagnostics)),
+                ),
+              if (_leftPiece?.ink.saveError != null)
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: Material(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(padding: const EdgeInsets.all(8), child: Text(_leftPiece!.ink.saveError!)),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1431,6 +1588,12 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final tools = state.tools;
+    // Handy: nur die wichtigsten Knöpfe, der Rest steht im ⋮-Menü.
+    final narrow = MediaQuery.sizeOf(context).width < 600;
+    PopupMenuItem<VoidCallback> item(IconData icon, String label, VoidCallback onTap) => PopupMenuItem(
+      value: onTap,
+      child: ListTile(leading: Icon(icon), title: Text(label), contentPadding: EdgeInsets.zero),
+    );
     return Listener(
       // Jede Berührung der Leiste hält sie offen.
       onPointerDown: (_) => state._restartHideTimer(),
@@ -1462,12 +1625,19 @@ class _TopBar extends StatelessWidget {
                           style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
                         ),
                       ),
-                    GradientButton(
-                      compact: true,
-                      onPressed: tools.startEditing,
-                      icon: const Icon(Icons.edit),
-                      label: tr('Bearbeiten', 'Edit'),
-                    ),
+                    if (narrow)
+                      GradientIconButton(
+                        icon: Icons.edit,
+                        tooltip: tr('Bearbeiten', 'Edit'),
+                        onPressed: tools.startEditing,
+                      )
+                    else
+                      GradientButton(
+                        compact: true,
+                        onPressed: tools.startEditing,
+                        icon: const Icon(Icons.edit),
+                        label: tr('Bearbeiten', 'Edit'),
+                      ),
                     ListenableBuilder(
                       listenable: state._metronome,
                       builder: (context, _) => IconButton(
@@ -1479,32 +1649,70 @@ class _TopBar extends StatelessWidget {
                         onPressed: state._toggleMetronome,
                       ),
                     ),
-                    IconButton(
-                      tooltip: tr('Stimmgerät und Stimmton', 'Tuner and pitch pipe'),
-                      isSelected: state._tunerOpen,
-                      icon: const TuningForkIcon(),
-                      onPressed: state._toggleTuner,
+                    ListenableBuilder(
+                      listenable: state._audio,
+                      builder: (context, _) {
+                        final a = state._audio;
+                        final scheme = Theme.of(context).colorScheme;
+                        return IconButton(
+                          tooltip: a.path == null
+                              ? tr('Aufnahme zuordnen (K)', 'Attach recording (K)')
+                              : tr('Aufnahme (K: abspielen/anhalten)', 'Recording (K: play/pause)'),
+                          isSelected: state._audioOpen || a.playing,
+                          icon: Icon(
+                            a.playing ? Icons.headphones : Icons.headphones_outlined,
+                            color: a.path != null ? scheme.primary : null,
+                          ),
+                          onPressed: state._toggleAudio,
+                        );
+                      },
                     ),
-                    IconButton(
-                      tooltip: tr('Seitenübersicht (O)', 'Page overview (O)'),
-                      icon: const Icon(Icons.grid_view),
-                      onPressed: state._openOverview,
-                    ),
-                    IconButton(
-                      tooltip: tr('Als PDF teilen oder drucken', 'Share or print as PDF'),
-                      icon: const Icon(Icons.ios_share),
-                      onPressed: state._export,
-                    ),
-                    IconButton(
-                      tooltip: tr('Lesezeichen', 'Bookmarks'),
-                      icon: const Icon(Icons.bookmarks_outlined),
-                      onPressed: state._openBookmarks,
-                    ),
+                    if (!narrow) ...[
+                      IconButton(
+                        tooltip: tr('Stimmgerät und Stimmton', 'Tuner and pitch pipe'),
+                        isSelected: state._tunerOpen,
+                        icon: const TuningForkIcon(),
+                        onPressed: state._toggleTuner,
+                      ),
+                      IconButton(
+                        tooltip: tr('Seitenübersicht (O)', 'Page overview (O)'),
+                        icon: const Icon(Icons.grid_view),
+                        onPressed: state._openOverview,
+                      ),
+                      IconButton(
+                        tooltip: tr('Als PDF teilen oder drucken', 'Share or print as PDF'),
+                        icon: const Icon(Icons.ios_share),
+                        onPressed: state._export,
+                      ),
+                      IconButton(
+                        tooltip: tr('Lesezeichen', 'Bookmarks'),
+                        icon: const Icon(Icons.bookmarks_outlined),
+                        onPressed: state._openBookmarks,
+                      ),
+                    ],
                     PopupMenuButton<VoidCallback>(
                       tooltip: tr('Mehr', 'More'),
                       icon: const Icon(Icons.more_vert),
                       onSelected: (a) => a(),
                       itemBuilder: (_) => [
+                        if (narrow) ...[
+                          PopupMenuItem(
+                            value: state._toggleTuner,
+                            child: ListTile(
+                              leading: const TuningForkIcon(),
+                              title: Text(tr('Stimmgerät und Stimmton', 'Tuner and pitch pipe')),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          item(Icons.grid_view, tr('Seitenübersicht', 'Page overview'), state._openOverview),
+                          item(
+                            Icons.ios_share,
+                            tr('Als PDF teilen oder drucken', 'Share or print as PDF'),
+                            state._export,
+                          ),
+                          item(Icons.bookmarks_outlined, tr('Lesezeichen', 'Bookmarks'), state._openBookmarks),
+                          const PopupMenuDivider(),
+                        ],
                         PopupMenuItem(
                           value: () => showSettingsDialog(context),
                           child: ListTile(

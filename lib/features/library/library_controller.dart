@@ -8,6 +8,7 @@ import '../../core/app_settings.dart';
 import '../../core/library/folders.dart';
 import '../../core/library/library_scanner.dart';
 import '../../core/library/score_importer.dart';
+import '../../core/library/score_audio.dart';
 import '../../core/library/score_meta.dart';
 import '../../core/library/setlist.dart';
 import '../../core/library/sidecar_store.dart';
@@ -318,6 +319,7 @@ class LibraryController extends ChangeNotifier {
     final rels = {for (final e in entries) e.relativePath};
     final paths = {for (final e in entries) e.path};
     for (final entry in entries) {
+      await deleteAudioOf(entry.path, entry.meta);
       for (final f in [File(entry.path), File('${entry.path}${SidecarStore.suffix}')]) {
         if (await f.exists()) await f.delete();
       }
