@@ -271,8 +271,9 @@ class _LibraryScreenState extends State<LibraryScreen> with LibraryActions<Libra
   }
 }
 
-/// Knopf unten in der Seitenleiste, gestaltet wie ihre Punkte (Symbol mit
-/// Beschriftung darunter), aber ohne Auswahl: Er öffnet ein Fenster.
+/// Knopf unten in der Seitenleiste: nur das Symbol (Wunsch des Besitzers),
+/// der Name erscheint beim Darüberfahren mit der Maus. Ohne Auswahl, er
+/// öffnet ein Fenster.
 class _RailButton extends StatelessWidget {
   const _RailButton({required this.icon, required this.label, required this.onTap});
   final IconData icon;
@@ -280,36 +281,13 @@ class _RailButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme.onSurfaceVariant;
-    return Semantics(
-      button: true,
-      label: label,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: SizedBox(
-          width: 72,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: color),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelSmall?.copyWith(color: color),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => IconButton(
+    tooltip: label,
+    iconSize: 26,
+    color: Theme.of(context).colorScheme.onSurfaceVariant,
+    icon: Icon(icon),
+    onPressed: onTap,
+  );
 }
 
 /// Leere Bibliothek (z. B. beim ersten Start): Begrüssung und Import.
