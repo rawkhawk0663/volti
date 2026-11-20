@@ -817,6 +817,7 @@ Map<ShapeKind, String> get _shapeNames => {
   ShapeKind.decrescendo: tr('Crescendo / Decrescendo', 'Crescendo / decrescendo'),
   ShapeKind.slur: tr('Bogen', 'Slur'),
   ShapeKind.staff: tr('Notenlinien', 'Staff lines'),
+  ShapeKind.tab: tr('Tabulatur (6 Linien)', 'Tablature (6 lines)'),
 };
 
 class _ShapeSettings extends StatelessWidget {
@@ -846,7 +847,7 @@ class _ShapeSettings extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           switch (tools.shapeKind) {
-            ShapeKind.staff => tr(
+            ShapeKind.staff || ShapeKind.tab => tr(
               'Vom Anfang zum Ende ziehen. Nach unten ziehen bestimmt die Höhe, nur waagrecht ergibt die übliche Höhe.',
               'Drag from start to end. Dragging downwards sets the height; dragging only sideways gives the usual height.',
             ),
@@ -927,9 +928,12 @@ class _ShapeIconPainter extends CustomPainter {
       ShapeKind.rectangle || ShapeKind.ellipse => (const Offset(3, 7), Offset(size.width - 3, size.height - 7)),
       ShapeKind.line || ShapeKind.arrow => (Offset(3, size.height - 5), Offset(size.width - 3, 5)),
       ShapeKind.staff => (const Offset(2, 7), Offset(size.width - 2, size.height - 7)),
+      ShapeKind.tab => (const Offset(2, 4), Offset(size.width - 2, size.height - 4)),
       _ => (Offset(2, size.height / 2 + 4), Offset(size.width - 2, size.height / 2 + 4)),
     };
-    for (final piece in shapeGeometry(kind, a, b, 1.5, pageWidth: size.width * 28)) {
+    // Die Tabulatur ist höher – mit kleinerer „Seite“ passt sie ins Symbol.
+    final page = size.width * (kind == ShapeKind.tab ? 12 : 28);
+    for (final piece in shapeGeometry(kind, a, b, 1.5, pageWidth: page)) {
       if (piece.solid) canvas.drawPath(Path()..addPolygon(piece.points, true), Paint()..color = paint.color);
       canvas.drawPoints(PointMode.polygon, piece.points, paint);
     }

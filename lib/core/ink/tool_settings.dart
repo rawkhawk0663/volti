@@ -127,7 +127,10 @@ enum ShapeKind {
   slur,
 
   /// Fünf waagrechte Notenlinien.
-  staff;
+  staff,
+
+  /// Sechs waagrechte Linien für Gitarren-Tabulatur.
+  tab;
 
   static ShapeKind fromName(String? n) => ShapeKind.values.firstWhere((k) => k.name == n, orElse: () => line);
 }

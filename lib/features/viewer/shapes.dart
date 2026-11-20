@@ -19,6 +19,13 @@ const kStaffHeight = 0.033;
 /// Ziehen die Höhe der Notenlinien.
 const kStaffFreeHeight = 0.07;
 
+/// Höhe einer Tabulatur (6 Linien), wenn man nur waagrecht zieht (≈ 12,5 mm
+/// auf A4, gleich wie die Vorlage „Tabulatur“ für leere Seiten).
+const kTabHeight = 0.06;
+
+/// Ab dieser senkrechten Bewegung bestimmt das Ziehen die Höhe der Tabulatur.
+const kTabFreeHeight = 0.085;
+
 /// Breite der Notenlinien relativ zur eingestellten Breite.
 const kStaffLineWidth = 0.45;
 
@@ -105,24 +112,27 @@ List<ShapePiece> shapeGeometry(ShapeKind kind, Offset a, Offset b, double stroke
         ShapePiece([b + normal * h, a, b - normal * h]),
       ];
     case ShapeKind.staff:
+    case ShapeKind.tab:
       // Immer waagrecht. Die Länge kommt vom Ziehen nach links/rechts, die
       // Höhe vom Ziehen nach unten (oder oben). Fast nur waagrecht gezogen
-      // → übliche Systemhöhe.
+      // → übliche Systemhöhe. Notenlinien: 5 Linien, Tabulatur: 6 (Saiten).
+      final tab = kind == ShapeKind.tab;
+      final lines = tab ? 6 : 5;
       final w = pageWidth ?? 800;
       final dy = b.dy - a.dy;
       if ((b.dx - a.dx).abs() < 4) return const [];
       // Die Höhe ändert sich erst nach einer deutlichen Bewegung nach unten
       // (oder oben). Kleines Wackeln beim waagrechten Ziehen bleibt ohne Folge.
-      final free = dy.abs() >= w * kStaffFreeHeight;
-      final height = free ? dy.abs() : w * kStaffHeight;
+      final free = dy.abs() >= w * (tab ? kTabFreeHeight : kStaffFreeHeight);
+      final height = free ? dy.abs() : w * (tab ? kTabHeight : kStaffHeight);
       final down = dy >= 0 || !free ? 1.0 : -1.0;
       // Feiner als die eingestellte Breite (Wunsch des Besitzers): Notenlinien
       // sind auch im Druck dünner als Hälse und Bögen.
       return [
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < lines; i++)
           ShapePiece([
-            Offset(a.dx, a.dy + down * height * i / 4),
-            Offset(b.dx, a.dy + down * height * i / 4),
+            Offset(a.dx, a.dy + down * height * i / (lines - 1)),
+            Offset(b.dx, a.dy + down * height * i / (lines - 1)),
           ], widthFactor: kStaffLineWidth),
       ];
     case ShapeKind.slur:

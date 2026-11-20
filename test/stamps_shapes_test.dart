@@ -162,6 +162,17 @@ void main() {
       final tall = geo(ShapeKind.staff, const Offset(100, 200), const Offset(500, 300), 2, pageWidth: 1000);
       expect(tall.last.first.dy, 300, reason: 'Höhe aus dem Ziehen nach unten');
       expect(tall[1].first.dy, 225);
+      // Tabulatur: 6 Linien, sonst gleich wie Notenlinien
+      final tab = geo(ShapeKind.tab, const Offset(100, 200), const Offset(500, 203), 2, pageWidth: 1000);
+      expect(tab.length, 6);
+      expect(tab.every((l) => l.first.dy == l.last.dy), isTrue);
+      expect(tab.last.first.dy - tab.first.first.dy, closeTo(60, 0.01));
+      expect(tab[1].first.dy - tab[0].first.dy, closeTo(12, 0.01), reason: 'gleiche Abstände');
+      final tabWobble = geo(ShapeKind.tab, const Offset(100, 200), const Offset(500, 270), 2, pageWidth: 1000);
+      expect(tabWobble.last.first.dy, closeTo(260, 0.01), reason: '70 px nach unten reichen noch nicht');
+      final tabTall = geo(ShapeKind.tab, const Offset(100, 200), const Offset(500, 300), 2, pageWidth: 1000);
+      expect(tabTall.last.first.dy, 300);
+      expect(offeredShapeKinds, contains(ShapeKind.tab));
       // Gabeln immer waagrecht
       final hairpin = geo(ShapeKind.crescendo, const Offset(0, 0), const Offset(300, 80), 2, pageWidth: 1000).single;
       expect(hairpin[1], Offset.zero);
