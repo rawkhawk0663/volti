@@ -1520,7 +1520,7 @@ class _TabSettings extends StatelessWidget {
                 child: TextButton.icon(
                   onPressed: () => session!.ink.updateTab(
                     block.id,
-                    beats: [for (final b in block.beats) b.bar ? const TabBeat.bar() : b],
+                    beats: [for (final b in block.beats) b.bar ? TabBeat.bar(kind: b.kind) : b],
                   ),
                   icon: const Icon(Icons.auto_fix_high, size: 18),
                   label: Text(tr('Taktstriche wieder automatisch', 'Bar lines automatic again')),

@@ -65,7 +65,8 @@ class _TabLayerState extends State<TabLayer> {
     if (i == null || i >= t.beats.length || !t.beats[i].bar) return t;
     final l = layoutTab(t, size);
     final beats = [...t.beats];
-    beats[i] = TabBeat.bar(at: l.fractionAt(_barX));
+    // Die Art (Wiederholung, Schlussstrich …) bleibt beim Verschieben.
+    beats[i] = TabBeat.bar(at: l.fractionAt(_barX), kind: t.beats[i].kind);
     return t.copyWith(beats: beats);
   }
 
@@ -226,7 +227,7 @@ class _TabLayerState extends State<TabLayer> {
   void _resetBar(TabBlock t, int i) {
     if (i >= t.beats.length || t.beats[i].at == null) return;
     final beats = [...t.beats];
-    beats[i] = const TabBeat.bar();
+    beats[i] = TabBeat.bar(kind: t.beats[i].kind);
     c.updateTab(t.id, beats: beats);
   }
 

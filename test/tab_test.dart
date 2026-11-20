@@ -342,6 +342,23 @@ void main() {
     });
   });
 
+  group('Besondere Taktstriche bleiben', () {
+    test('Taktart neu setzen behält Wiederholung vorne, Arten in der Mitte und Schlussstrich hinten', () {
+      const q = TabBeat(frets: {0: 1});
+      final beats = [
+        const TabBeat.bar(kind: BarKind.repeatStart),
+        q, q, q, q,
+        const TabBeat.bar(kind: BarKind.repeatEnd),
+        q, q, q, q,
+        const TabBeat.bar(kind: BarKind.last),
+      ];
+      final out = rebar(beats, 1.0);
+      expect(out.first.kind, BarKind.repeatStart);
+      expect(out[5].kind, BarKind.repeatEnd);
+      expect(out.last.kind, BarKind.last);
+    });
+  });
+
   group('Triolen', () {
     test('Drei Achtel-Triolen = eine Viertel, die Triole geht beim Weiterschreiben weiter', () {
       final e = TabEditor(const [], measure: 0.25);
@@ -542,7 +559,7 @@ void main() {
     testWidgets('Taktstrich am Griff ziehen und mit langem Drücken zurücksetzen', (t) async {
       await pump(t);
       final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
-      ink.updateTab(id, beats: const [TabBeat(frets: {0: 1}), TabBeat.bar(), TabBeat(frets: {0: 2})]);
+      ink.updateTab(id, beats: const [TabBeat(frets: {0: 1}), TabBeat.bar(kind: BarKind.repeatEnd), TabBeat(frets: {0: 2})]);
       tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
       await t.pump();
       await t.pump();
@@ -553,11 +570,13 @@ void main() {
       await t.pump();
       final bar = ink.annotations.tab(id)!.beats[1];
       expect(bar.at, isNotNull);
+      expect(bar.kind, BarKind.repeatEnd, reason: 'Wiederholung bleibt beim Verschieben');
       final after = layoutTab(ink.annotations.tab(id)!, const Size(800, 600)).xs[1];
       expect(after, greaterThan(before + 100));
       await t.longPress(handle);
       await t.pump();
       expect(ink.annotations.tab(id)!.beats[1].at, isNull);
+      expect(ink.annotations.tab(id)!.beats[1].kind, BarKind.repeatEnd);
       tools.tabSession.value = null;
       await t.pump();
       ink.dispose();

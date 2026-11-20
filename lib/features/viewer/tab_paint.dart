@@ -78,7 +78,7 @@ const _clef = 3.0;
 /// Breite der Taktart (in Linienabständen).
 double _meterWidth(String meter) {
   final digits = meter.split('/').map((p) => p.length).fold(1, math.max);
-  return 1.0 + digits * 1.35;
+  return 0.8 + digits * 1.1;
 }
 
 /// Ziffern der Taktart in der Notenschrift Bravura.
@@ -312,10 +312,10 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     final parts = t.meter!.split('/');
     final cx = l.origin.dx + g * (_clef + 0.1 + _meterWidth(t.meter!) / 2);
     for (final (i, part) in parts.indexed) {
-      final p = _text(_meterDigits(part), g * 3.2, color, family: 'Bravura');
+      final p = _text(_meterDigits(part), g * 2.6, color, family: 'Bravura');
       final base = p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
       // Die Ziffern sind um ihre Grundlinie herum gezeichnet.
-      final cy = l.top + g * (i == 0 ? 1.5 : 3.5);
+      final cy = l.top + g * (i == 0 ? 1.6 : 3.4);
       p.paint(canvas, Offset(cx - p.width / 2, cy - base));
       p.dispose();
     }
@@ -332,7 +332,7 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
       continue;
     }
     if (b.isRest) {
-      final p = _text(String.fromCharCode(_restGlyph(b.value)), g * 4, color, family: 'Bravura');
+      final p = _text(String.fromCharCode(_restGlyph(b.value)), g * 2.8, color, family: 'Bravura');
       final base = p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
       final mid = l.top + g * 2.5;
       // Ganze Pause hängt an einer Linie, die anderen sitzen in der Mitte.

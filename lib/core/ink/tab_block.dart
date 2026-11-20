@@ -275,21 +275,33 @@ List<TabBeat> restsFor(double length) {
 
 /// Taktstriche neu nach der Taktart setzen: alle bisherigen weg, dann nach
 /// jedem vollen Takt einer (ein zu langer Schlag beendet seinen Takt).
+/// Besondere Taktstriche bleiben erhalten: ein Wiederholungs-Anfang ganz
+/// vorne, ein Taktstrich ganz am Ende (z. B. Schlussstrich), und die übrigen
+/// Arten der Reihe nach.
 List<TabBeat> rebar(List<TabBeat> beats, double measure) {
   final notes = [
     for (final b in beats)
       if (!b.bar) b,
   ];
-  final out = <TabBeat>[];
+  final first = beats.isNotEmpty && beats.first.bar ? beats.first : null;
+  final last = beats.length > 1 && beats.last.bar ? beats.last : null;
+  final middle = [
+    for (var i = 0; i < beats.length; i++)
+      if (beats[i].bar && i != 0 && i != beats.length - 1) beats[i].kind,
+  ];
+  var k = 0;
+  final out = <TabBeat>[if (first != null) TabBeat.bar(kind: first.kind)];
   var acc = 0.0;
   for (var i = 0; i < notes.length; i++) {
     out.add(notes[i]);
     acc += notes[i].length;
     if (acc >= measure - 1e-9 && i < notes.length - 1) {
-      out.add(const TabBeat.bar());
+      out.add(TabBeat.bar(kind: k < middle.length ? middle[k] : BarKind.normal));
+      k++;
       acc = 0;
     }
   }
+  if (last != null && notes.isNotEmpty) out.add(TabBeat.bar(kind: last.kind));
   return out;
 }
 
