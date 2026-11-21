@@ -1,0 +1,69 @@
+# Erzeugt die Modell-Datei für „Spuren trennen“ und legt sie als eigenes
+# Release ab (Vorabversion, nie „latest“, damit die Update-Suche sie nicht
+# findet). Volti lädt sie beim ersten Gebrauch herunter. Läuft nur, wenn es
+# das Release noch nicht gibt; für eine neue Fassung STEM_MODEL_TAG erhöhen
+# (auch in lib/core/audio/stem_model.dart).
+name: Modell für Spuren trennen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - tool/make_stem_model.py
+      - .github/workflows/stem_model.yml
+  workflow_dispatch:
+
+env:
+  STEM_MODEL_TAG: stem-model-v1
+
+jobs:
+  model:
+    name: Modell erzeugen
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gibt es das Release schon?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$STEM_MODEL_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $STEM_MODEL_TAG gibt es schon – nichts zu tun."
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.exists != 'true'
+        with:
+          python-version: "3.12"
+      - name: Werkzeuge installieren
+        if: steps.check.outputs.exists != 'true'
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install demucs==4.1.0 onnx onnxruntime onnxscript
+      - name: Modell erzeugen und prüfen
+        if: steps.check.outputs.exists != 'true'
+        run: python tool/make_stem_model.py out
+      - name: Release erstellen
+        if: steps.check.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SUM=$(cat out/htdemucs_core.onnx.sha256)
+          cat > notes.md <<EOT
+          Modell-Datei für „Spuren trennen“ in Volti. Volti lädt sie beim ersten Gebrauch selbst herunter.
+          Model file for “Separate tracks” in Volti. Volti downloads it by itself on first use.
+
+          Hybrid Transformer Demucs (htdemucs), umgewandelt mit \`tool/make_stem_model.py\`.
+          Demucs: Copyright (c) Meta Platforms, Inc. and affiliates, MIT-Lizenz / MIT License.
+
+          SHA-256: $SUM
+          EOT
+          sed -i 's/^          //' notes.md
+          gh release create "$STEM_MODEL_TAG" out/htdemucs_core.onnx out/htdemucs_core.onnx.sha256 \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Volti: Modell für Spuren trennen ($STEM_MODEL_TAG)" \
+            --notes-file notes.md \
+            --prerelease --latest=false
