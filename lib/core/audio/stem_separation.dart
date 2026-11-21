@@ -10,12 +10,15 @@ import 'stft.dart';
 typedef StemModelRun =
     void Function(Float32List mix, Float32List mag, void Function(Float32List spec, Float32List wave) use);
 
-/// Gibt fertige Werte der beiden Spuren weiter (Schlagzeug und Rest, je
-/// links und rechts, gleich lang).
-typedef StemSink =
-    void Function(Float32List drumsL, Float32List drumsR, Float32List restL, Float32List restR);
+/// Gibt fertige Werte der vier Spuren weiter: [channels] hat 8 Listen
+/// (Spur s, Kanal c an Stelle 2·s + c), alle gleich lang.
+typedef StemSink = void Function(List<Float32List> channels);
 
-/// Trennt ein Lied in Schlagzeug und Rest (Bass, Gesang, Gitarre, Keys …).
+/// Die Spuren in der Reihenfolge des Modells.
+enum Stem { drums, bass, other, vocals }
+
+/// Trennt ein Lied in Schlagzeug, Bass, Instrumente (Gitarre, Keys …) und
+/// Gesang.
 ///
 /// Ablauf wie beim Trenn-Modell selbst: Das ganze Lied wird normiert, in
 /// Stücke von 7,8 s mit 25 % Überlappung zerlegt (das letzte wird mit echtem
@@ -75,12 +78,12 @@ class StemSeparation {
     final mixL = Float32List(seg), mixR = Float32List(seg);
     final mix = Float32List(2 * seg);
 
-    // Laufende Summen ab [base] (eine Stücklänge).
-    final acc = List.generate(4, (_) => Float64List(seg)); // dL, dR, rL, rR
+    // Laufende Summen ab [base] (eine Stücklänge), je Spur und Kanal.
+    const channels = 2 * 4;
+    final acc = List.generate(channels, (_) => Float64List(seg));
     final wsum = Float64List(seg);
     var base = 0;
-    final outL = Float64List(seg), outR = Float64List(seg);
-    final restL = Float64List(seg), restR = Float64List(seg);
+    final out = List.generate(channels, (_) => Float64List(seg));
 
     for (var k = 0; k < total; k++) {
       if (cancelled?.call() ?? false) return false;
@@ -102,51 +105,44 @@ class StemSeparation {
 
       run(mix, mag, (spec, wave) {
         final specStem = 4 * DemucsSpectrum.bins * spectrum.frames;
-        // Rest = Bass + Rest + Gesang (vor der Rückrechnung zusammenzählen).
-        final restSpec = Float32List(specStem);
-        for (var s = 1; s < 4; s++) {
-          final o = s * specStem;
-          for (var i = 0; i < specStem; i++) {
-            restSpec[i] += spec[o + i];
+        for (var st = 0; st < 4; st++) {
+          final l = out[2 * st], r = out[2 * st + 1];
+          l.fillRange(0, seg, 0);
+          r.fillRange(0, seg, 0);
+          spectrum.inverse(spec, st * specStem, l, r);
+          final wl = 2 * st * seg, wr = (2 * st + 1) * seg;
+          for (var i = 0; i < seg; i++) {
+            l[i] += wave[wl + i];
+            r[i] += wave[wr + i];
           }
-        }
-        outL.fillRange(0, seg, 0);
-        outR.fillRange(0, seg, 0);
-        restL.fillRange(0, seg, 0);
-        restR.fillRange(0, seg, 0);
-        spectrum.inverse(spec, 0, outL, outR);
-        spectrum.inverse(restSpec, 0, restL, restR);
-        for (var i = 0; i < seg; i++) {
-          outL[i] += wave[i];
-          outR[i] += wave[seg + i];
-          restL[i] += wave[2 * seg + i] + wave[4 * seg + i] + wave[6 * seg + i];
-          restR[i] += wave[3 * seg + i] + wave[5 * seg + i] + wave[7 * seg + i];
         }
       });
 
       // Mitte des Stücks gewichtet aufaddieren.
       final trim = delta ~/ 2;
       final at = offset - base;
+      for (var c = 0; c < channels; c++) {
+        final a = acc[c], o = out[c];
+        for (var i = 0; i < len; i++) {
+          a[at + i] += o[trim + i] * weight[i];
+        }
+      }
       for (var i = 0; i < len; i++) {
-        final w = weight[i];
-        acc[0][at + i] += outL[trim + i] * w;
-        acc[1][at + i] += outR[trim + i] * w;
-        acc[2][at + i] += restL[trim + i] * w;
-        acc[3][at + i] += restR[trim + i] * w;
-        wsum[at + i] += w;
+        wsum[at + i] += weight[i];
       }
 
       // Fertig ist alles vor dem nächsten Stück.
       final next = offset + stride;
       final upto = (next < n ? next : n) - base;
-      final out = List.generate(4, (_) => Float32List(upto));
-      for (var i = 0; i < upto; i++) {
-        final w = wsum[i];
-        for (var c = 0; c < 4; c++) {
-          out[c][i] = (w > 0 ? acc[c][i] / w : 0) * std + mean;
+      final done = List.generate(channels, (_) => Float32List(upto));
+      for (var c = 0; c < channels; c++) {
+        final a = acc[c], d = done[c];
+        for (var i = 0; i < upto; i++) {
+          final w = wsum[i];
+          d[i] = (w > 0 ? a[i] / w : 0) * std + mean;
         }
       }
-      sink(out[0], out[1], out[2], out[3]);
+      sink(done);
       if (next < n) {
         for (final a in [...acc, wsum]) {
           a.setRange(0, seg - upto, a, upto);

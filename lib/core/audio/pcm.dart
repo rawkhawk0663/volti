@@ -47,7 +47,7 @@ Future<RawAudio> decodeAudio(String input, String output) async {
 /// Windows-Teil von [decodeAudio] (synchron, für ein Hintergrund-Isolate).
 RawAudio decodeAudioWindows(String input, String output) {
   final fn = ffi.DynamicLibrary.executable().lookupFunction<_DecodeNative, _DecodeDart>('VoltiDecodeAudio');
-  final inPtr = input.toNativeUtf16(), outPtr = output.toNativeUtf16();
+  final inPtr = input.toNativeUtf16(allocator: calloc), outPtr = output.toNativeUtf16(allocator: calloc);
   final rate = calloc<ffi.Int32>(), ch = calloc<ffi.Int32>();
   try {
     final code = fn(inPtr, outPtr, rate, ch);

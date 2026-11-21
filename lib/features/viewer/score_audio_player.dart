@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/audio/stem_separation.dart';
 import '../../core/audio/stem_service.dart';
 
 import '../../app/l10n.dart';
@@ -17,10 +20,11 @@ import '../../app/l10n.dart';
 ///   ändern: Die Geschwindigkeit verändert auch die Tonhöhe, ein Tonhöhen-
 ///   Filter gleicht das wieder aus.
 /// * Schleife von A bis B zum Üben einer Stelle.
-/// * Getrennte Spuren ([loadStems]): Beim Transponieren spielen Schlagzeug
-///   und Rest als zwei gleichzeitige Stimmen. Nur der Rest wird in der
-///   Tonhöhe verschoben, das Schlagzeug klingt so natürlich. Ohne
-///   Transponieren spielt immer das Original.
+/// * Getrennte Spuren ([loadStems]): Dann spielen Schlagzeug, Bass,
+///   Instrumente und Gesang als vier gleichzeitige Stimmen, jede mit eigener
+///   Lautstärke, stumm oder solo ([setStemVolume], [toggleMute],
+///   [toggleSolo]). Beim Transponieren bleibt das Schlagzeug unverändert, das
+///   klingt natürlicher.
 class ScoreAudioPlayer extends ChangeNotifier {
   ScoreAudioPlayer() {
     StemService.instance.stemsChanged.addListener(_onStemsChanged);
@@ -35,7 +39,7 @@ class ScoreAudioPlayer extends ChangeNotifier {
   Future<void> _adoptStems(String audio) async {
     final stems = await StemService.instance.stemsFor(audio);
     if (audio != _path || _disposed) return;
-    await loadStems(stems?.$1, stems?.$2);
+    await loadStems(stems, mixFile: p.join(await StemService.instance.folderFor(audio), 'mix.json'));
   }
 
   /// Pfad der geladenen Aufnahme (null = keine).
@@ -76,13 +80,92 @@ class ScoreAudioPlayer extends ChangeNotifier {
   AudioSource? _source;
   SoundHandle? _handle;
 
-  /// Getrennte Spuren (Schlagzeug und Rest), null = keine.
-  AudioSource? _drums, _rest;
-  SoundHandle? _drumsHandle;
+  /// Getrennte Spuren in der Reihenfolge von [Stem], null = keine.
+  List<AudioSource>? _stems;
+  List<SoundHandle> _stemHandles = const [];
   String? _stemsKey;
+  String? _mixFile;
 
-  /// Spuren geladen: Transponieren lässt das Schlagzeug unverändert.
-  bool get hasStems => _drums != null && _rest != null;
+  /// Spuren geladen: Mischpult und natürlicheres Transponieren.
+  bool get hasStems => _stems != null;
+
+  /// Mischung je Spur: Lautstärke 0..1, stumm, solo.
+  final List<double> stemVolume = List.filled(Stem.values.length, 1.0);
+  final List<bool> stemMuted = List.filled(Stem.values.length, false);
+  final List<bool> stemSolo = List.filled(Stem.values.length, false);
+
+  /// Ist die Mischung verändert (nicht alles voll, nichts stumm oder solo)?
+  bool get mixChanged =>
+      stemVolume.any((v) => v != 1) || stemMuted.any((m) => m) || stemSolo.any((s) => s);
+
+  /// Was von Spur [i] gerade zu hören ist (0..1).
+  double stemGain(int i) {
+    final anySolo = stemSolo.any((s) => s);
+    final on = anySolo ? stemSolo[i] : !stemMuted[i];
+    return on ? stemVolume[i] : 0;
+  }
+
+  void setStemVolume(int i, double v) {
+    stemVolume[i] = v.clamp(0.0, 1.0);
+    _applyMix();
+  }
+
+  void toggleMute(int i) {
+    stemMuted[i] = !stemMuted[i];
+    _applyMix();
+  }
+
+  void toggleSolo(int i) {
+    stemSolo[i] = !stemSolo[i];
+    _applyMix();
+  }
+
+  void resetMix() {
+    resetMixValues();
+    _applyMix();
+  }
+
+  /// Lautstärken sofort setzen (ohne Neustart) und die Mischung merken.
+  void _applyMix({bool save = true}) {
+    for (var i = 0; i < _stemHandles.length; i++) {
+      try {
+        _soloud.setVolume(_stemHandles[i], stemGain(i));
+      } catch (_) {}
+    }
+    if (save) _saveMix();
+    _notify();
+  }
+
+  void _saveMix() {
+    final f = _mixFile;
+    if (f == null) return;
+    try {
+      File(f).writeAsStringSync(jsonEncode({'v': stemVolume, 'm': stemMuted, 's': stemSolo}));
+    } catch (_) {}
+  }
+
+  void _loadMix() {
+    resetMixValues();
+    final f = _mixFile;
+    if (f == null) return;
+    try {
+      final j = jsonDecode(File(f).readAsStringSync()) as Map<String, dynamic>;
+      final v = j['v'] as List, m = j['m'] as List, s = j['s'] as List;
+      for (var i = 0; i < stemVolume.length && i < v.length; i++) {
+        stemVolume[i] = (v[i] as num).toDouble().clamp(0.0, 1.0);
+        stemMuted[i] = m[i] == true;
+        stemSolo[i] = s[i] == true;
+      }
+    } catch (_) {}
+  }
+
+  @visibleForTesting
+  void resetMixValues() {
+    stemVolume.fillRange(0, stemVolume.length, 1);
+    stemMuted.fillRange(0, stemMuted.length, false);
+    stemSolo.fillRange(0, stemSolo.length, false);
+  }
+
   Timer? _ticker;
   int _generation = 0;
   bool _disposed = false;
@@ -92,21 +175,23 @@ class ScoreAudioPlayer extends ChangeNotifier {
 
   SoLoud get _soloud => SoLoud.instance;
 
-  /// Getrennte Spuren laden ([drums], [rest]: WAV-Dateien) bzw. mit null
-  /// entfernen. Gilt ab dem nächsten Start der Wiedergabe.
-  Future<void> loadStems(String? drums, String? rest) async {
-    if (drums == _stemsKey && (drums == null || hasStems)) return;
+  /// Getrennte Spuren laden ([files] in der Reihenfolge von [Stem]) bzw.
+  /// mit null entfernen. [mixFile] merkt sich die Mischung dieser Aufnahme.
+  Future<void> loadStems(List<String>? files, {String? mixFile}) async {
+    final key = files?.first;
+    if (key == _stemsKey && (key == null || hasStems)) return;
     final position = this.position.value;
     final wasPlaying = _playing;
     if (wasPlaying) await pause();
     await _unloadStems();
-    if (drums != null && rest != null) {
+    if (files != null && files.length == Stem.values.length) {
       try {
         if (!_soloud.isInitialized) await _soloud.init(bufferSize: 512);
         // Von der Festplatte lesen statt alles in den Speicher.
-        _drums = await _soloud.loadFile(drums, mode: LoadMode.disk);
-        _rest = await _soloud.loadFile(rest, mode: LoadMode.disk);
-        _stemsKey = drums;
+        _stems = [for (final f in files) await _soloud.loadFile(f, mode: LoadMode.disk)];
+        _stemsKey = key;
+        _mixFile = mixFile;
+        _loadMix();
       } catch (e) {
         debugPrint('Spuren: $e');
         await _unloadStems();
@@ -119,14 +204,15 @@ class ScoreAudioPlayer extends ChangeNotifier {
 
   Future<void> _unloadStems() async {
     _stopVoice();
-    for (final s in [_drums, _rest]) {
-      if (s == null) continue;
+    for (final s in _stems ?? const <AudioSource>[]) {
       try {
         await _soloud.disposeSource(s);
       } catch (_) {}
     }
-    _drums = _rest = null;
+    _stems = null;
     _stemsKey = null;
+    _mixFile = null;
+    resetMixValues();
   }
 
   /// Aufnahme laden (ohne abzuspielen). Gleicher Pfad: nichts zu tun.
@@ -211,7 +297,7 @@ class ScoreAudioPlayer extends ChangeNotifier {
     position.value = d;
     final h = _handle;
     if (h != null && _soloud.getIsValidVoiceHandle(h)) {
-      for (final v in [h, ?_drumsHandle]) {
+      for (final v in _voices) {
         try {
           _soloud.seek(v, d);
         } catch (_) {}
@@ -261,8 +347,8 @@ class ScoreAudioPlayer extends ChangeNotifier {
     return d > _length ? _length : d;
   }
 
-  /// Beim Transponieren mit Spuren: Rest verschoben, Schlagzeug nicht.
-  bool get _splitVoices => hasStems && _semitones != 0;
+  /// Alle laufenden Stimmen (eine bzw. je Spur eine).
+  List<SoundHandle> get _voices => _stemHandles.isNotEmpty ? _stemHandles : [?_handle];
 
   /// Tonhöhen-Filter einer Quelle vor dem Abspielen ein- bzw. ausschalten.
   void _prepareFilter(AudioSource source, bool on) {
@@ -297,9 +383,14 @@ class ScoreAudioPlayer extends ChangeNotifier {
   /// Neue Stimme(n) starten (Filter müssen vor dem Abspielen gesetzt sein).
   void _start(Duration from, {required bool paused}) {
     _stopVoice();
-    if (_splitVoices) {
-      _handle = _voice(_rest!, from, _semitones);
-      _drumsHandle = _voice(_drums!, from, 0);
+    final stems = _stems;
+    if (stems != null) {
+      // Jede Spur eine Stimme; das Schlagzeug wird nicht transponiert.
+      _stemHandles = [
+        for (var i = 0; i < stems.length; i++) _voice(stems[i], from, i == Stem.drums.index ? 0 : _semitones),
+      ];
+      _handle = _stemHandles.first;
+      _applyMix(save: false);
     } else {
       _handle = _voice(_source!, from, _semitones);
     }
@@ -308,22 +399,22 @@ class ScoreAudioPlayer extends ChangeNotifier {
 
   /// Alle Stimmen gleichzeitig anhalten bzw. weiterspielen.
   void _setPause(bool pause) {
-    final h = _handle;
-    if (h == null) return;
-    final d = _drumsHandle;
-    if (d == null) {
-      _soloud.setPause(h, pause);
+    final voices = _voices;
+    if (voices.isEmpty) return;
+    if (voices.length == 1) {
+      _soloud.setPause(voices.first, pause);
       return;
     }
-    // Als Gruppe, damit beide im selben Augenblick weiterlaufen.
+    // Als Gruppe, damit alle im selben Augenblick weiterlaufen.
     try {
       final g = _soloud.createVoiceGroup();
-      _soloud.addVoicesToGroup(g, [h, d]);
+      _soloud.addVoicesToGroup(g, voices);
       _soloud.setPause(g, pause);
       _soloud.destroyVoiceGroup(g);
     } catch (_) {
-      _soloud.setPause(h, pause);
-      _soloud.setPause(d, pause);
+      for (final v in voices) {
+        _soloud.setPause(v, pause);
+      }
     }
   }
 
@@ -368,13 +459,13 @@ class ScoreAudioPlayer extends ChangeNotifier {
   }
 
   void _stopVoice() {
-    for (final h in [_handle, _drumsHandle]) {
-      if (h == null) continue;
+    for (final h in {..._stemHandles, ?_handle}) {
       try {
         _soloud.stop(h);
       } catch (_) {}
     }
-    _handle = _drumsHandle = null;
+    _handle = null;
+    _stemHandles = const [];
   }
 
   Future<void> _unload() async {

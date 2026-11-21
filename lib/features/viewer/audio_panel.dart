@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/audio/stem_model.dart';
+import '../../core/audio/stem_separation.dart';
 import '../../core/audio/stem_service.dart';
 import 'score_audio_player.dart';
 import '../../app/l10n.dart';
@@ -317,13 +318,15 @@ class _StemsSection extends StatelessWidget {
             width: 440,
             child: Text(
               tr(
-                'Volti trennt die Aufnahme in Schlagzeug und Rest (Gesang, Bass, Gitarre, Keys …). Beim '
-                    'Transponieren wird dann nur der Rest verschoben, das Schlagzeug klingt natürlich.\n\n'
+                'Volti trennt die Aufnahme in Gesang, Instrumente (Gitarre, Keys …), Bass und Schlagzeug. '
+                    'Danach kannst du jede Spur lauter, leiser, stumm oder solo stellen. Beim Transponieren '
+                    'bleibt das Schlagzeug unverändert, das klingt natürlicher.\n\n'
                     'Dafür lädt Volti einmalig eine Modell-Datei herunter (etwa $mb MB). Das Trennen läuft '
                     'danach ganz auf diesem Gerät und dauert je nach Lied einige Minuten. Du kannst '
                     'währenddessen weiterarbeiten.',
-                'Volti separates the recording into drums and the rest (vocals, bass, guitar, keys …). When '
-                    'transposing, only the rest is shifted, so the drums sound natural.\n\n'
+                'Volti separates the recording into vocals, instruments (guitar, keys …), bass and drums. '
+                    'Then you can make each track louder, quieter, mute it or solo it. When transposing, the '
+                    'drums stay unchanged, which sounds more natural.\n\n'
                     'For this, Volti downloads a model file once (about $mb MB). After that, separating runs '
                     'entirely on this device and takes a few minutes depending on the song. You can keep '
                     'working meanwhile.',
@@ -376,26 +379,7 @@ class _StemsSection extends StatelessWidget {
         ],
       );
     } else if (player.hasStems) {
-      child = Row(
-        children: [
-          Icon(Icons.check_circle_outline, size: 18, color: scheme.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              tr(
-                'Spuren getrennt: Beim Transponieren bleibt das Schlagzeug unverändert.',
-                'Tracks separated: the drums stay unchanged when transposing.',
-              ),
-              style: muted,
-            ),
-          ),
-          IconButton(
-            tooltip: tr('Getrennte Spuren löschen', 'Delete separated tracks'),
-            icon: const Icon(Icons.delete_outline, size: 20),
-            onPressed: () => s.deleteStems(path!),
-          ),
-        ],
-      );
+      child = StemMixer(player: player, onDelete: () => s.deleteStems(path!), muted: muted);
     } else {
       final other = s.busy;
       final failed = s.phase == StemPhase.failed && s.audioPath == path;
@@ -405,7 +389,17 @@ class _StemsSection extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: other ? null : () => _start(context),
             icon: const Icon(Icons.call_split, size: 18),
-            label: Text(tr('Spuren trennen (besser transponieren)', 'Separate tracks (better transposing)')),
+            label: Text(tr('Spuren trennen', 'Separate tracks')),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              tr(
+                'Gesang, Instrumente, Bass und Schlagzeug einzeln lauter, leiser, stumm oder solo.',
+                'Vocals, instruments, bass and drums louder, quieter, muted or solo.',
+              ),
+              style: muted,
+            ),
           ),
           if (other)
             Padding(
@@ -430,6 +424,126 @@ class _StemsSection extends StatelessWidget {
       );
     }
     return Padding(padding: const EdgeInsets.fromLTRB(0, 10, 8, 0), child: child);
+  }
+}
+
+/// Mischpult der getrennten Spuren: Lautstärke, stumm (M) und solo (S).
+class StemMixer extends StatelessWidget {
+  const StemMixer({super.key, required this.player, required this.onDelete, required this.muted});
+  final ScoreAudioPlayer player;
+  final VoidCallback onDelete;
+  final TextStyle? muted;
+
+  static String _name(Stem s) => switch (s) {
+    Stem.vocals => tr('Gesang', 'Vocals'),
+    Stem.other => tr('Instrumente', 'Instruments'),
+    Stem.bass => tr('Bass', 'Bass'),
+    Stem.drums => tr('Schlagzeug', 'Drums'),
+  };
+
+  static IconData _icon(Stem s) => switch (s) {
+    Stem.vocals => Icons.mic_none,
+    Stem.other => Icons.piano,
+    Stem.bass => Icons.graphic_eq,
+    Stem.drums => Icons.album_outlined,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final a = player;
+    Widget toggle(String label, bool on, VoidCallback onTap, String tip, Color color) => SizedBox(
+      width: 34,
+      height: 30,
+      child: Tooltip(
+        message: tip,
+        child: TextButton(
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            backgroundColor: on ? color : null,
+            foregroundColor: on ? Colors.white : scheme.onSurfaceVariant,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          onPressed: onTap,
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(tr('Spuren', 'Tracks'), style: theme.textTheme.titleSmall)),
+            if (a.mixChanged)
+              TextButton(onPressed: a.resetMix, child: Text(tr('Alle zurücksetzen', 'Reset all'))),
+            IconButton(
+              tooltip: tr('Getrennte Spuren löschen', 'Delete separated tracks'),
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: onDelete,
+            ),
+          ],
+        ),
+        // Oben Gesang, unten Schlagzeug.
+        for (final st in [Stem.vocals, Stem.other, Stem.bass, Stem.drums])
+          Builder(
+            builder: (context) {
+              final i = st.index;
+              final audible = a.stemGain(i) > 0;
+              return Row(
+                children: [
+                  Icon(_icon(st), size: 18, color: audible ? scheme.primary : scheme.outline),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 84,
+                    child: Text(
+                      _name(st),
+                      style: theme.textTheme.bodyMedium?.copyWith(color: audible ? null : scheme.outline),
+                    ),
+                  ),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(overlayShape: SliderComponentShape.noOverlay),
+                      child: Slider(
+                        value: a.stemVolume[i],
+                        onChanged: (v) => a.setStemVolume(i, v),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  toggle(
+                    'M',
+                    a.stemMuted[i],
+                    () => a.toggleMute(i),
+                    tr('Stumm', 'Mute'),
+                    scheme.error,
+                  ),
+                  const SizedBox(width: 4),
+                  toggle(
+                    'S',
+                    a.stemSolo[i],
+                    () => a.toggleSolo(i),
+                    tr('Solo (nur diese Spuren)', 'Solo (only these tracks)'),
+                    scheme.primary,
+                  ),
+                ],
+              );
+            },
+          ),
+        if (a.semitones != 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              tr(
+                'Beim Transponieren bleibt das Schlagzeug unverändert.',
+                'The drums stay unchanged when transposing.',
+              ),
+              style: muted,
+            ),
+          ),
+      ],
+    );
   }
 }
 

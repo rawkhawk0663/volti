@@ -86,11 +86,13 @@ void main() {
     final ok = await sep.separate(
       l,
       r,
-      (a, b, c, d) {
-        dl.addAll(a);
-        dr.addAll(b);
-        rl.addAll(c);
-        rr.addAll(d);
+      (ch) {
+        expect(ch.length, 8);
+        dl.addAll(ch[0]);
+        dr.addAll(ch[1]);
+        // Bass, Instrumente und Gesang zusammen
+        rl.addAll(List.generate(ch[2].length, (i) => ch[2][i] + ch[4][i] + ch[6][i]));
+        rr.addAll(List.generate(ch[3].length, (i) => ch[3][i] + ch[5][i] + ch[7][i]));
       },
       progress: (done, total) => steps.add(done),
     );
@@ -121,7 +123,7 @@ void main() {
         use(Float32List(4 * mag.length), Float32List(8 * seg));
       },
     );
-    final ok = await sep.separate(l, r, (a, b, c, d) {}, cancelled: () => runs >= 2);
+    final ok = await sep.separate(l, r, (ch) {}, cancelled: () => runs >= 2);
     expect(ok, isFalse);
     expect(runs, 2);
   });

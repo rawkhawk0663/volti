@@ -14,12 +14,13 @@ import 'stem_separation.dart';
 /// Stand von „Spuren trennen“.
 enum StemPhase { idle, downloading, decoding, separating, failed }
 
-/// Trennt Aufnahmen in Schlagzeug und Rest (für besser klingendes
-/// Transponieren). Eine Aufgabe gleichzeitig, app-weit; sie läuft weiter,
-/// auch wenn die Notenansicht geschlossen wird.
+/// Trennt Aufnahmen in Schlagzeug, Bass, Instrumente und Gesang (zum
+/// Mischen und für besser klingendes Transponieren). Eine Aufgabe
+/// gleichzeitig, app-weit; sie läuft weiter, auch wenn die Notenansicht
+/// geschlossen wird.
 ///
-/// Ablage: `<ApplicationSupport>/stems/<Aufnahme ohne Endung>/drums.wav` und
-/// `rest.wav`, nur auf diesem Gerät (nicht abgeglichen, jedes Gerät rechnet
+/// Ablage: `<ApplicationSupport>/stems/<Aufnahme ohne Endung>/drums.wav`,
+/// `bass.wav`, `other.wav`, `vocals.wav`, nur auf diesem Gerät (nicht abgeglichen, jedes Gerät rechnet
 /// selbst). Die Aufnahme-Dateien heissen nach einer ID und ändern sich nie,
 /// deshalb passt eine Ablage immer genau zu einer Aufnahme.
 class StemService extends ChangeNotifier {
@@ -53,13 +54,19 @@ class StemService extends ChangeNotifier {
 
   static String _dirFor(String support, String audio) => p.join(support, 'stems', p.basenameWithoutExtension(audio));
 
-  /// Fertige Spuren der Aufnahme [audio] (Schlagzeug, Rest), oder null.
-  Future<(String, String)?> stemsFor(String audio) async {
+  /// Fertige Spuren der Aufnahme [audio], oder null.
+  /// In der Reihenfolge von [Stem].
+  Future<List<String>?> stemsFor(String audio) async {
     final dir = _dirFor(await _supportDir(), audio);
-    final drums = p.join(dir, 'drums.wav'), rest = p.join(dir, 'rest.wav');
-    if (await File(drums).exists() && await File(rest).exists()) return (drums, rest);
-    return null;
+    final files = [for (final st in Stem.values) p.join(dir, '${st.name}.wav')];
+    for (final f in files) {
+      if (!await File(f).exists()) return null;
+    }
+    return files;
   }
+
+  /// Ordner der Spuren einer Aufnahme (für die gespeicherte Mischung).
+  Future<String> folderFor(String audio) async => _dirFor(await _supportDir(), audio);
 
   /// Ist die Modell-Datei schon da?
   Future<bool> modelInstalled() async => StemModelFile.installed(await _supportDir());
@@ -140,6 +147,8 @@ class StemService extends ChangeNotifier {
       if (_cancel) return _finish();
 
       final out = _dirFor(support, audio);
+      // Frisch anfangen (Reste eines früheren Versuchs weg).
+      if (await Directory(out).exists()) await Directory(out).delete(recursive: true);
       await Directory(out).create(recursive: true);
       final result = await _runWorker(
         StemWorkerJob(
@@ -229,9 +238,7 @@ Future<void> stemWorker((StemWorkerJob, SendPort) args) async {
   control.listen((m) {
     if (m == 'cancel') cancelled = true;
   });
-  final drumsPart = p.join(job.outDir, 'drums.wav.part');
-  final restPart = p.join(job.outDir, 'rest.wav.part');
-  WavWriter? drums, rest;
+  final writers = <WavWriter>[];
   StemModelRunner? runner;
   try {
     out.send(['decode', 0.0]);
@@ -244,32 +251,38 @@ Future<void> stemWorker((StemWorkerJob, SendPort) args) async {
     } catch (_) {}
     out.send(['separate', 0.0]);
     runner = StemModelRunner(job.model);
-    drums = WavWriter(drumsPart);
-    rest = WavWriter(restPart);
+    for (final st in Stem.values) {
+      writers.add(WavWriter(p.join(job.outDir, '${st.name}.wav.part')));
+    }
     final ok = await StemSeparation(run: runner.run).separate(
       left,
       right,
-      (dl, dr, rl, rr) {
-        drums!.add(dl, dr);
-        rest!.add(rl, rr);
+      (ch) {
+        for (var st = 0; st < writers.length; st++) {
+          writers[st].add(ch[2 * st], ch[2 * st + 1]);
+        }
       },
       progress: (done, total) => out.send(['separate', done / total]),
       cancelled: () => cancelled,
       breathe: () => Future<void>.delayed(Duration.zero),
     );
     if (!ok) {
-      drums.discard();
-      rest.discard();
+      for (final w in writers) {
+        w.discard();
+      }
       return out.send('cancelled');
     }
-    drums.close();
-    rest.close();
-    File(drumsPart).renameSync(p.join(job.outDir, 'drums.wav'));
-    File(restPart).renameSync(p.join(job.outDir, 'rest.wav'));
+    for (final w in writers) {
+      w.close();
+    }
+    for (final st in Stem.values) {
+      File(p.join(job.outDir, '${st.name}.wav.part')).renameSync(p.join(job.outDir, '${st.name}.wav'));
+    }
     out.send('ok');
   } catch (e) {
-    drums?.discard();
-    rest?.discard();
+    for (final w in writers) {
+      w.discard();
+    }
     out.send('$e');
   } finally {
     runner?.release();

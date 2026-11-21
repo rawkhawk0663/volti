@@ -102,14 +102,66 @@ class _DigestSink implements Sink<Digest> {
 class StemModelRunner {
   StemModelRunner(String modelPath, {int? threads}) {
     OrtEnv.instance.init();
-    _options = OrtSessionOptions()
-      ..setIntraOpNumThreads(threads ?? defaultThreads)
-      ..setInterOpNumThreads(1)
-      ..setSessionGraphOptimizationLevel(GraphOptimizationLevel.ortEnableAll);
-    _session = OrtSession.fromFile(File(modelPath), _options);
+    _optionsPtr = _createOptions(threads ?? defaultThreads);
+    _session = _openSession(modelPath);
     _runOptions = OrtRunOptions();
     _mix = calloc<ffi.Float>(_mixCount);
     _mag = calloc<ffi.Float>(_magCount);
+  }
+
+  /// Einstellungen für die Sitzung (selbst angelegt, damit [_openSession]
+  /// sie direkt übergeben kann).
+  ffi.Pointer<bg.OrtSessionOptions> _createOptions(int threads) {
+    final out = calloc<ffi.Pointer<bg.OrtSessionOptions>>();
+    try {
+      OrtStatus.checkOrtStatus(
+        _api.CreateSessionOptions.asFunction<
+          bg.OrtStatusPtr Function(ffi.Pointer<ffi.Pointer<bg.OrtSessionOptions>>)
+        >()(out),
+      );
+      final o = out.value;
+      OrtStatus.checkOrtStatus(
+        _api.SetIntraOpNumThreads.asFunction<bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>, int)>()(
+          o,
+          threads,
+        ),
+      );
+      OrtStatus.checkOrtStatus(
+        _api.SetInterOpNumThreads.asFunction<bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>, int)>()(o, 1),
+      );
+      OrtStatus.checkOrtStatus(
+        _api.SetSessionGraphOptimizationLevel.asFunction<
+          bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>, int)
+        >()(o, GraphOptimizationLevel.ortEnableAll.value),
+      );
+      return o;
+    } finally {
+      calloc.free(out);
+    }
+  }
+
+  /// Sitzung aus der Modell-Datei. Unter Windows erwartet ONNX Runtime den
+  /// Pfad in UTF-16 (`OrtSession.fromFile` übergibt UTF-8, das gab beim
+  /// Besitzer „File doesn't exist“ mit Zeichensalat).
+  OrtSession _openSession(String path) {
+    final name = Platform.isWindows ? path.toNativeUtf16(allocator: calloc).cast<ffi.Char>() : path.toNativeUtf8(allocator: calloc).cast<ffi.Char>();
+    final out = calloc<ffi.Pointer<bg.OrtSession>>();
+    try {
+      OrtStatus.checkOrtStatus(
+        _api.CreateSession.asFunction<
+          bg.OrtStatusPtr Function(
+            ffi.Pointer<bg.OrtEnv>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<bg.OrtSessionOptions>,
+            ffi.Pointer<ffi.Pointer<bg.OrtSession>>,
+          )
+        >()(OrtEnv.instance.ptr, name, _optionsPtr, out),
+      );
+      return OrtSession.fromAddress(out.value.address);
+    } finally {
+      calloc.free(name);
+      calloc.free(out);
+    }
   }
 
   /// Etwas Luft für die Oberfläche lassen.
@@ -120,7 +172,7 @@ class StemModelRunner {
   static final _frames = DemucsSpectrum(_seg).frames;
   static final _magCount = 4 * DemucsSpectrum.bins * _frames;
 
-  late final OrtSessionOptions _options;
+  late final ffi.Pointer<bg.OrtSessionOptions> _optionsPtr;
   late final OrtSession _session;
   late final OrtRunOptions _runOptions;
   late final ffi.Pointer<ffi.Float> _mix, _mag;
@@ -211,7 +263,7 @@ class StemModelRunner {
   void release() {
     _runOptions.release();
     _session.release();
-    _options.release();
+    _api.ReleaseSessionOptions.asFunction<void Function(ffi.Pointer<bg.OrtSessionOptions>)>()(_optionsPtr);
     calloc.free(_mix);
     calloc.free(_mag);
     OrtEnv.instance.release();
