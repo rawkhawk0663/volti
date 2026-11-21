@@ -10,12 +10,16 @@ import 'package:path/path.dart' as p;
 import '../../core/audio/stem_separation.dart';
 import '../../core/audio/stem_service.dart';
 
+import '../../app/audio_engine.dart';
 import '../../app/l10n.dart';
 
 /// Spielt die Aufnahme eines Stücks ab (zum Mitspielen).
 ///
-/// * Wird ein Stück geöffnet, lädt [load] seine Aufnahme schon im Voraus,
-///   damit „Abspielen“ sofort klingt.
+/// * Wird ein Stück geöffnet, merkt sich [load] nur seine Aufnahme. Geladen
+///   (ausgepackt) wird sie erst beim Abspielen bzw. wenn das Fenster aufgeht
+///   ([ensureLoaded]), und nach einer Minute Pause wieder freigegeben. So
+///   kostet ein Songwechsel in der Setlist nichts (früher wurde jedes Mal die
+///   ganze Aufnahme ausgepackt, das bremste das Tablet).
 /// * Tempo ([speed]) und Tonhöhe ([semitones]) lassen sich unabhängig
 ///   ändern: Die Geschwindigkeit verändert auch die Tonhöhe, ein Tonhöhen-
 ///   Filter gleicht das wieder aus.
@@ -52,7 +56,14 @@ class ScoreAudioPlayer extends ChangeNotifier {
   bool get loading => _loading;
   bool _loading = false;
 
-  bool get ready => _source != null;
+  /// Länge bekannt: Die Bedienung kann angezeigt werden (auch wenn die
+  /// Aufnahme nach einer Pause wieder freigegeben ist).
+  bool get ready => _length > Duration.zero;
+
+  /// Klänge geladen (Original bzw. die Spuren).
+  bool get _loaded => _stemFiles != null ? _stems != null : _source != null;
+  Future<void>? _loadingFuture;
+  Timer? _sleepTimer;
 
   Duration get length => _length;
   Duration _length = Duration.zero;
@@ -80,14 +91,17 @@ class ScoreAudioPlayer extends ChangeNotifier {
   AudioSource? _source;
   SoundHandle? _handle;
 
-  /// Getrennte Spuren in der Reihenfolge von [Stem], null = keine.
+  /// Dateien der getrennten Spuren (Reihenfolge [Stem]), null = keine.
+  List<String>? _stemFiles;
+
+  /// Geladene Spuren (nur solange gebraucht).
   List<AudioSource>? _stems;
   List<SoundHandle> _stemHandles = const [];
   String? _stemsKey;
   String? _mixFile;
 
   /// Spuren geladen: Mischpult und natürlicheres Transponieren.
-  bool get hasStems => _stems != null;
+  bool get hasStems => _stemFiles != null;
 
   /// Mischung je Spur: Lautstärke 0..1, stumm, solo.
   final List<double> stemVolume = List.filled(Stem.values.length, 1.0);
@@ -175,77 +189,87 @@ class ScoreAudioPlayer extends ChangeNotifier {
 
   SoLoud get _soloud => SoLoud.instance;
 
-  /// Getrennte Spuren laden ([files] in der Reihenfolge von [Stem]) bzw.
-  /// mit null entfernen. [mixFile] merkt sich die Mischung dieser Aufnahme.
+  /// Getrennte Spuren übernehmen ([files] in der Reihenfolge von [Stem])
+  /// bzw. mit null entfernen. [mixFile] merkt sich die Mischung dieser
+  /// Aufnahme. Läuft gerade etwas, geht es mit den Spuren nahtlos weiter.
   Future<void> loadStems(List<String>? files, {String? mixFile}) async {
     final key = files?.first;
-    if (key == _stemsKey && (key == null || hasStems)) return;
-    final position = this.position.value;
-    final wasPlaying = _playing;
+    if (key == _stemsKey) return;
+    final wasLoaded = _loaded, wasPlaying = _playing;
     if (wasPlaying) await pause();
-    await _unloadStems();
-    if (files != null && files.length == Stem.values.length) {
-      try {
-        if (!_soloud.isInitialized) await _soloud.init(bufferSize: 512);
-        // Von der Festplatte lesen statt alles in den Speicher.
-        _stems = [for (final f in files) await _soloud.loadFile(f, mode: LoadMode.disk)];
-        _stemsKey = key;
-        _mixFile = mixFile;
-        _loadMix();
-      } catch (e) {
-        debugPrint('Spuren: $e');
-        await _unloadStems();
-      }
-    }
-    this.position.value = position;
+    await _unloadSources();
+    _stemFiles = files != null && files.length == Stem.values.length ? files : null;
+    _stemsKey = _stemFiles == null ? null : key;
+    _mixFile = _stemFiles == null ? null : mixFile;
+    _loadMix();
+    if (wasLoaded) await ensureLoaded();
     if (wasPlaying) await play();
     _notify();
   }
 
-  Future<void> _unloadStems() async {
-    _stopVoice();
-    for (final s in _stems ?? const <AudioSource>[]) {
-      try {
-        await _soloud.disposeSource(s);
-      } catch (_) {}
-    }
-    _stems = null;
-    _stemsKey = null;
-    _mixFile = null;
-    resetMixValues();
-  }
-
-  /// Aufnahme laden (ohne abzuspielen). Gleicher Pfad: nichts zu tun.
-  /// null entlädt die bisherige.
+  /// Aufnahme merken (ohne sie zu laden). Gleicher Pfad: nichts zu tun.
+  /// null vergisst die bisherige.
   Future<void> load(String? newPath) async {
-    if (newPath == _path && (_source != null || _loading)) return;
-    final gen = ++_generation;
-    await _unload();
-    await _unloadStems();
+    if (newPath == _path) return;
+    ++_generation;
+    await _unloadSources();
     _path = newPath;
     error = null;
     _length = Duration.zero;
     position.value = Duration.zero;
     _loopA = _loopB = null;
-    if (newPath == null) {
-      _notify();
-      return;
-    }
+    _stemFiles = null;
+    _stemsKey = _mixFile = null;
+    resetMixValues();
+    _notify();
+    // Gibt es schon getrennte Spuren? (nur nachsehen, nichts laden)
+    if (newPath != null) unawaited(_adoptStems(newPath));
+  }
+
+  /// Klänge laden, falls nötig (beim Abspielen und wenn das Fenster aufgeht).
+  Future<void> ensureLoaded() {
+    if (_path == null || _loaded) return Future.value();
+    return _loadingFuture ??= _loadSources().whenComplete(() {
+      _loadingFuture = null;
+    });
+  }
+
+  Future<void> _loadSources() async {
+    final path = _path!;
+    final gen = _generation;
     _loading = true;
+    error = null;
     _notify();
     try {
-      if (!_soloud.isInitialized) await _soloud.init(bufferSize: 512);
-      final source = await _soloud.loadFile(newPath);
-      if (gen != _generation) {
-        await _soloud.disposeSource(source);
-        return;
+      final soloud = await AudioEngine.use(this);
+      final stems = _stemFiles;
+      if (stems != null) {
+        // Von der Festplatte lesen statt alles in den Speicher; das Original
+        // braucht es dann gar nicht.
+        final loaded = <AudioSource>[];
+        for (final f in stems) {
+          loaded.add(await soloud.loadFile(f, mode: LoadMode.disk));
+        }
+        if (gen != _generation || _stemFiles != stems) {
+          for (final s in loaded) {
+            await soloud.disposeSource(s);
+          }
+          return;
+        }
+        _stems = loaded;
+        _length = soloud.getLength(loaded.first);
+      } else {
+        final source = await soloud.loadFile(path);
+        if (gen != _generation || _stemFiles != null) {
+          await soloud.disposeSource(source);
+          return;
+        }
+        _source = source;
+        _length = soloud.getLength(source);
       }
-      _source = source;
-      _length = _soloud.getLength(source);
-      // Getrennte Spuren dazu (falls schon einmal getrennt); Spuren von
-      // gelöschten Aufnahmen wegräumen.
-      unawaited(_adoptStems(newPath));
-      unawaited(StemService.instance.prune(p.dirname(newPath)));
+      _scheduleSleep();
+      // Spuren von gelöschten Aufnahmen wegräumen.
+      unawaited(StemService.instance.prune(p.dirname(path)));
     } catch (e) {
       if (gen != _generation) return;
       error = tr(
@@ -253,18 +277,34 @@ class ScoreAudioPlayer extends ChangeNotifier {
         'The recording could not be loaded. Is the file still missing (sync), or is the format unknown?',
       );
       debugPrint('Audio: $e');
+    } finally {
+      if (gen == _generation) {
+        _loading = false;
+        _notify();
+      }
     }
-    if (gen == _generation) {
-      _loading = false;
-      _notify();
-    }
+  }
+
+  /// Nach einer Minute ohne Abspielen alles freigeben (spart Speicher, und
+  /// die Audio-Technik darf schlafen).
+  void _scheduleSleep() {
+    _sleepTimer?.cancel();
+    _sleepTimer = Timer(const Duration(minutes: 1), () {
+      if (_playing || _disposed) return;
+      final h = _handle;
+      if (h != null && _soloud.isInitialized && _soloud.getIsValidVoiceHandle(h)) {
+        position.value = _soloud.getPosition(h);
+      }
+      unawaited(_unloadSources());
+    });
   }
 
   Future<void> toggle() => _playing ? pause() : play();
 
   Future<void> play() async {
-    final source = _source;
-    if (source == null) return;
+    _sleepTimer?.cancel();
+    await ensureLoaded();
+    if (!_loaded || _disposed) return;
     final h = _handle;
     if (h != null && _soloud.getIsValidVoiceHandle(h)) {
       _setPause(false);
@@ -286,6 +326,7 @@ class ScoreAudioPlayer extends ChangeNotifier {
     }
     _playing = false;
     _ticker?.cancel();
+    _scheduleSleep();
     _notify();
   }
 
@@ -296,7 +337,7 @@ class ScoreAudioPlayer extends ChangeNotifier {
     final d = _clampTime(to);
     position.value = d;
     final h = _handle;
-    if (h != null && _soloud.getIsValidVoiceHandle(h)) {
+    if (h != null && _soloud.isInitialized && _soloud.getIsValidVoiceHandle(h)) {
       for (final v in _voices) {
         try {
           _soloud.seek(v, d);
@@ -419,7 +460,7 @@ class ScoreAudioPlayer extends ChangeNotifier {
   }
 
   void _restartWithEffects() {
-    if (_source == null) {
+    if (!_loaded) {
       _notify();
       return;
     }
@@ -447,6 +488,7 @@ class ScoreAudioPlayer extends ChangeNotifier {
       _playing = false;
       _ticker?.cancel();
       position.value = Duration.zero;
+      _scheduleSleep();
       _notify();
       return;
     }
@@ -459,6 +501,11 @@ class ScoreAudioPlayer extends ChangeNotifier {
   }
 
   void _stopVoice() {
+    if (!_soloud.isInitialized) {
+      _handle = null;
+      _stemHandles = const [];
+      return;
+    }
     for (final h in {..._stemHandles, ?_handle}) {
       try {
         _soloud.stop(h);
@@ -468,17 +515,23 @@ class ScoreAudioPlayer extends ChangeNotifier {
     _stemHandles = const [];
   }
 
-  Future<void> _unload() async {
+  /// Alle geladenen Klänge freigeben und die Audio-Technik abmelden.
+  Future<void> _unloadSources() async {
     _ticker?.cancel();
+    _sleepTimer?.cancel();
     _playing = false;
     _stopVoice();
-    final s = _source;
+    final all = [?_source, ...?_stems];
     _source = null;
-    if (s != null) {
-      try {
-        await _soloud.disposeSource(s);
-      } catch (_) {}
+    _stems = null;
+    if (_soloud.isInitialized) {
+      for (final s in all) {
+        try {
+          await _soloud.disposeSource(s);
+        } catch (_) {}
+      }
     }
+    AudioEngine.done(this);
   }
 
   void _notify() {
@@ -490,8 +543,7 @@ class ScoreAudioPlayer extends ChangeNotifier {
     _disposed = true;
     StemService.instance.stemsChanged.removeListener(_onStemsChanged);
     _generation++;
-    _unload();
-    _unloadStems();
+    _unloadSources();
     position.dispose();
     super.dispose();
   }

@@ -129,6 +129,21 @@ class StemModelRunner {
       OrtStatus.checkOrtStatus(
         _api.SetInterOpNumThreads.asFunction<bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>, int)>()(o, 1),
       );
+      // Wartende Rechen-Stränge sollen schlafen statt im Kreis zu laufen
+      // (sonst ist der Prozessor auch zwischen den Stücken voll belegt).
+      for (final (key, value) in [('session.intra_op.allow_spinning', '0'), ('session.inter_op.allow_spinning', '0')]) {
+        final k = key.toNativeUtf8(allocator: calloc), v = value.toNativeUtf8(allocator: calloc);
+        try {
+          OrtStatus.checkOrtStatus(
+            _api.AddSessionConfigEntry.asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)
+            >()(o, k.cast(), v.cast()),
+          );
+        } finally {
+          calloc.free(k);
+          calloc.free(v);
+        }
+      }
       OrtStatus.checkOrtStatus(
         _api.SetSessionGraphOptimizationLevel.asFunction<
           bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>, int)
@@ -164,8 +179,10 @@ class StemModelRunner {
     }
   }
 
-  /// Etwas Luft für die Oberfläche lassen.
-  static int get defaultThreads => math.max(1, math.min(8, Platform.numberOfProcessors - 2));
+  /// Höchstens die Hälfte des Prozessors (und nie mehr als 6 Stränge), damit
+  /// Volti beim Trennen flüssig bleibt. Auf dem Surface Pro 9 (12 Stränge)
+  /// sind es 6.
+  static int get defaultThreads => math.max(1, math.min(6, Platform.numberOfProcessors ~/ 2));
 
   static const _seg = StemSeparation.defaultSegment;
   static const _mixCount = 2 * _seg;

@@ -712,9 +712,15 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void _adoptTempo() {
     final p = _leftPiece;
     if (p == null || p.cache == null) return;
-    // Aufnahme des Stücks bereithalten (ein anderes Stück beendet die bisherige).
+    // Aufnahme des Stücks merken (geladen wird erst beim Abspielen; ein
+    // anderes Stück beendet die bisherige).
     final audio = audioPathOf(p.item.path, p.meta);
-    if (audio != _audio.path) _audio.load(audio);
+    if (audio != _audio.path) {
+      _audio.load(audio).then((_) {
+        // Ist das Fenster offen, gleich laden (sonst erst beim Abspielen).
+        if (mounted && _audioOpen) _audio.ensureLoaded();
+      });
+    }
     if (_metronomePiece == _left.piece) return;
     _metronomePiece = _left.piece;
     _metronome.adopt(bpm: p.tempo, beats: p.beats);
@@ -740,6 +746,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       _audioOpen = !_audioOpen;
       if (_audioOpen) _metronomeOpen = _tunerOpen = false;
     });
+    if (_audioOpen) _audio.ensureLoaded();
   }
 
   /// Audio-Datei auswählen und dem Stück zuordnen.
@@ -777,6 +784,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       piece.meta = saved.meta;
       await deleteAudioOf(piece.item.path, old);
       await _audio.load(audioPathOf(piece.item.path, piece.meta));
+      unawaited(_audio.ensureLoaded());
       if (!mounted) return;
       setState(() {
         _audioOpen = true;
@@ -1005,7 +1013,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     } else if (down && key == LogicalKeyboardKey.keyK) {
       // Aufnahme abspielen/anhalten (ohne Aufnahme: Fenster zum Zuordnen).
       _adoptTempo();
-      if (_audio.ready) {
+      if (_audio.path != null) {
         _audio.toggle();
       } else {
         _toggleAudio();

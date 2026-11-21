@@ -35,6 +35,36 @@ Download **`Volti-Android.apk`** from the [latest version](https://github.com/ra
 
 - **Automatic updates:** in the [Obtainium](https://github.com/ImranR98/Obtainium) app choose “Add app” and enter `https://github.com/rawkhawk0663/volti`. Obtainium notifies you about and installs every new version.
 
+## System requirements
+
+Based on experience, not a guarantee. For smooth writing with the pen, the processor matters most.
+
+### Windows
+
+| | Minimum | Recommended |
+|---|---|---|
+| System | Windows 10 (64-bit) | Windows 11 |
+| Processor | 4 cores, e.g. Intel Core i5 8th generation or newer | 8 cores or more, e.g. Intel Core i5/i7 12th generation or newer |
+| Memory | 8 GB | 16 GB |
+| Storage | 1 GB free plus your music | SSD with a few GB free |
+| Input | Mouse or touch | Touch screen with pen (e.g. Surface Pro with Surface Pen) |
+
+### Android
+
+| | Minimum | Recommended |
+|---|---|---|
+| System | Android 7.0 | Android 13 or newer |
+| Device | Tablet from 10 inches, 4 GB memory | Tablet from 11 inches with pen, 8 GB memory (e.g. Galaxy Tab S9 or newer) |
+| Storage | 1 GB free plus your music | 8 GB free |
+
+Volti also runs on phones but is made for tablets.
+
+### Separating tracks (additionally)
+
+- Memory: at least 8 GB, 16 GB recommended (Volti needs about 2.5 GB while separating).
+- Storage: 174 MB once for the model file, plus about 40 MB per minute of each song (a 6-minute song about 250 MB).
+- Time: a few minutes per song on a Surface Pro 9, longer on Android tablets. You can keep working while it runs.
+
 ## Features
 
 ### Library

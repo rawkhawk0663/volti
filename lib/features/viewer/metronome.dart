@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../app/audio_engine.dart';
 import '../../app/l10n.dart';
 
 /// Klang des Metronoms.
@@ -127,6 +128,7 @@ class Metronome extends ChangeNotifier {
     beat.value = -1;
     _generation++;
     await _stopSound();
+    AudioEngine.done(this);
     if (!_disposed) notifyListeners();
   }
 
@@ -143,8 +145,7 @@ class Metronome extends ChangeNotifier {
   Future<void> _play() async {
     final gen = ++_generation;
     try {
-      final soloud = SoLoud.instance;
-      if (!soloud.isInitialized) await soloud.init(bufferSize: 512);
+      final soloud = await AudioEngine.use(this);
       final wav = buildBar(_bpm, _beats, _sound);
       final source = await soloud.loadMem('metronom-$gen.wav', wav);
       if (gen != _generation || !_running) {
@@ -185,7 +186,9 @@ class Metronome extends ChangeNotifier {
     _restart?.cancel();
     _ticker?.cancel();
     _generation++;
-    _stopSound();
+    _stopSound().whenComplete(() {
+      AudioEngine.done(this);
+    });
     beat.dispose();
     super.dispose();
   }

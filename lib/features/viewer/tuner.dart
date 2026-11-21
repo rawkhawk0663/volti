@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_recorder/flutter_recorder.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../app/audio_engine.dart';
 import '../../app/error_log.dart';
 import '../../app/l10n.dart';
 import '../../core/audio/pitch.dart';
@@ -211,8 +212,7 @@ class Tuner extends ChangeNotifier {
     pipeError = null;
     notifyListeners();
     try {
-      final soloud = SoLoud.instance;
-      if (!soloud.isInitialized) await soloud.init(bufferSize: 512);
+      final soloud = await AudioEngine.use(this);
       final wav = buildPipeTone(noteFrequency(midi, a4: _a4), _sound);
       final source = await soloud.loadMem('stimmton-$gen.wav', wav);
       if (gen != _generation) {
@@ -233,6 +233,8 @@ class Tuner extends ChangeNotifier {
         _endTimer = Timer(const Duration(seconds: 4), () {
           if (gen == _generation) {
             _playingMidi = null;
+            // Ausgeklungen: Klang freigeben, die Audio-Technik darf schlafen.
+            _stopSound();
             if (!_disposed) notifyListeners();
           }
         });
@@ -269,6 +271,7 @@ class Tuner extends ChangeNotifier {
       }
       if (s != null) await soloud.disposeSource(s);
     } catch (_) {}
+    AudioEngine.done(this);
   }
 
   @override

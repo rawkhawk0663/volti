@@ -35,6 +35,36 @@ Lade **`Volti-Android.apk`** aus der [neuesten Version](https://github.com/rawkh
 
 - **Automatische Updates:** In der App [Obtainium](https://github.com/ImranR98/Obtainium) „App hinzufügen“ wählen und `https://github.com/rawkhawk0663/volti` eintragen. Obtainium meldet und installiert jede neue Version.
 
+## Systemvoraussetzungen
+
+Erfahrungswerte, keine Garantie. Für flüssiges Schreiben mit dem Stift zählt vor allem der Prozessor.
+
+### Windows
+
+| | Mindestens | Empfohlen |
+|---|---|---|
+| System | Windows 10 (64 Bit) | Windows 11 |
+| Prozessor | 4 Kerne, z. B. Intel Core i5 ab 8. Generation | 8 Kerne oder mehr, z. B. Intel Core i5/i7 ab 12. Generation |
+| Arbeitsspeicher | 8 GB | 16 GB |
+| Speicher | 1 GB frei plus deine Noten | SSD mit einigen GB frei |
+| Bedienung | Maus oder Touch | Touchscreen mit Stift (z. B. Surface Pro mit Surface Pen) |
+
+### Android
+
+| | Mindestens | Empfohlen |
+|---|---|---|
+| System | Android 7.0 | Android 13 oder neuer |
+| Gerät | Tablet ab 10 Zoll, 4 GB Arbeitsspeicher | Tablet ab 11 Zoll mit Stift, 8 GB Arbeitsspeicher (z. B. Galaxy Tab S9 oder neuer) |
+| Speicher | 1 GB frei plus deine Noten | 8 GB frei |
+
+Volti läuft auch auf dem Handy, ist aber fürs Tablet gemacht.
+
+### Spuren trennen (zusätzlich)
+
+- Arbeitsspeicher: mindestens 8 GB, empfohlen 16 GB (während des Trennens braucht Volti etwa 2,5 GB).
+- Speicher: einmalig 174 MB für die Modell-Datei, dazu pro Lied etwa 40 MB je Minute (ein 6-Minuten-Lied rund 250 MB).
+- Dauer: auf einem Surface Pro 9 einige Minuten pro Lied, auf Android-Tablets länger. Während des Trennens kann man weiterarbeiten.
+
 ## Was Volti kann
 
 ### Bibliothek
