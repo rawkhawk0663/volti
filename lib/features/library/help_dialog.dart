@@ -78,9 +78,11 @@ List<_HelpPage> get _pages => [
     ),
     tr(
       'Mit dem Kopfhörer-Knopf oben ordnest du einem Stück eine Aufnahme zu und spielst mit, auch langsamer oder '
-          'als Schleife. Taste K startet und hält an.',
+          'als Schleife. Taste K startet und hält an. „Spuren trennen“ lässt beim Transponieren das Schlagzeug '
+          'unverändert, das klingt natürlicher.',
       'The headphones button at the top attaches a recording to a piece so you can play along, also slower or '
-          'as a loop. The K key starts and stops it.',
+          'as a loop. The K key starts and stops it. “Separate tracks” keeps the drums unchanged when '
+          'transposing, which sounds more natural.',
     ),
   ]),
   _HelpPage(Icons.edit_outlined, tr('Mit dem Stift schreiben', 'Writing with the pen'), [

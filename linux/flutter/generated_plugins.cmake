@@ -14,6 +14,7 @@ list(APPEND FLUTTER_FFI_PLUGIN_LIST
   flutter_recorder
   flutter_soloud
   jni
+  onnxruntime_v2
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

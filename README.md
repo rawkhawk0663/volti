@@ -74,7 +74,7 @@ Lade **`Volti-Android.apk`** aus der [neuesten Version](https://github.com/rawkh
 - **Endlosband**: Die Notenzeilen erscheinen untereinander über die ganze Breite und lassen sich durchscrollen.
 - **Bildleiste** unten, schwebend in der Mitte: alle Seiten als kleine Bilder, antippen springt hin. Dazu eine **Seitenübersicht** über alle Seiten, in einer Setlist Song für Song.
 - **Metronom** mit angenehmem Klang. Es übernimmt das Tempo und die Taktart jedes Songs.
-- **Aufnahme zum Mitspielen:** Ordne jedem Stück eine Audio-Datei zu (MP3, M4A, WAV, OGG, FLAC). Sie wird beim Öffnen mitgeladen. Langsamer abspielen ohne andere Tonhöhe, transponieren um bis zu sechs Halbtöne und eine Stelle als Schleife üben.
+- **Aufnahme zum Mitspielen:** Ordne jedem Stück eine Audio-Datei zu (MP3, M4A, WAV, OGG, FLAC). Sie wird beim Öffnen mitgeladen. Langsamer abspielen ohne andere Tonhöhe, transponieren um bis zu sechs Halbtöne und eine Stelle als Schleife üben. **Spuren trennen:** Volti zerlegt die Aufnahme auf dem Gerät in Schlagzeug und Rest, damit beim Transponieren nur Gesang und Instrumente verschoben werden und das Schlagzeug natürlich klingt.
 - **Stimmgerät** (über das Mikrofon) und **Stimmton** zum Anstimmen, mit einstellbarem Kammerton.
 
 ### Schreiben mit dem Stift

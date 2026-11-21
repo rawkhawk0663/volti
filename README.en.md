@@ -74,7 +74,7 @@ Download **`Volti-Android.apk`** from the [latest version](https://github.com/ra
 - **Continuous scroll**: the staves are lined up across the full width so you can scroll through them.
 - **Page strip** floating at the bottom centre: every page as a small picture, tap to jump there. Plus a **page overview** of all pages, song by song in a setlist.
 - **Metronome** with a pleasant click. It picks up the tempo and time signature of every song.
-- **Play-along recording:** attach an audio file to any piece (MP3, M4A, WAV, OGG, FLAC). It is loaded whenever you open the piece. Slow it down without changing the pitch, transpose by up to six semitones and loop a passage.
+- **Play-along recording:** attach an audio file to any piece (MP3, M4A, WAV, OGG, FLAC). It is loaded whenever you open the piece. Slow it down without changing the pitch, transpose by up to six semitones and loop a passage. **Separate tracks:** Volti splits the recording on the device into drums and the rest, so transposing only shifts vocals and instruments and the drums sound natural.
 - **Tuner** (using the microphone) and **pitch pipe** for giving the note, with adjustable concert pitch.
 
 ### Writing with the pen

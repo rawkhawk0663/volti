@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/audio/stem_model.dart';
+import '../../core/audio/stem_service.dart';
 import 'score_audio_player.dart';
 import '../../app/l10n.dart';
 import '../../app/visuals.dart';
@@ -41,7 +43,7 @@ class AudioPanel extends StatelessWidget {
       child: SizedBox(
         width: 380,
         child: ListenableBuilder(
-          listenable: player,
+          listenable: Listenable.merge([player, StemService.instance]),
           builder: (context, _) {
             final a = player;
             final has = a.path != null;
@@ -286,8 +288,148 @@ class AudioPanel extends StatelessWidget {
             small('↺', st == 0 ? null : () => a.setSemitones(0), tip: tr('Originaltonhöhe', 'Original pitch')),
           ],
         ),
+        if (a.path != null) _StemsSection(player: a, muted: muted),
       ],
     ];
+  }
+}
+
+/// Spuren trennen: Schlagzeug und Rest, damit beim Transponieren nur der
+/// Rest verschoben wird und das Schlagzeug natürlich klingt.
+class _StemsSection extends StatelessWidget {
+  const _StemsSection({required this.player, required this.muted});
+  final ScoreAudioPlayer player;
+  final TextStyle? muted;
+
+  StemService get _service => StemService.instance;
+
+  Future<void> _start(BuildContext context) async {
+    final path = player.path;
+    if (path == null) return;
+    if (!await _service.modelInstalled()) {
+      if (!context.mounted) return;
+      final mb = (StemModelFile.size / 1000000).round();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(tr('Spuren trennen', 'Separate tracks')),
+          content: SizedBox(
+            width: 440,
+            child: Text(
+              tr(
+                'Volti trennt die Aufnahme in Schlagzeug und Rest (Gesang, Bass, Gitarre, Keys …). Beim '
+                    'Transponieren wird dann nur der Rest verschoben, das Schlagzeug klingt natürlich.\n\n'
+                    'Dafür lädt Volti einmalig eine Modell-Datei herunter (etwa $mb MB). Das Trennen läuft '
+                    'danach ganz auf diesem Gerät und dauert je nach Lied einige Minuten. Du kannst '
+                    'währenddessen weiterarbeiten.',
+                'Volti separates the recording into drums and the rest (vocals, bass, guitar, keys …). When '
+                    'transposing, only the rest is shifted, so the drums sound natural.\n\n'
+                    'For this, Volti downloads a model file once (about $mb MB). After that, separating runs '
+                    'entirely on this device and takes a few minutes depending on the song. You can keep '
+                    'working meanwhile.',
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Abbrechen', 'Cancel'))),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: Text(tr('Herunterladen und trennen', 'Download and separate')),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    await _service.separate(path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final path = player.path;
+    final s = _service;
+    final Widget child;
+    if (s.busyWith(path)) {
+      final (label, value) = switch (s.phase) {
+        StemPhase.downloading => (
+          tr('Modell wird heruntergeladen … ${(s.progress * 100).round()} %', 'Downloading model … ${(s.progress * 100).round()} %'),
+          s.progress,
+        ),
+        StemPhase.decoding => (tr('Aufnahme wird vorbereitet …', 'Preparing the recording …'), null),
+        _ => (
+          tr('Spuren werden getrennt … ${(s.progress * 100).round()} %', 'Separating tracks … ${(s.progress * 100).round()} %'),
+          s.progress,
+        ),
+      };
+      child = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(label, style: muted)),
+              TextButton(onPressed: s.cancel, child: Text(tr('Abbrechen', 'Cancel'))),
+            ],
+          ),
+          LinearProgressIndicator(value: value),
+        ],
+      );
+    } else if (player.hasStems) {
+      child = Row(
+        children: [
+          Icon(Icons.check_circle_outline, size: 18, color: scheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              tr(
+                'Spuren getrennt: Beim Transponieren bleibt das Schlagzeug unverändert.',
+                'Tracks separated: the drums stay unchanged when transposing.',
+              ),
+              style: muted,
+            ),
+          ),
+          IconButton(
+            tooltip: tr('Getrennte Spuren löschen', 'Delete separated tracks'),
+            icon: const Icon(Icons.delete_outline, size: 20),
+            onPressed: () => s.deleteStems(path!),
+          ),
+        ],
+      );
+    } else {
+      final other = s.busy;
+      final failed = s.phase == StemPhase.failed && s.audioPath == path;
+      child = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OutlinedButton.icon(
+            onPressed: other ? null : () => _start(context),
+            icon: const Icon(Icons.call_split, size: 18),
+            label: Text(tr('Spuren trennen (besser transponieren)', 'Separate tracks (better transposing)')),
+          ),
+          if (other)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                tr('Eine andere Aufnahme wird gerade getrennt.', 'Another recording is being separated.'),
+                style: muted,
+              ),
+            ),
+          if (failed)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                tr(
+                  'Das Trennen hat nicht geklappt: ${s.error ?? ''}',
+                  'Separating did not work: ${s.error ?? ''}',
+                ),
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+              ),
+            ),
+        ],
+      );
+    }
+    return Padding(padding: const EdgeInsets.fromLTRB(0, 10, 8, 0), child: child);
   }
 }
 
