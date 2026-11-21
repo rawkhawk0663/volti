@@ -57,6 +57,7 @@ class TabBeat {
     this.slideIns = const {},
     this.slideOuts = const {},
     this.ties = const {},
+    this.tieIns = const {},
     this.staccato = false,
     this.accent = false,
     this.triplet = false,
@@ -74,6 +75,7 @@ class TabBeat {
       slideIns = const {},
       slideOuts = const {},
       ties = const {},
+      tieIns = const {},
       staccato = false,
       accent = false,
       triplet = false;
@@ -108,6 +110,11 @@ class TabBeat {
   /// gehalten wird (die gehaltene steht in Klammern).
   final Set<int> ties;
 
+  /// Haltebögen von davor: Saiten, deren Ton von einer früheren Note gehalten
+  /// wird (Bogen von links in die Zahl, die Zahl in Klammern). Für einen
+  /// Haltebogen über einen Zeilenumbruch.
+  final Set<int> tieIns;
+
   /// Staccato (Punkt über dem Schlag) und Akzent („>“).
   final bool staccato, accent;
 
@@ -139,6 +146,7 @@ class TabBeat {
     Map<int, int>? slideIns,
     Map<int, int>? slideOuts,
     Set<int>? ties,
+    Set<int>? tieIns,
     bool? staccato,
     bool? accent,
     bool? triplet,
@@ -171,6 +179,10 @@ class TabBeat {
         for (final st in ties ?? this.ties)
           if (f.containsKey(st)) st,
       },
+      tieIns: {
+        for (final st in tieIns ?? this.tieIns)
+          if (f.containsKey(st)) st,
+      },
       // Ohne Bundzahl (Pause) keine Artikulation.
       staccato: f.isNotEmpty && (staccato ?? this.staccato),
       accent: f.isNotEmpty && (accent ?? this.accent),
@@ -189,6 +201,7 @@ class TabBeat {
           if (slideIns.isNotEmpty) 'sIn': {for (final e in slideIns.entries) '${e.key}': e.value},
           if (slideOuts.isNotEmpty) 'sOut': {for (final e in slideOuts.entries) '${e.key}': e.value},
           if (ties.isNotEmpty) 'tie': (ties.toList()..sort()),
+          if (tieIns.isNotEmpty) 'tieIn': (tieIns.toList()..sort()),
           if (staccato) 'stacc': true,
           if (accent) 'acc': true,
           if (triplet) 'tri': true,
@@ -230,6 +243,10 @@ class TabBeat {
         for (final st in j['tie'] as List<dynamic>? ?? const [])
           if (st is int && frets.containsKey(st)) st,
       },
+      tieIns: {
+        for (final st in j['tieIn'] as List<dynamic>? ?? const [])
+          if (st is int && frets.containsKey(st)) st,
+      },
       staccato: frets.isNotEmpty && j['stacc'] == true,
       accent: frets.isNotEmpty && j['acc'] == true,
       triplet: j['tri'] == true,
@@ -255,6 +272,8 @@ class TabBeat {
       _sameMap(other.slideOuts, slideOuts) &&
       other.ties.length == ties.length &&
       other.ties.containsAll(ties) &&
+      other.tieIns.length == tieIns.length &&
+      other.tieIns.containsAll(tieIns) &&
       other.staccato == staccato &&
       other.accent == accent &&
       other.triplet == triplet;
@@ -272,6 +291,7 @@ class TabBeat {
     Object.hashAllUnordered(slideIns.entries.map((e) => e.key * 10 + e.value)),
     Object.hashAllUnordered(slideOuts.entries.map((e) => e.key * 10 + e.value)),
     Object.hashAllUnordered(ties),
+    Object.hashAllUnordered(tieIns),
     staccato,
     accent,
     triplet,
@@ -563,6 +583,17 @@ class TabEditor {
     anchor ??= beat.clamp(0, beats.length - 1);
     stringAnchor ??= string;
     string = (string + by).clamp(0, TabBlock.strings - 1);
+    _resetDigits();
+  }
+
+  /// Den ganzen Schlag unter dem Cursor markieren (alle Noten übereinander,
+  /// ebenso Taktstrich oder Pause). Löschen entfernt ihn dann ganz; mit
+  /// Umschalt + ← / → wird die Markierung erweitert.
+  void selectColumn() {
+    if (beats.isEmpty) return;
+    beat = beat.clamp(0, beats.length - 1);
+    anchor ??= beat;
+    stringAnchor = null;
     _resetDigits();
   }
 
@@ -884,6 +915,17 @@ class TabEditor {
         break;
       }
     }
+    _resetDigits();
+  }
+
+  /// Haltebogen von davor (der Ton ist von einer früheren Note gehalten,
+  /// z. B. über einen Zeilenumbruch) auf dieser Saite ein/aus.
+  void toggleTieIn() {
+    final b = current;
+    if (b == null || b.bar || !b.frets.containsKey(string)) return;
+    final ins = {...b.tieIns};
+    ins.contains(string) ? ins.remove(string) : ins.add(string);
+    beats[beat] = b.copyWith(tieIns: ins);
     _resetDigits();
   }
 

@@ -271,9 +271,10 @@ class _TabLayerState extends State<TabLayer> {
         s.extend(plain == TabAction.left ? -1 : 1);
         return KeyEventResult.handled;
       }
-      // Umschalt + ↑ / ↓: Noten übereinander markieren.
+      // Umschalt + ↑ / ↓: den ganzen Schlag markieren (alle Noten
+      // übereinander), Entf löscht ihn dann.
       if (plain == TabAction.up || plain == TabAction.down) {
-        s.extendString(plain == TabAction.up ? -1 : 1);
+        s.selectColumn();
         return KeyEventResult.handled;
       }
     }

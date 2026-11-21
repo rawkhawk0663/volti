@@ -111,7 +111,9 @@ double _naturalWidth(TabBeat b) {
   // Platz für den Bending-Pfeil rechts neben der Zahl.
   final bend = b.bends.isNotEmpty ? 1.0 : 0.0;
   // Platz für Slides in den Ton hinein bzw. aus ihm heraus.
-  final slide = (b.slideIns.isNotEmpty ? 0.9 : 0.0) + (b.slideOuts.isNotEmpty ? 0.7 : 0.0);
+  // … und für den Haltebogen von davor samt Klammern.
+  final slide =
+      (b.slideIns.isNotEmpty ? 0.9 : 0.0) + (b.slideOuts.isNotEmpty ? 0.7 : 0.0) + (b.tieIns.isNotEmpty ? 1.2 : 0.0);
   return math.max(w, twoDigits ? 2.3 : 1.6) + bend + slide;
 }
 
@@ -350,7 +352,8 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     for (final e in b.frets.entries) {
       // Ghost Note: ein „x“ statt der Bundzahl.
       final label = e.value == ghostNote ? 'x' : '${e.value}';
-      final p = _text(held.contains((i, e.key)) ? '($label)' : label, g * 1.15, color);
+      final isHeld = held.contains((i, e.key)) || b.tieIns.contains(e.key);
+      final p = _text(isHeld ? '($label)' : label, g * 1.15, color);
       final cy = l.lineY(e.key);
       final r = Rect.fromCenter(center: Offset(cx, cy), width: p.width + g * 0.3, height: g * 0.95);
       canvas.drawRect(r, knockout);
@@ -475,6 +478,20 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
           ..moveTo(cx - w, above - h)
           ..lineTo(cx + w, above)
           ..lineTo(cx - w, above + h),
+        line,
+      );
+    }
+    // Haltebogen von davor: kommt von links in die (eingeklammerte) Zahl.
+    for (final st in b.tieIns) {
+      final fret = b.frets[st];
+      if (fret == null) continue;
+      final y = l.lineY(st) + g * 0.55;
+      final x2 = cx - g * 0.2 - _halfNumber(fret, g) * 0.6;
+      final x1 = x2 - g * 1.4;
+      canvas.drawPath(
+        Path()
+          ..moveTo(x1, y)
+          ..quadraticBezierTo((x1 + x2) / 2, y + g * 0.6, x2, y),
         line,
       );
     }

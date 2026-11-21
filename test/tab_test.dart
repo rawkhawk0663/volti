@@ -392,7 +392,7 @@ void main() {
       expect(e.beats[0].frets, {0: 0, 2: 0, 3: 2});
     });
 
-    test('Umschalt+↓ markiert Noten übereinander, Löschen trifft nur diese', () {
+    test('Einzelne Saiten markiert (Rechteck): Löschen trifft nur diese', () {
       final e = TabEditor(const [chord, chord]);
       e.string = 1;
       e.extendString(1);
@@ -414,11 +414,57 @@ void main() {
       expect(e.beats[1].frets, {2: 0, 3: 2});
     });
 
+    test('Ganzen Schlag markieren: alle Noten übereinander, Taktstrich oder Pause; Entf löscht ihn', () {
+      final e = TabEditor(const [chord, TabBeat.bar(), TabBeat(), TabBeat(frets: {0: 3})]);
+      e.string = 3;
+      e.selectColumn();
+      expect(e.selection, (0, 0));
+      expect(e.stringSelection, isNull, reason: 'alle Saiten');
+      expect(e.deleteSelection(), isTrue);
+      expect(e.beats.length, 3, reason: 'der ganze Akkord ist weg');
+      expect(e.beats.first.bar, isTrue);
+      // Taktstrich
+      e.beat = 0;
+      e.selectColumn();
+      e.deleteSelection();
+      expect(e.beats.first.isRest, isTrue);
+      // Pause, dann mit → erweitern
+      e.beat = 0;
+      e.selectColumn();
+      e.extend(1);
+      expect(e.selection, (0, 1));
+      e.deleteSelection();
+      expect(e.beats, isEmpty);
+    });
+
     test('Alte gespeicherte Belegung wird umgestellt', () {
       const old = '{"clearNote":{"k":4294967304},"deleteBeat":{"k":4294967423}}';
       final m = TabKeymap.fromJson(old);
       expect(m[TabAction.clearNote]!.key, LogicalKeyboardKey.delete);
       expect(m[TabAction.deleteBeat]!.ctrl, isTrue);
+    });
+  });
+
+  group('Haltebogen von davor', () {
+    test('Ein/aus, nur mit Bundzahl, speichern und lesen', () {
+      final e = TabEditor(const []);
+      e.toggleTieIn();
+      expect(e.beats, isEmpty, reason: 'ohne Bundzahl nichts');
+      e.setFret(7);
+      e.toggleTieIn();
+      expect(e.beats.single.tieIns, {0});
+      final back = TabBeat.fromJson(e.beats.single.toJson());
+      expect(back, e.beats.single);
+      expect(back.tieIns, {0});
+      e.toggleTieIn();
+      expect(e.beats.single.tieIns, isEmpty);
+      e.toggleTieIn();
+      e.clearNote();
+      expect(e.beats.single.tieIns, isEmpty, reason: 'Bundzahl weg = Bogen weg');
+      expect(
+        TabKeymap.defaults.actionFor(LogicalKeyboardKey.keyO, ctrl: false, shift: true, alt: false),
+        TabAction.tieIn,
+      );
     });
   });
 
@@ -695,6 +741,26 @@ void main() {
       await t.sendKeyEvent(LogicalKeyboardKey.keyN);
       await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       expect(ink.annotations.tab(id)!.beats.length, 6, reason: 'Pause und Taktstrich dazu');
+      tools.tabSession.value = null;
+      await t.pump();
+      ink.dispose();
+    });
+
+    testWidgets('Umschalt+↓ markiert sofort den ganzen Schlag, Entf löscht ihn', (t) async {
+      await pump(t);
+      final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
+      ink.updateTab(id, beats: const [TabBeat(frets: {0: 1, 1: 3, 2: 2}), TabBeat(frets: {0: 5})]);
+      tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
+      await t.pump();
+      await t.pump();
+      await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(tools.tabSession.value!.selection, (0, 0));
+      await t.sendKeyEvent(LogicalKeyboardKey.delete);
+      expect(ink.annotations.tab(id)!.beats.map((b) => b.frets), [
+        {0: 5},
+      ]);
       tools.tabSession.value = null;
       await t.pump();
       ink.dispose();

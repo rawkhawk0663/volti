@@ -75,6 +75,7 @@ class TabSession extends ChangeNotifier {
 
   void extend(int by) => _move((e) => e.extend(by));
   void extendString(int by) => _move((e) => e.extendString(by));
+  void selectColumn() => _move((e) => e.selectColumn());
 
   /// Markierte Saiten (beide inklusive), null = alle.
   (int, int)? get stringSelection => _editor.stringSelection;
@@ -142,9 +143,9 @@ class TabSession extends ChangeNotifier {
       case TabAction.right:
         markMode ? extend(1) : _move((e) => e.move(1));
       case TabAction.up:
-        markMode ? extendString(-1) : _move((e) => e.moveString(-1));
+        markMode ? selectColumn() : _move((e) => e.moveString(-1));
       case TabAction.down:
-        markMode ? extendString(1) : _move((e) => e.moveString(1));
+        markMode ? selectColumn() : _move((e) => e.moveString(1));
       case TabAction.shorter:
         _edit((e) => e.shorter());
       case TabAction.longer:
@@ -167,6 +168,8 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.cycleBend());
       case TabAction.tie:
         _edit((e) => e.toggleTie());
+      case TabAction.tieIn:
+        _edit((e) => e.toggleTieIn());
       case TabAction.staccato:
         _edit((e) => e.toggleStaccato());
       case TabAction.accent:

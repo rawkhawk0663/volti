@@ -1704,6 +1704,14 @@ class _TabKeypad extends StatelessWidget {
                     tooltip: tip(TabAction.tie),
                     width: 37,
                   ),
+                  // Haltebogen von davor (z. B. über einen Zeilenumbruch).
+                  key(
+                    const Text('⌒(5)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                    () => session.perform(TabAction.tieIn),
+                    selected: cur?.tieIns.contains(session.string) ?? false,
+                    tooltip: tip(TabAction.tieIn),
+                    width: 50,
+                  ),
                   key(
                     Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A2)),
                     () => session.perform(TabAction.staccato),
