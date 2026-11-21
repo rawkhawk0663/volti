@@ -24,6 +24,11 @@ void SafeRelease(T** p) {
   }
 }
 
+// Die Konstanten sind als Aufzählung mit Vorzeichen deklariert, die
+// Funktionen erwarten DWORD.
+constexpr DWORD kFirstAudio = static_cast<DWORD>(MF_SOURCE_READER_FIRST_AUDIO_STREAM);
+constexpr DWORD kAllStreams = static_cast<DWORD>(MF_SOURCE_READER_ALL_STREAMS);
+
 }  // namespace
 
 // Rückgabe: 0 = gut, sonst ein Fehlercode (HRESULT oder 1 = Datei).
@@ -48,8 +53,8 @@ extern "C" __declspec(dllexport) int VoltiDecodeAudio(const wchar_t* input,
 
   hr = MFCreateSourceReaderFromURL(input, nullptr, &reader);
   if (SUCCEEDED(hr)) {
-    reader->SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, FALSE);
-    hr = reader->SetStreamSelection(MF_SOURCE_READER_FIRST_AUDIO_STREAM, TRUE);
+    reader->SetStreamSelection(kAllStreams, FALSE);
+    hr = reader->SetStreamSelection(kFirstAudio, TRUE);
   }
   // Ausgabe: unkomprimiert, 32-Bit-Gleitkomma (Abtastrate und Kanäle wie
   // in der Datei).
@@ -57,11 +62,11 @@ extern "C" __declspec(dllexport) int VoltiDecodeAudio(const wchar_t* input,
   if (SUCCEEDED(hr)) hr = wanted->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
   if (SUCCEEDED(hr)) hr = wanted->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_Float);
   if (SUCCEEDED(hr)) {
-    hr = reader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM,
+    hr = reader->SetCurrentMediaType(kFirstAudio,
                                      nullptr, wanted);
   }
   if (SUCCEEDED(hr)) {
-    hr = reader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM,
+    hr = reader->GetCurrentMediaType(kFirstAudio,
                                      &actual);
   }
   if (SUCCEEDED(hr)) {
@@ -74,7 +79,7 @@ extern "C" __declspec(dllexport) int VoltiDecodeAudio(const wchar_t* input,
   while (SUCCEEDED(hr) && !fileError) {
     DWORD flags = 0;
     IMFSample* sample = nullptr;
-    hr = reader->ReadSample(MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, nullptr,
+    hr = reader->ReadSample(kFirstAudio, 0, nullptr,
                             &flags, nullptr, &sample);
     if (FAILED(hr)) break;
     if (sample) {
