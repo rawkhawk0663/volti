@@ -568,6 +568,35 @@ void main() {
       expect(back.annotations.tab('t'), isNotNull);
     });
 
+    test('Tabulaturen landen immer auf der Ebene „TABS“ (je Bibliothek bzw. Setlist eine)', () async {
+      final dir = Directory.systemTemp.createTempSync('volti_tab');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final c = InkController(pdfPath: '${dir.path}/x.pdf');
+      final other = c.addLayer('Fingersätze');
+      expect(c.activeLayer, other);
+      final a = c.addTab(page: 1, x: 0.1, y: 0.1, width: 0.8);
+      expect(c.annotations.tab(a)!.layer, 'tabs');
+      expect(c.annotations.layer('tabs')!.name, 'TABS');
+      expect(c.activeLayer, other, reason: 'die aktive Ebene bleibt');
+      expect(c.layers.last.id, 'tabs', reason: 'ganz oben');
+      // Ausgeblendet: die nächste Tabulatur blendet sie wieder ein.
+      c.setLayerVisible('tabs', false);
+      final b = c.addTab(page: 2, x: 0.1, y: 0.1, width: 0.8);
+      expect(c.annotations.tab(b)!.layer, 'tabs');
+      expect(c.annotations.layer('tabs')!.visible, isTrue);
+      expect(c.layers.where((l) => l.name == 'TABS').length, 1, reason: 'keine zweite');
+      // Ein Rückgängig-Schritt nimmt bei der ersten auch die Ebene mit.
+      c.undo();
+      c.undo();
+      expect(c.annotations.visibleTabsOn(1), isEmpty);
+      expect(c.layers.any((l) => l.id == 'tabs'), isFalse);
+      // In einer Setlist: eigene Ebene, nur dort sichtbar.
+      final s = InkController(pdfPath: '${dir.path}/y.pdf', scope: 'set1', scopeName: 'Probe');
+      final t = s.addTab(page: 1, x: 0.1, y: 0.1, width: 0.8);
+      expect(s.annotations.tab(t)!.layer, 'tabs-set1');
+      expect(s.annotations.layer('tabs-set1')!.scope, 'set1');
+    });
+
     test('Anlegen, Schreiben, Löschen – alles rückgängig machbar', () async {
       final dir = Directory.systemTemp.createTempSync('volti_tab');
       addTearDown(() => dir.deleteSync(recursive: true));

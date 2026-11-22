@@ -26,6 +26,13 @@ class AnnotationLayer {
   /// entsteht beim Abgleich keine zweite).
   static String forSetlist(String setlistId) => 'setlist-$setlistId';
 
+  /// ID der Ebene „TABS“, auf der alle Tabulaturen landen (in der Bibliothek
+  /// bzw. je Setlist oder Kartei eine; für alle Geräte gleich).
+  static String forTabs(String? scope) => scope == null ? 'tabs' : 'tabs-$scope';
+
+  /// Name der Ebene für Tabulaturen (in beiden Sprachen gleich).
+  static const tabsName = 'TABS';
+
   /// Die Grund-Ebene, solange sie nie verändert wurde.
   static AnnotationLayer standard() =>
       AnnotationLayer(id: kDefaultLayer, name: tr('Standard', 'Default'), order: 0, createdAt: DateTime.utc(2000));

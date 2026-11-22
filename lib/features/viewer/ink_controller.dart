@@ -384,6 +384,7 @@ class InkController extends ChangeNotifier {
     int background = TabBlock.noBackground,
     String? meter,
   }) {
+    beginBatch();
     final t = TabBlock(
       id: _uuid.v4(),
       page: page,
@@ -394,11 +395,38 @@ class InkController extends ChangeNotifier {
       background: background,
       meter: meter,
       createdAt: DateTime.now().toUtc(),
-      layer: _layerForNew(),
+      layer: _tabsLayer(),
     );
     _annotations.putTab(t);
     _push(_UndoEntry(tabsBefore: [t.copyWith(deleted: true)]));
+    endBatch();
     return t.id;
+  }
+
+  /// Ebene „TABS“ (Wunsch des Besitzers): Tabulaturen landen immer dort,
+  /// egal welche Ebene gerade aktiv ist. Beim ersten Mal (bzw. nachdem sie
+  /// gelöscht wurde) entsteht sie ganz oben, in einer Setlist nur für diese.
+  /// Ist sie ausgeblendet, wird sie eingeblendet.
+  String _tabsLayer() {
+    final id = AnnotationLayer.forTabs(scope);
+    final old = _annotations.allLayers.where((l) => l.id == id).firstOrNull;
+    if (old == null || old.deleted) {
+      _changeLayers([
+        old?.copyWith(deleted: false, visible: true, order: _topOrder() + 1, parent: null) ??
+            AnnotationLayer(
+              id: id,
+              name: AnnotationLayer.tabsName,
+              order: _topOrder() + 1,
+              createdAt: DateTime.now().toUtc(),
+              scope: scope,
+            ),
+      ]);
+    }
+    final l = _annotations.layer(id)!;
+    if (!l.visible) _setLayer(l.copyWith(visible: true));
+    final g = _annotations.groupOf(l);
+    if (g != null && !g.visible) _setLayer(g.copyWith(visible: true));
+    return id;
   }
 
   /// Inhalt oder Lage einer Tabulatur ändern (ein Rückgängig-Schritt).
