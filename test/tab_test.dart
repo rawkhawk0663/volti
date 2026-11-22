@@ -618,6 +618,35 @@ void main() {
       expect(const TabBeat.bar(at: 0.4) == const TabBeat.bar(), isFalse);
     });
 
+    test('Note von Hand im Takt: Taktstriche bleiben, die Note wandert mit dem Taktstrich', () {
+      // Taktstrich von Hand weiter rechts, damit der Takt Platz hat
+      final wide = [...beats]..[2] = const TabBeat.bar(at: 0.6);
+      final base = layoutTab(block('a', beats: wide), page);
+      final (lo, hi) = measureSpanOf(block('a', beats: wide), base, 0);
+      // Zweite Note ganz nach hinten im Takt
+      final pinned = [...wide]..[1] = const TabBeat(frets: {0: 2}, at: 0.85);
+      final l = layoutTab(block('a', beats: pinned), page);
+      expect(l.xs[1], closeTo(lo + 0.85 * (hi - lo), 0.001));
+      expect(l.xs[1], greaterThan(base.xs[1]));
+      expect(l.xs[2], closeTo(base.xs[2], 1e-9), reason: 'Taktstrich bleibt');
+      expect(l.xs[3], closeTo(base.xs[3], 1e-9), reason: 'nächster Takt bleibt');
+      expect(l.xs[0], closeTo(base.xs[0], 0.001), reason: 'Note davor bleibt');
+      // Taktstrich weiter nach rechts: die Note wandert mit (gleicher Anteil)
+      final further = [...pinned]..[2] = const TabBeat.bar(at: 0.8);
+      final t2 = block('a', beats: further);
+      final l2 = layoutTab(t2, page);
+      final (lo2, hi2) = measureSpanOf(t2, l2, 1);
+      expect(l2.xs[1], closeTo(lo2 + 0.85 * (hi2 - lo2), 0.001));
+      expect(l2.xs[1], greaterThan(l.xs[1]));
+      // Gespeichert, wieder automatisch, Einfügen und neue Taktart vergessen die Lage
+      expect(TabBeat.fromJson(pinned[1].toJson()), pinned[1]);
+      expect(pinned[1].withoutAt.at, isNull);
+      expect(pinned[1].copyWith(frets: const {0: 7}).at, 0.85, reason: 'Bund ändern behält die Lage');
+      final e = TabEditor(const [])..paste(pinned);
+      expect(e.beats.every((b) => b.at == null), isTrue);
+      expect(rebar(pinned, 1.0).every((b) => b.bar || b.at == null), isTrue);
+    });
+
     test('Grösse ändern: Linienabstand wächst mit', () {
       final small = layoutTab(block('a', beats: beats), page);
       final big = layoutTab(block('a', beats: beats).copyWith(gap: TabBlock.defaultGap * 2), page);
@@ -794,6 +823,34 @@ void main() {
       expect(beats[2].bar, isTrue);
       await t.sendKeyEvent(LogicalKeyboardKey.escape);
       expect(tools.tabSession.value, isNull);
+      ink.dispose();
+    });
+
+    testWidgets('Note am Griff ziehen: Taktstrich bleibt, lange drücken = automatisch', (t) async {
+      await pump(t);
+      final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
+      ink.updateTab(
+        id,
+        beats: const [TabBeat(frets: {0: 1}), TabBeat(frets: {0: 2}), TabBeat.bar(at: 0.7), TabBeat(frets: {0: 3})],
+      );
+      tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
+      await t.pump();
+      await t.pump();
+      final handles = find.byTooltip('Note verschieben (lange drücken: wieder automatisch)');
+      expect(handles, findsNWidgets(3), reason: 'ein Griff pro Note');
+      final size = t.getSize(find.byType(TabLayer));
+      final before = layoutTab(ink.annotations.tab(id)!, size);
+      await t.drag(handles.at(1), const Offset(120, 0), kind: PointerDeviceKind.mouse);
+      await t.pump();
+      final moved = ink.annotations.tab(id)!;
+      expect(moved.beats[1].at, isNotNull);
+      final after = layoutTab(moved, size);
+      expect(after.xs[1], greaterThan(before.xs[1] + 60));
+      expect(after.xs[2], closeTo(before.xs[2], 1e-9), reason: 'Taktstrich bleibt stehen');
+      expect(moved.beats[2].at, 0.7);
+      await t.longPress(handles.at(1));
+      await t.pump();
+      expect(ink.annotations.tab(id)!.beats[1].at, isNull);
       ink.dispose();
     });
 

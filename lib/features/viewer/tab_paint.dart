@@ -194,6 +194,53 @@ TabLayout layoutTab(TabBlock t, Size page) {
       b.bar && b.meter != null ? xs.last - widths.last / 2 + _barWidth(b.kind) * gap * factor(i) / 2 : xs.last,
     );
   }
+
+  // 3. Von Hand gesetzte Schläge: Lage innerhalb ihres Takts. Die
+  //    Taktstriche und die übrigen Schläge bleiben, wo sie sind; sie weichen
+  //    nur aus, wenn es zu eng würde (Reihenfolge bleibt).
+  if (t.beats.any((b) => !b.bar && b.at != null)) {
+    final n = t.beats.length;
+    final minGap = gap * 0.8;
+    for (final m in measuresOf(t.beats)) {
+      if (m.end <= m.start) continue;
+      var any = false;
+      for (var i = m.start; i < m.end; i++) {
+        if (t.beats[i].at != null) any = true;
+      }
+      if (!any) continue;
+      final (lo, hi) = _measureSpan(m.start, m.end, n, xs, widths, start, contentEnd - gap * _tail);
+      // Letzter Takt ohne Taktstrich danach: rechts offen.
+      final open = m.end >= n;
+      final pinned = <int>{};
+      var last = lo;
+      for (var i = m.start; i < m.end; i++) {
+        final at = t.beats[i].at;
+        if (at == null) continue;
+        final to = lo + at * (hi - lo);
+        if (to <= last + minGap) continue;
+        if (!open && to >= hi - gap * 0.5) continue;
+        xs[i] = to;
+        pinned.add(i);
+        last = to;
+      }
+      // Vorwärts: nicht in den Schlag davor hinein …
+      var prev = lo;
+      for (var i = m.start; i < m.end; i++) {
+        if (!pinned.contains(i)) xs[i] = math.max(xs[i], prev + minGap);
+        prev = xs[i];
+      }
+      // … und rückwärts: nicht in den nächsten festen Schlag bzw. Taktstrich.
+      var next = open ? double.infinity : hi;
+      for (var i = m.end - 1; i >= m.start; i--) {
+        if (!pinned.contains(i)) xs[i] = math.min(xs[i], next - minGap);
+        next = xs[i];
+      }
+      for (var i = m.start; i < m.end; i++) {
+        lineXs[i] = xs[i];
+      }
+    }
+  }
+
   final endOfLast = xs.isEmpty ? start : xs.last + widths.last / 2;
   xs.add(endOfLast + gap * 1.1);
   widths.add(gap * 2.2);
@@ -209,6 +256,37 @@ TabLayout layoutTab(TabBlock t, Size page) {
     contentStart: start,
     contentEnd: contentEnd,
   );
+}
+
+/// Platz eines Takts (Schläge [from] bis vor [to]): vom Taktstrich davor
+/// (bzw. dem Anfang) bis zum Taktstrich danach (bzw. [openEnd]).
+(double, double) _measureSpan(
+  int from,
+  int to,
+  int n,
+  List<double> xs,
+  List<double> widths,
+  double start,
+  double openEnd,
+) {
+  final lo = from > 0 ? xs[from - 1] + widths[from - 1] / 2 : start;
+  final double hi;
+  if (to < n) {
+    hi = xs[to] - widths[to] / 2;
+  } else {
+    hi = math.max(openEnd, to > from ? xs[to - 1] + widths[to - 1] / 2 : lo);
+  }
+  return (lo, math.max(hi, lo + 1));
+}
+
+/// Platz des Takts, in dem der Schlag [i] steht (in Bildpunkten).
+(double, double) measureSpanOf(TabBlock t, TabLayout l, int i) {
+  for (final m in measuresOf(t.beats)) {
+    if (i >= m.start && i < m.end) {
+      return _measureSpan(m.start, m.end, t.beats.length, l.xs, l.slotWidths, l.contentStart, l.contentEnd - l.gap * _tail);
+    }
+  }
+  return (l.contentStart, l.contentEnd);
 }
 
 /// Pausen-Zeichen in der Notenschrift Bravura (SMuFL).

@@ -64,8 +64,8 @@ class TabBeat {
     this.accent = false,
     this.palmMute = false,
     this.triplet = false,
-  }) : at = null,
-       kind = BarKind.normal,
+    this.at,
+  }) : kind = BarKind.normal,
        meter = null;
 
   /// Taktstrich; [at] = von Hand gesetzte Lage (sonst automatisch).
@@ -92,6 +92,10 @@ class TabBeat {
   /// nächsten Wechsel. null = wie davor. Steht nach dem Taktstrich.
   final String? meter;
 
+  /// Gleicher Eintrag ohne von Hand gesetzte Lage (wieder automatisch).
+  TabBeat get withoutAt =>
+      at == null ? this : (bar ? TabBeat.bar(kind: kind, meter: meter) : copyWith(at: null));
+
   /// Gleicher Taktstrich mit anderer Art bzw. Taktart (Lage bleibt).
   TabBeat barWith({BarKind? kind, Object? meter = _keepMeter}) => TabBeat.bar(
     at: at,
@@ -99,9 +103,15 @@ class TabBeat {
     meter: identical(meter, _keepMeter) ? this.meter : meter as String?,
   );
 
-  /// Von Hand verschobener Taktstrich: Lage im Schreibbereich der Tabulatur
-  /// (0 = gleich nach „TAB“, 1 = rechtes Ende). null = automatisch. Die
-  /// Schläge davor und danach verteilen sich dann auf den Platz dazwischen.
+  /// Von Hand gesetzte Lage, null = automatisch.
+  ///
+  /// Taktstrich: Lage im Schreibbereich der Tabulatur (0 = gleich nach
+  /// „TAB“, 1 = rechtes Ende); die Schläge davor und danach verteilen sich
+  /// auf den Platz dazwischen.
+  ///
+  /// Schlag: Lage innerhalb seines Takts (0 = gleich nach dem Taktstrich
+  /// davor, 1 = vor dem Taktstrich danach). So wandert er mit, wenn ein
+  /// Taktstrich verschoben wird; die Taktstriche selbst bleiben, wo sie sind.
   final double? at;
 
   /// Saite (0 = oberste Linie, hohe E-Saite) → Bund ([ghostNote] = „x“).
@@ -171,6 +181,7 @@ class TabBeat {
     bool? accent,
     bool? palmMute,
     bool? triplet,
+    Object? at = _keepMeter,
   }) {
     final f = frets ?? this.frets;
     // Bendings und Slides nur dort, wo es eine Bundzahl gibt.
@@ -209,6 +220,7 @@ class TabBeat {
       accent: f.isNotEmpty && (accent ?? this.accent),
       palmMute: f.isNotEmpty && (palmMute ?? this.palmMute),
       triplet: triplet ?? this.triplet,
+      at: identical(at, _keepMeter) ? this.at : at as double?,
     );
   }
 
@@ -233,6 +245,7 @@ class TabBeat {
           if (accent) 'acc': true,
           if (palmMute) 'pm': true,
           if (triplet) 'tri': true,
+          if (at != null) 'at': at,
         };
 
   static TabBeat fromJson(Map<String, dynamic> j) {
@@ -284,6 +297,7 @@ class TabBeat {
       accent: frets.isNotEmpty && j['acc'] == true,
       palmMute: frets.isNotEmpty && j['pm'] == true,
       triplet: j['tri'] == true,
+      at: (j['at'] as num?)?.toDouble().clamp(0.0, 1.0),
     );
   }
 
@@ -378,7 +392,8 @@ List<TabBeat> restsFor(double length) {
 /// vorne, ein Taktstrich ganz am Ende (z. B. Schlussstrich), und die übrigen
 /// Arten der Reihe nach.
 List<TabBeat> rebar(List<TabBeat> beats, double measure) {
-  final notes = [for (final b in beats) if (!b.bar) b];
+  // Die Takte ändern sich: von Hand gesetzte Lagen der Noten gelten nicht mehr.
+  final notes = [for (final b in beats) if (!b.bar) b.at == null ? b : b.copyWith(at: null)];
   final first = beats.isNotEmpty && beats.first.bar ? beats.first : null;
   final last = beats.length > 1 && beats.last.bar ? beats.last : null;
   // Arten und Taktwechsel der Taktstriche in der Mitte, der Reihe nach.
@@ -752,7 +767,9 @@ class TabEditor {
       deleteSelection();
     }
     final at = beat.clamp(0, beats.length);
-    beats.insertAll(at, clip);
+    // Von Hand gesetzte Lagen gelten im Takt, aus dem kopiert wurde – hier
+    // wieder automatisch.
+    beats.insertAll(at, [for (final b in clip) b.withoutAt]);
     beat = at + clip.length;
     _resetDigits();
   }

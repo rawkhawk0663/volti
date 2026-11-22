@@ -54,20 +54,40 @@ class _TabLayerState extends State<TabLayer> {
   /// Markieren durch Ziehen über eine Tabulatur: ihre ID und der Anfang.
   ({String id, int from})? _selecting;
 
-  /// Taktstrich, der gerade gezogen wird, und seine Stelle in Pixeln.
+  /// Taktstrich oder Schlag, der gerade gezogen wird, und seine Stelle in
+  /// Pixeln.
   int? _barIndex;
   double _barX = 0;
 
-  /// Die bearbeitete Tabulatur, mit dem gerade gezogenen Taktstrich an der
-  /// neuen Stelle (nur Anzeige, gespeichert wird beim Loslassen).
+  /// Die bearbeitete Tabulatur, mit dem gerade gezogenen Taktstrich bzw.
+  /// Schlag an der neuen Stelle (nur Anzeige, gespeichert wird beim
+  /// Loslassen).
   TabBlock _preview(TabBlock t, Size size) {
     final i = _barIndex;
-    if (i == null || i >= t.beats.length || !t.beats[i].bar) return t;
+    if (i == null || i >= t.beats.length) return t;
     final l = layoutTab(t, size);
     final beats = [...t.beats];
-    // Die Art (Wiederholung, Schlussstrich …) bleibt beim Verschieben.
-    beats[i] = TabBeat.bar(at: l.fractionAt(_barX), kind: t.beats[i].kind, meter: t.beats[i].meter);
+    final b = t.beats[i];
+    if (b.bar) {
+      // Die Art (Wiederholung, Schlussstrich …) bleibt beim Verschieben.
+      beats[i] = TabBeat.bar(at: l.fractionAt(_barX), kind: b.kind, meter: b.meter);
+    } else {
+      // Schlag: Lage innerhalb seines Takts (die Taktstriche bleiben).
+      final (lo, hi) = measureSpanOf(t, l, i);
+      beats[i] = b.copyWith(at: ((_barX - lo) / (hi - lo)).clamp(0.0, 1.0));
+    }
     return t.copyWith(beats: beats);
+  }
+
+  /// Wie weit ein Schlag gezogen werden darf: im eigenen Takt und nicht über
+  /// die Nachbarn hinaus.
+  (double, double) _beatLimits(TabBlock t, TabLayout l, int i) {
+    final (mlo, mhi) = measureSpanOf(t, l, i);
+    final g = l.gap;
+    var lo = mlo + g * 0.6, hi = mhi - g * 0.6;
+    if (i > 0 && !t.beats[i - 1].bar) lo = math.max(lo, l.xs[i - 1] + g);
+    if (i + 1 < t.beats.length && !t.beats[i + 1].bar) hi = math.min(hi, l.xs[i + 1] - g);
+    return (lo, math.max(lo, hi));
   }
 
   /// Wie weit ein Taktstrich gezogen werden darf: nicht über die Nachbarn
@@ -224,10 +244,11 @@ class _TabLayerState extends State<TabLayer> {
     if (clip != null) s.paste(clip);
   }
 
+  /// Taktstrich bzw. Schlag wieder automatisch platzieren.
   void _resetBar(TabBlock t, int i) {
     if (i >= t.beats.length || t.beats[i].at == null) return;
     final beats = [...t.beats];
-    beats[i] = TabBeat.bar(kind: t.beats[i].kind, meter: t.beats[i].meter);
+    beats[i] = t.beats[i].withoutAt;
     c.updateTab(t.id, beats: beats);
   }
 
@@ -453,6 +474,47 @@ class _TabLayerState extends State<TabLayer> {
                 onDrag: (d) {
                   final base = layoutTab(saved, size);
                   final (lo, hi) = _barLimits(saved, base, i);
+                  setState(() {
+                    if (_barIndex != i) {
+                      _barIndex = i;
+                      _barX = base.xs[i];
+                    }
+                    _barX = (_barX + d.dx).clamp(lo, hi);
+                  });
+                },
+                onEnd: () {
+                  final moved = _preview(saved, size);
+                  setState(() => _barIndex = null);
+                  c.updateTab(saved.id, beats: moved.beats);
+                },
+              ),
+            ),
+          ),
+      // Griffe unter den Schlägen: ziehen setzt den Schlag innerhalb seines
+      // Takts, die Taktstriche bleiben. Lange drücken (oder Rechtsklick) =
+      // wieder automatisch.
+      for (var i = 0; i < t.beats.length; i++)
+        if (!t.beats[i].bar)
+          Positioned(
+            left: l.xs[i] - handle * 0.35 + _moveDelta.dx,
+            top: l.stemBottom + g * 0.4 + (t.beats.any((b) => b.triplet) ? g * 1.4 : 0) + _moveDelta.dy,
+            width: handle * 0.7,
+            height: handle * 0.7,
+            child: GestureDetector(
+              onLongPress: () => _resetBar(saved, i),
+              onSecondaryTap: () => _resetBar(saved, i),
+              child: _Handle(
+                icon: Icons.swap_horiz,
+                tooltip: tr(
+                  'Note verschieben (lange drücken: wieder automatisch)',
+                  'Move note (long-press: automatic again)',
+                ),
+                cursor: SystemMouseCursors.resizeLeftRight,
+                small: true,
+                filled: t.beats[i].at != null,
+                onDrag: (d) {
+                  final base = layoutTab(saved, size);
+                  final (lo, hi) = _beatLimits(saved, base, i);
                   setState(() {
                     if (_barIndex != i) {
                       _barIndex = i;
