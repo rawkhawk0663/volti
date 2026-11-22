@@ -46,6 +46,8 @@ const ghostNote = -1;
 
 /// Ein Eintrag in einer Tabulatur: ein Schlag (Bundzahlen auf einzelnen
 /// Saiten, mit Notenwert) oder ein Taktstrich.
+const _keepMeter = Object();
+
 class TabBeat {
   const TabBeat({
     this.frets = const {},
@@ -60,12 +62,14 @@ class TabBeat {
     this.tieIns = const {},
     this.staccato = false,
     this.accent = false,
+    this.palmMute = false,
     this.triplet = false,
   }) : at = null,
-       kind = BarKind.normal;
+       kind = BarKind.normal,
+       meter = null;
 
   /// Taktstrich; [at] = von Hand gesetzte Lage (sonst automatisch).
-  const TabBeat.bar({this.at, this.kind = BarKind.normal})
+  const TabBeat.bar({this.at, this.kind = BarKind.normal, this.meter})
     : frets = const {},
       value = 4,
       dotted = false,
@@ -78,10 +82,22 @@ class TabBeat {
       tieIns = const {},
       staccato = false,
       accent = false,
+      palmMute = false,
       triplet = false;
 
   /// Art des Taktstrichs (Wiederholung, Schlussstrich …).
   final BarKind kind;
+
+  /// Taktwechsel: Ab diesem Taktstrich gilt diese Taktart („2/4“ …), bis zum
+  /// nächsten Wechsel. null = wie davor. Steht nach dem Taktstrich.
+  final String? meter;
+
+  /// Gleicher Taktstrich mit anderer Art bzw. Taktart (Lage bleibt).
+  TabBeat barWith({BarKind? kind, Object? meter = _keepMeter}) => TabBeat.bar(
+    at: at,
+    kind: kind ?? this.kind,
+    meter: identical(meter, _keepMeter) ? this.meter : meter as String?,
+  );
 
   /// Von Hand verschobener Taktstrich: Lage im Schreibbereich der Tabulatur
   /// (0 = gleich nach „TAB“, 1 = rechtes Ende). null = automatisch. Die
@@ -118,6 +134,10 @@ class TabBeat {
   /// Staccato (Punkt über dem Schlag) und Akzent („>“).
   final bool staccato, accent;
 
+  /// Palm Mute („P.M.“ über dem Schlag; aufeinanderfolgende mit gestrichelter
+  /// Linie verbunden).
+  final bool palmMute;
+
   /// Teil einer Triole (drei im Raum von zwei): dauert ⅔ so lange.
   final bool triplet;
 
@@ -149,6 +169,7 @@ class TabBeat {
     Set<int>? tieIns,
     bool? staccato,
     bool? accent,
+    bool? palmMute,
     bool? triplet,
   }) {
     final f = frets ?? this.frets;
@@ -186,12 +207,18 @@ class TabBeat {
       // Ohne Bundzahl (Pause) keine Artikulation.
       staccato: f.isNotEmpty && (staccato ?? this.staccato),
       accent: f.isNotEmpty && (accent ?? this.accent),
+      palmMute: f.isNotEmpty && (palmMute ?? this.palmMute),
       triplet: triplet ?? this.triplet,
     );
   }
 
   Map<String, dynamic> toJson() => bar
-      ? {'bar': true, if (at != null) 'at': at, if (kind != BarKind.normal) 'k': kind.name}
+      ? {
+          'bar': true,
+          if (at != null) 'at': at,
+          if (kind != BarKind.normal) 'k': kind.name,
+          if (meter != null) 'm': meter,
+        }
       : {
           if (frets.isNotEmpty) 'f': {for (final e in frets.entries) '${e.key}': e.value},
           'v': value,
@@ -204,13 +231,19 @@ class TabBeat {
           if (tieIns.isNotEmpty) 'tieIn': (tieIns.toList()..sort()),
           if (staccato) 'stacc': true,
           if (accent) 'acc': true,
+          if (palmMute) 'pm': true,
           if (triplet) 'tri': true,
         };
 
   static TabBeat fromJson(Map<String, dynamic> j) {
     if (j['bar'] == true) {
       final at = (j['at'] as num?)?.toDouble();
-      return TabBeat.bar(at: at?.clamp(0.0, 1.0), kind: BarKind.fromName(j['k'] as String?));
+      final m = j['m'] as String?;
+      return TabBeat.bar(
+        at: at?.clamp(0.0, 1.0),
+        kind: BarKind.fromName(j['k'] as String?),
+        meter: meterLength(m) == null ? null : m,
+      );
     }
     final f = j['f'] as Map<String, dynamic>? ?? const {};
     final v = j['v'] as int? ?? 4;
@@ -249,6 +282,7 @@ class TabBeat {
       },
       staccato: frets.isNotEmpty && j['stacc'] == true,
       accent: frets.isNotEmpty && j['acc'] == true,
+      palmMute: frets.isNotEmpty && j['pm'] == true,
       triplet: j['tri'] == true,
     );
   }
@@ -262,6 +296,7 @@ class TabBeat {
       other.bar == bar &&
       other.at == at &&
       other.kind == kind &&
+      other.meter == meter &&
       other.value == value &&
       other.dotted == dotted &&
       _sameMap(other.frets, frets) &&
@@ -276,6 +311,7 @@ class TabBeat {
       other.tieIns.containsAll(tieIns) &&
       other.staccato == staccato &&
       other.accent == accent &&
+      other.palmMute == palmMute &&
       other.triplet == triplet;
 
   @override
@@ -283,6 +319,7 @@ class TabBeat {
     bar,
     at,
     kind,
+    meter,
     value,
     dotted,
     Object.hashAllUnordered(frets.entries.map((e) => e.key * 100 + e.value)),
@@ -294,6 +331,7 @@ class TabBeat {
     Object.hashAllUnordered(tieIns),
     staccato,
     accent,
+    palmMute,
     triplet,
   );
 }
@@ -340,29 +378,30 @@ List<TabBeat> restsFor(double length) {
 /// vorne, ein Taktstrich ganz am Ende (z. B. Schlussstrich), und die übrigen
 /// Arten der Reihe nach.
 List<TabBeat> rebar(List<TabBeat> beats, double measure) {
-  final notes = [
-    for (final b in beats)
-      if (!b.bar) b,
-  ];
+  final notes = [for (final b in beats) if (!b.bar) b];
   final first = beats.isNotEmpty && beats.first.bar ? beats.first : null;
   final last = beats.length > 1 && beats.last.bar ? beats.last : null;
+  // Arten und Taktwechsel der Taktstriche in der Mitte, der Reihe nach.
   final middle = [
     for (var i = 0; i < beats.length; i++)
-      if (beats[i].bar && i != 0 && i != beats.length - 1) beats[i].kind,
+      if (beats[i].bar && i != 0 && i != beats.length - 1) beats[i],
   ];
   var k = 0;
-  final out = <TabBeat>[if (first != null) TabBeat.bar(kind: first.kind)];
+  final out = <TabBeat>[if (first != null) TabBeat.bar(kind: first.kind, meter: first.meter)];
+  var len = meterLength(first?.meter) ?? measure;
   var acc = 0.0;
   for (var i = 0; i < notes.length; i++) {
     out.add(notes[i]);
     acc += notes[i].length;
-    if (acc >= measure - 1e-9 && i < notes.length - 1) {
-      out.add(TabBeat.bar(kind: k < middle.length ? middle[k] : BarKind.normal));
+    if (acc >= len - 1e-9 && i < notes.length - 1) {
+      final m = k < middle.length ? middle[k] : null;
+      out.add(TabBeat.bar(kind: m?.kind ?? BarKind.normal, meter: m?.meter));
+      len = meterLength(m?.meter) ?? len;
       k++;
       acc = 0;
     }
   }
-  if (last != null && notes.isNotEmpty) out.add(TabBeat.bar(kind: last.kind));
+  if (last != null && notes.isNotEmpty) out.add(TabBeat.bar(kind: last.kind, meter: last.meter));
   return out;
 }
 
@@ -382,6 +421,34 @@ List<({int start, int end, double length})> measuresOf(List<TabBeat> beats) {
     }
   }
   return out;
+}
+
+/// Länge jedes Takts aus [measuresOf] (null = frei): [base] ist die Taktart
+/// der Tabulatur, Taktwechsel an einem Taktstrich gelten ab dort.
+List<double?> measureLengths(List<TabBeat> beats, double? base) {
+  final out = <double?>[];
+  var cur = base;
+  for (final m in measuresOf(beats)) {
+    if (m.start > 0) {
+      final bar = beats[m.start - 1];
+      if (bar.bar && bar.meter != null) cur = meterLength(bar.meter) ?? cur;
+    }
+    out.add(cur);
+  }
+  return out;
+}
+
+/// Taktart als Text, die im Takt [index] gilt (null = frei).
+String? meterOfMeasure(List<TabBeat> beats, String? base, int index) {
+  var cur = base;
+  for (final (k, m) in measuresOf(beats).indexed) {
+    if (m.start > 0) {
+      final bar = beats[m.start - 1];
+      if (bar.bar && bar.meter != null) cur = bar.meter;
+    }
+    if (k == index) return cur;
+  }
+  return cur;
 }
 
 /// Triolen-Gruppen: aufeinanderfolgende Triolen-Schläge, je drei im Raum von
@@ -544,10 +611,16 @@ class TabBlock {
 /// Der Cursor darf einen Platz hinter dem letzten Eintrag stehen: Dort
 /// Getipptes legt einen neuen Schlag an.
 class TabEditor {
-  TabEditor(List<TabBeat> beats, {this.beat = 0, this.string = 0, this.measure}) : beats = [...beats];
+  TabEditor(List<TabBeat> beats, {this.beat = 0, this.string = 0, double? measure, this.meter})
+    : measure = measure ?? meterLength(meter),
+      beats = [...beats];
 
-  /// Länge eines Takts (aus der Taktart); null = frei.
+  /// Länge eines Takts (aus der Taktart der Tabulatur); null = frei.
   double? measure;
+
+  /// Taktart der Tabulatur („4/4“ …), gilt im ersten Takt. Ändert
+  /// [setMeasureMeter] sie, muss sie in die Tabulatur übernommen werden.
+  String? meter;
 
   List<TabBeat> beats;
 
@@ -712,7 +785,7 @@ class TabEditor {
   TabBeat _ensureBeat() {
     if (beat >= beats.length) {
       // Mit Taktart: Ist der letzte Takt voll, kommt zuerst der Taktstrich.
-      final m = measure;
+      final m = measureLengths(beats, measure).last;
       if (m != null && beats.isNotEmpty && !beats.last.bar && measuresOf(beats).last.length >= m - 1e-9) {
         beats.add(const TabBeat.bar());
       }
@@ -944,6 +1017,23 @@ class TabEditor {
     _resetDigits();
   }
 
+  /// Palm Mute ein/aus: für alle markierten Schläge (mit Bundzahl) bzw. den
+  /// Schlag unter dem Cursor. Sind alle schon gedämpft, wird es entfernt.
+  void togglePalmMute() {
+    final sel = selection;
+    final range = sel ?? (beat, beat);
+    final idx = [
+      for (var i = range.$1; i <= range.$2 && i < beats.length; i++)
+        if (!beats[i].bar && beats[i].frets.isNotEmpty) i,
+    ];
+    if (idx.isEmpty) return;
+    final on = !idx.every((i) => beats[i].palmMute);
+    for (final i in idx) {
+      beats[i] = beats[i].copyWith(palmMute: on);
+    }
+    _resetDigits();
+  }
+
   void toggleAccent() {
     final b = current;
     if (b == null || b.bar || b.frets.isEmpty) return;
@@ -972,7 +1062,7 @@ class TabEditor {
   }
 
   /// Taktstrich mit einer anderen Art (Lage bleibt).
-  TabBeat _withKind(TabBeat bar, BarKind kind) => TabBeat.bar(at: bar.at, kind: kind);
+  TabBeat _withKind(TabBeat bar, BarKind kind) => bar.barWith(kind: kind);
 
   /// Wiederholung Anfang vor dem Takt mit dem Cursor ein/aus.
   void repeatStart() {
@@ -1032,7 +1122,7 @@ class TabEditor {
   /// Leeren Takt (Pausen) vor dem Takt mit dem Cursor einfügen. Alles danach
   /// rückt als Ganzes nach hinten.
   void insertMeasure() {
-    final m = measure ?? 1.0;
+    final m = measureLengths(beats, measure)[measureIndex] ?? 1.0;
     final rests = restsFor(m);
     final cur = _currentMeasure;
     if (beat >= beats.length) {
@@ -1057,9 +1147,66 @@ class TabEditor {
     } else if (from > 0) {
       from--; // letzter Takt: Taktstrich davor mitnehmen
     }
+    // Ein Taktwechsel am mitgelöschten Taktstrich danach gilt weiter.
+    final keep = to > cur.end && beats[cur.end].bar ? beats[cur.end].meter : null;
     beats.removeRange(from, to);
+    if (keep != null && from > 0 && from <= beats.length && beats[from - 1].bar) {
+      beats[from - 1] = beats[from - 1].barWith(meter: keep);
+    }
     beat = from.clamp(0, beats.length);
+    _normalizeMeters();
     _resetDigits();
+  }
+
+  /// Nummer des Takts mit dem Cursor (in [measuresOf]).
+  int get measureIndex {
+    final all = measuresOf(beats);
+    for (final (k, m) in all.indexed) {
+      if (beat >= m.start && beat <= m.end) return k;
+    }
+    return all.length - 1;
+  }
+
+  /// Taktart, die im Takt mit dem Cursor gilt.
+  String? get currentMeter => meterOfMeasure(beats, meter, measureIndex);
+
+  /// Taktart nur für den Takt mit dem Cursor ändern (eingeschobener 2/4-Takt
+  /// …). Die Takte danach behalten ihre Taktart; geschrieben wird am Ende in
+  /// der neuen weiter. Im ersten Takt ändert sich [meter] der Tabulatur.
+  /// Nichts wird verschoben: Passt der Inhalt nicht, zeigt die Prüfung es an.
+  void setMeasureMeter(String m) {
+    if (meterLength(m) == null) return;
+    final k = measureIndex;
+    final all = measuresOf(beats);
+    final cur = all[k];
+    final old = meterOfMeasure(beats, meter, k);
+    if (old == m) return;
+    // Der Takt danach (falls es ihn gibt) bleibt, wie er war.
+    if (cur.end < beats.length && beats[cur.end].bar && beats[cur.end].meter == null && k + 1 < all.length) {
+      beats[cur.end] = beats[cur.end].barWith(meter: old);
+    }
+    if (k == 0 || cur.start == 0 || !beats[cur.start - 1].bar) {
+      meter = m;
+      measure = meterLength(m);
+    } else {
+      beats[cur.start - 1] = beats[cur.start - 1].barWith(meter: m);
+    }
+    _normalizeMeters();
+    _resetDigits();
+  }
+
+  /// Taktwechsel ohne Wirkung (gleich wie davor) entfernen.
+  void _normalizeMeters() {
+    var cur = meter;
+    for (var i = 0; i < beats.length; i++) {
+      final b = beats[i];
+      if (!b.bar || b.meter == null) continue;
+      if (b.meter == cur) {
+        beats[i] = b.barWith(meter: null);
+      } else {
+        cur = b.meter;
+      }
+    }
   }
 
   /// Leeren Schlag vor dem Cursor einfügen.

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'tool_controller.dart';
 
@@ -10,7 +12,9 @@ import 'tool_controller.dart';
 /// * **Nur mit den Fingern** (oder der Maus) bewegen: ein Finger auf dem
 ///   Lineal verschiebt es, ein zweiter Finger dazu dreht es – wie ein echtes
 ///   Lineal unter zwei Fingern. Bei 0° und 90° rastet es leicht ein.
-///   Am Computer: mit der Maus ziehen, mit dem Mausrad drehen.
+///   Am Computer: mit der Maus ziehen; liegt der Mauszeiger auf dem Lineal,
+///   dreht das Mausrad es (3° pro Raste, mit Umschalt 15°). Das Lineal
+///   leuchtet dann etwas auf, und die Seite darunter reagiert nicht aufs Rad.
 /// * Der Stift bewegt das Lineal nie, er zeichnet daran entlang (das erledigt
 ///   die Stift-Ebene, auch wenn man auf dem Lineal selbst ansetzt).
 ///
@@ -36,6 +40,18 @@ class _RulerOverlayState extends State<RulerOverlay> {
   /// Halten Finger das Lineal (und nicht die Maus)? Nur dann dreht ein zweiter.
   bool _byFinger = false;
   bool _showAngle = false;
+
+  /// Mauszeiger über dem Lineal (dann dreht das Mausrad es).
+  bool _hover = false;
+
+  /// Blendet den Winkel nach dem Drehen mit dem Mausrad wieder aus.
+  Timer? _angleTimer;
+
+  @override
+  void dispose() {
+    _angleTimer?.cancel();
+    super.dispose();
+  }
 
   static const _thick = ToolController.rulerThickness;
   double get _len => tools.rulerLength;
@@ -114,11 +130,41 @@ class _RulerOverlayState extends State<RulerOverlay> {
     }
   }
 
+  void _hovering(PointerHoverEvent e) {
+    final on = e.kind == PointerDeviceKind.mouse && _onRuler(e.position);
+    if (on != _hover) setState(() => _hover = on);
+  }
+
+  void _exit(PointerExitEvent e) {
+    if (_hover) setState(() => _hover = false);
+  }
+
   void _wheel(PointerSignalEvent e) {
     if (e is! PointerScrollEvent || !_onRuler(e.position)) return;
-    final step = (e.scrollDelta.dy > 0 ? 1 : -1) * 2 * math.pi / 180;
-    _rawAngle = tools.rulerAngle + step;
-    tools.moveRuler(tools.rulerCenter!, _snap(_rawAngle));
+    final keys = HardwareKeyboard.instance;
+    // Strg + Mausrad bleibt Zoomen.
+    if (keys.isControlPressed) return;
+    final delta = e.scrollDelta.dy != 0 ? e.scrollDelta.dy : e.scrollDelta.dx;
+    if (delta == 0) return;
+    // Nur das Lineal reagiert, nicht auch noch die Seite darunter.
+    GestureBinding.instance.pointerSignalResolver.register(e, (_) {
+      final dir = delta > 0 ? 1 : -1;
+      final double angle;
+      if (keys.isShiftPressed) {
+        // In 15°-Schritten, genau auf den Stufen.
+        const step = 15 * math.pi / 180;
+        angle = ((tools.rulerAngle / step).round() + dir) * step;
+      } else {
+        angle = _snap(tools.rulerAngle + dir * 3 * math.pi / 180);
+      }
+      _rawAngle = angle;
+      tools.moveRuler(tools.rulerCenter!, angle);
+      _angleTimer?.cancel();
+      _angleTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (mounted && _held.isEmpty) setState(() => _showAngle = false);
+      });
+      if (!_showAngle) setState(() => _showAngle = true);
+    });
   }
 
   @override
@@ -138,13 +184,18 @@ class _RulerOverlayState extends State<RulerOverlay> {
           children: [
             // Beobachtet Finger und Maus, ohne etwas darunter zu blockieren.
             Positioned.fill(
-              child: Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: _down,
-                onPointerMove: _move,
-                onPointerUp: _up,
-                onPointerCancel: _up,
-                onPointerSignal: _wheel,
+              child: MouseRegion(
+                opaque: false,
+                onExit: _exit,
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: _down,
+                  onPointerMove: _move,
+                  onPointerUp: _up,
+                  onPointerCancel: _up,
+                  onPointerSignal: _wheel,
+                  onPointerHover: _hovering,
+                ),
               ),
             ),
             ValueListenableBuilder<int>(
@@ -160,7 +211,7 @@ class _RulerOverlayState extends State<RulerOverlay> {
                     child: Transform.rotate(
                       angle: tools.rulerAngle,
                       child: CustomPaint(
-                        painter: _RulerPainter(showAngle: _showAngle, angle: tools.rulerAngle),
+                        painter: _RulerPainter(showAngle: _showAngle, angle: tools.rulerAngle, hover: _hover),
                       ),
                     ),
                   ),
@@ -175,14 +226,17 @@ class _RulerOverlayState extends State<RulerOverlay> {
 }
 
 class _RulerPainter extends CustomPainter {
-  _RulerPainter({required this.showAngle, required this.angle});
+  _RulerPainter({required this.showAngle, required this.angle, this.hover = false});
   final bool showAngle;
   final double angle;
+
+  /// Mauszeiger darüber: etwas kräftiger (das Mausrad dreht jetzt).
+  final bool hover;
 
   @override
   void paint(Canvas canvas, Size size) {
     final r = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(6));
-    canvas.drawRRect(r, Paint()..color = const Color(0x447A3CF0));
+    canvas.drawRRect(r, Paint()..color = hover ? const Color(0x667A3CF0) : const Color(0x447A3CF0));
     canvas.drawRRect(
       r,
       Paint()
@@ -216,5 +270,5 @@ class _RulerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RulerPainter old) => old.showAngle != showAngle || old.angle != angle;
+  bool shouldRepaint(_RulerPainter old) => old.showAngle != showAngle || old.angle != angle || old.hover != hover;
 }

@@ -12,6 +12,7 @@ class TabLayout {
     required this.width,
     required this.xs,
     required this.slotWidths,
+    required this.lineXs,
     required this.endX,
     required this.contentStart,
     required this.contentEnd,
@@ -37,6 +38,10 @@ class TabLayout {
 
   /// Breite jedes Eintrags (wie [xs]).
   final List<double> slotWidths;
+
+  /// Lage des Taktstrichs selbst (wie [xs]; bei einem Taktwechsel steht der
+  /// Strich links und die neue Taktart rechts davon im selben Platz).
+  final List<double> lineXs;
 
   /// Ende der Linien.
   final double endX;
@@ -90,14 +95,7 @@ const _tail = 2.4;
 /// Natürliche Breite eines Eintrags in Linienabständen: Längere Notenwerte
 /// bekommen mehr Platz, damit man den Rhythmus auch im Abstand sieht.
 double _naturalWidth(TabBeat b) {
-  if (b.bar) {
-    return switch (b.kind) {
-      BarKind.normal => 1.4,
-      BarKind.repeatBoth => 4.2,
-      BarKind.last || BarKind.doubleLine => 2.0,
-      _ => 3.0,
-    };
-  }
+  if (b.bar) return _barWidth(b.kind) + (b.meter != null ? _meterWidth(b.meter!) + 0.3 : 0);
   final base = switch (b.value) {
     1 => 4.4,
     2 => 3.5,
@@ -116,6 +114,14 @@ double _naturalWidth(TabBeat b) {
       (b.slideIns.isNotEmpty ? 0.9 : 0.0) + (b.slideOuts.isNotEmpty ? 0.7 : 0.0) + (b.tieIns.isNotEmpty ? 1.2 : 0.0);
   return math.max(w, twoDigits ? 2.3 : 1.6) + bend + slide;
 }
+
+/// Breite eines Taktstrichs ohne Taktwechsel (in Linienabständen).
+double _barWidth(BarKind k) => switch (k) {
+  BarKind.normal => 1.4,
+  BarKind.repeatBoth => 4.2,
+  BarKind.last || BarKind.doubleLine => 2.0,
+  _ => 3.0,
+};
 
 TabLayout layoutTab(TabBlock t, Size page) {
   final gap = t.gap * page.width;
@@ -179,20 +185,26 @@ TabLayout layoutTab(TabBlock t, Size page) {
     return tailScale;
   }
 
-  final xs = <double>[], widths = <double>[];
+  final xs = <double>[], widths = <double>[], lineXs = <double>[];
   for (var i = 0; i < nx.length; i++) {
+    final b = t.beats[i];
     xs.add(map(i, nx[i]));
     widths.add(nw[i] * factor(i));
+    lineXs.add(
+      b.bar && b.meter != null ? xs.last - widths.last / 2 + _barWidth(b.kind) * gap * factor(i) / 2 : xs.last,
+    );
   }
   final endOfLast = xs.isEmpty ? start : xs.last + widths.last / 2;
   xs.add(endOfLast + gap * 1.1);
   widths.add(gap * 2.2);
+  lineXs.add(xs.last);
   return TabLayout(
     origin: origin,
     gap: gap,
     width: width,
     xs: xs,
     slotWidths: widths,
+    lineXs: lineXs,
     endX: math.max(contentEnd, endOfLast + gap * _tail),
     contentStart: start,
     contentEnd: contentEnd,
@@ -277,7 +289,7 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
 
   // Endet die Zeile mit einem Taktstrich, hören die Linien genau dort auf.
   final lastBar = t.beats.isNotEmpty && t.beats.last.bar ? t.beats.last : null;
-  final lineEnd = lastBar == null ? l.endX : l.xs[t.beats.length - 1] + _barRight(lastBar.kind, g);
+  final lineEnd = lastBar == null ? l.endX : l.lineXs[t.beats.length - 1] + _barRight(lastBar.kind, g);
 
   // Hintergrund (falls gewählt) hinter allem, mit etwas Rand.
   final bg = t.background != TabBlock.noBackground ? Color(t.background) : null;
@@ -285,7 +297,7 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     // Mit Bendings ragt der Pfeil samt Stufe über die oberste Linie hinaus.
     final above = t.beats.any((b) => b.bends.isNotEmpty)
         ? 2.4
-        : (t.beats.any((b) => b.staccato || b.accent) ? 2.0 : 1.0);
+        : (t.beats.any((b) => b.staccato || b.accent) ? 2.0 : (t.beats.any((b) => b.palmMute) ? 1.5 : 1.0));
     // Triolen-Zahlen stehen unter den Balken.
     final below = t.beats.any((b) => b.triplet) ? 2.0 : 0.8;
     final r = Rect.fromLTRB(l.origin.dx - g * 0.6, l.top - g * above, lineEnd + g * 0.6, l.stemBottom + g * below);
@@ -312,18 +324,7 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   }
 
   // Taktart nach „TAB“: Zähler oben, Nenner unten.
-  if (t.measure != null) {
-    final parts = t.meter!.split('/');
-    final cx = l.origin.dx + g * (_clef + 0.1 + _meterWidth(t.meter!) / 2);
-    for (final (i, part) in parts.indexed) {
-      final p = _text(_meterDigits(part), g * 2.6, color, family: 'Bravura');
-      final base = p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
-      // Die Ziffern sind um ihre Grundlinie herum gezeichnet.
-      final cy = l.top + g * (i == 0 ? 1.6 : 3.4);
-      p.paint(canvas, Offset(cx - p.width / 2, cy - base));
-      p.dispose();
-    }
-  }
+  if (t.measure != null) _paintMeter(canvas, t.meter!, l.origin.dx + g * (_clef + 0.1 + _meterWidth(t.meter!) / 2), l, color);
 
   final knockout = Paint()..color = ground;
   // Gehaltene Noten (Ziel eines Haltebogens) stehen in Klammern.
@@ -332,7 +333,12 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     final b = t.beats[i];
     final cx = l.xs[i];
     if (b.bar) {
-      _paintBar(canvas, b.kind, cx, l, color, stem.strokeWidth);
+      _paintBar(canvas, b.kind, l.lineXs[i], l, color, stem.strokeWidth);
+      // Taktwechsel: neue Taktart gleich nach dem Taktstrich.
+      if (b.meter != null) {
+        final m = _meterWidth(b.meter!) * l.slotWidths[i] / _naturalWidth(b);
+        _paintMeter(canvas, b.meter!, cx + l.slotWidths[i] / 2 - m / 2, l, color);
+      }
       continue;
     }
     if (b.isRest) {
@@ -380,6 +386,7 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   }
 
   _paintTechniques(canvas, t, l, color, thin.strokeWidth);
+  _paintPalmMutes(canvas, t, l, color, thin.strokeWidth);
   _paintTriplets(canvas, t, l, color, stem.strokeWidth);
 
   // Balken (mehrere zusammen) und Notenfahnen (einzeln)
@@ -465,8 +472,8 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
     final b = t.beats[i];
     if (b.bar) continue;
     final cx = l.xs[i];
-    // Staccato und Akzent über den Linien.
-    var above = l.top - g * 0.9;
+    // Staccato und Akzent über den Linien (bei Palm Mute darüber).
+    var above = l.top - g * (b.palmMute ? 1.75 : 0.9);
     if (b.staccato) {
       canvas.drawCircle(Offset(cx, above), g * 0.2, Paint()..color = color);
       above -= g * 0.8;
@@ -598,6 +605,69 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
   }
 }
 
+
+/// Palm Mute: kleines „P.M.“ gleich über der obersten Linie, bei mehreren
+/// Schlägen hintereinander eine gestrichelte Linie bis zum letzten mit einem
+/// kurzen Strich am Ende. Taktstriche unterbrechen nicht, Pausen schon.
+void _paintPalmMutes(Canvas canvas, TabBlock t, TabLayout l, Color color, double lineWidth) {
+  final g = l.gap;
+  final y = l.top - g * 0.85;
+  final dash = Paint()
+    ..color = color
+    ..strokeWidth = math.max(0.7, lineWidth);
+  void group(int first, int last) {
+    final p = TextPainter(
+      text: TextSpan(
+        text: 'P.M.',
+        style: TextStyle(
+          fontFamily: 'VoltiSans',
+          fontSize: g * 0.85,
+          color: color,
+          height: 1,
+          fontStyle: FontStyle.italic,
+          fontVariations: const [FontVariation.weight(600)],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final x0 = l.xs[first] - p.width / 2;
+    p.paint(canvas, Offset(x0, y - p.height / 2));
+    final from = x0 + p.width + g * 0.25, to = l.xs[last] + g * 0.6;
+    if (last > first && to > from + g * 0.3) {
+      for (var x = from; x < to; x += g * 0.55) {
+        canvas.drawLine(Offset(x, y), Offset(math.min(x + g * 0.3, to), y), dash);
+      }
+      canvas.drawLine(Offset(to, y), Offset(to, y + g * 0.4), dash);
+    }
+    p.dispose();
+  }
+
+  int? start, end;
+  for (var i = 0; i <= t.beats.length; i++) {
+    final b = i < t.beats.length ? t.beats[i] : null;
+    if (b != null && b.bar) continue;
+    if (b != null && b.palmMute) {
+      start ??= i;
+      end = i;
+    } else if (start != null) {
+      group(start, end!);
+      start = end = null;
+    }
+  }
+}
+
+/// Taktart (Zähler oben, Nenner unten) mit der Mitte bei [cx].
+void _paintMeter(Canvas canvas, String meter, double cx, TabLayout l, Color color) {
+  final g = l.gap;
+  for (final (i, part) in meter.split('/').indexed) {
+    final p = _text(_meterDigits(part), g * 2.6, color, family: 'Bravura');
+    final base = p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    // Die Ziffern sind um ihre Grundlinie herum gezeichnet.
+    final cy = l.top + g * (i == 0 ? 1.6 : 3.4);
+    p.paint(canvas, Offset(cx - p.width / 2, cy - base));
+    p.dispose();
+  }
+}
 
 /// Wie weit ein Taktstrich rechts über seine Mitte hinausreicht.
 double _barRight(BarKind k, double g) => switch (k) {

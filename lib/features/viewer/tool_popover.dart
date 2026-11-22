@@ -1513,6 +1513,37 @@ class _TabSettings extends StatelessWidget {
                   ),
               ],
             ),
+            // Taktwechsel: nur der Takt mit dem Cursor (eingeschobener
+            // 2/4-Takt …), die Takte danach bleiben, nichts rutscht.
+            if (session != null)
+              ListenableBuilder(
+                listenable: session,
+                builder: (context, _) {
+                  final b = session.block;
+                  if (b == null || b.beats.isEmpty) return const SizedBox.shrink();
+                  final n = session.measureNumber + 1;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Label(tr('Nur dieser Takt (Takt $n)', 'This bar only (bar $n)')),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          for (final m in tabMeters)
+                            ChoiceChip(
+                              label: Text(m),
+                              selected: session.measureMeter == m,
+                              showCheckmark: false,
+                              visualDensity: VisualDensity.compact,
+                              onSelected: (_) => session.setMeasureMeter(m),
+                            ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
             _TabSize(tools: tools, session: session, gap: block?.gap ?? tools.tabGap),
             if (block != null && block.beats.any((b) => b.at != null))
               Align(
@@ -1520,7 +1551,7 @@ class _TabSettings extends StatelessWidget {
                 child: TextButton.icon(
                   onPressed: () => session!.ink.updateTab(
                     block.id,
-                    beats: [for (final b in block.beats) b.bar ? TabBeat.bar(kind: b.kind) : b],
+                    beats: [for (final b in block.beats) b.bar ? TabBeat.bar(kind: b.kind, meter: b.meter) : b],
                   ),
                   icon: const Icon(Icons.auto_fix_high, size: 18),
                   label: Text(tr('Taktstriche wieder automatisch', 'Bar lines automatic again')),
@@ -1725,6 +1756,13 @@ class _TabKeypad extends StatelessWidget {
                     selected: cur?.accent ?? false,
                     tooltip: tip(TabAction.accent),
                     width: 37,
+                  ),
+                  key(
+                    const Text('P.M.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
+                    () => session.perform(TabAction.palmMute),
+                    selected: cur?.palmMute ?? false,
+                    tooltip: tip(TabAction.palmMute),
+                    width: 44,
                   ),
                   // Taktstriche: normal (fügt einen ein), dann die besonderen Arten.
                   for (final (kind, action) in [

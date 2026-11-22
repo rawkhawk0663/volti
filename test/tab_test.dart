@@ -289,6 +289,83 @@ void main() {
       expect(measuresOf(e.beats).last.length, 1.0);
     });
 
+    test('Taktwechsel nur für einen Takt: eingeschobener 2/4-Takt', () {
+      // Drei 4/4-Takte
+      final beats = rebar([for (var i = 0; i < 12; i++) q], 1.0);
+      final e = TabEditor(beats, meter: '4/4');
+      e.beat = 5; // zweiter Takt
+      expect(e.measureIndex, 1);
+      e.setMeasureMeter('2/4');
+      expect(e.currentMeter, '2/4');
+      expect(measureLengths(e.beats, e.measure), [1.0, 0.5, 1.0], reason: 'nur der zweite Takt ist 2/4');
+      expect(e.beats.length, beats.length, reason: 'nichts wird verschoben');
+      final bars = [for (final b in e.beats) if (b.bar) b.meter];
+      expect(bars, ['2/4', '4/4']);
+      // Wieder 4/4 wählen: kein Taktwechsel mehr
+      e.setMeasureMeter('4/4');
+      expect([for (final b in e.beats) if (b.bar) b.meter], [null, null]);
+      expect(measureLengths(e.beats, e.measure), [1.0, 1.0, 1.0]);
+    });
+
+    test('Taktwechsel: Weiterschreiben und Prüfen in der neuen Taktart', () {
+      final e = TabEditor(rebar([q, q, q, q, q], 1.0), meter: '4/4');
+      e.beat = e.beats.length - 1; // letzter Takt (nur eine Viertel)
+      e.setMeasureMeter('2/4');
+      e.beat = e.beats.length;
+      e.setFret(3);
+      e.move(1);
+      e.setFret(5);
+      final lengths = measureLengths(e.beats, e.measure);
+      expect(lengths, [1.0, 0.5, 0.5], reason: 'nach vollem 2/4-Takt Taktstrich, weiter in 2/4');
+      expect(measuresOf(e.beats)[1].length, 0.5);
+    });
+
+    test('Taktwechsel im ersten Takt ändert die Taktart der Tabulatur', () {
+      final e = TabEditor(rebar([q, q, q, q, q, q, q, q], 1.0), meter: '4/4');
+      e.beat = 0;
+      e.setMeasureMeter('3/4');
+      expect(e.meter, '3/4');
+      expect(measureLengths(e.beats, e.measure), [0.75, 1.0], reason: 'zweiter Takt bleibt 4/4');
+    });
+
+    test('Taktwechsel wird gespeichert und bleibt beim Neusetzen der Taktstriche', () {
+      const bar = TabBeat.bar(kind: BarKind.repeatStart, meter: '3/4');
+      expect(TabBeat.fromJson(bar.toJson()), bar);
+      expect(TabBeat.fromJson(const TabBeat.bar().toJson()).meter, isNull);
+      expect(bar.barWith(kind: BarKind.normal).meter, '3/4');
+      expect(bar.barWith(meter: null).meter, isNull);
+      final beats = rebar([q, q, q, q, const TabBeat.bar(meter: '2/4'), q, q, const TabBeat.bar(), q, q, q, q], 1.0);
+      expect(measureLengths(beats, 1.0), [1.0, 0.5, 0.5, 0.5], reason: 'ab dem Wechsel in 2/4');
+      // Takt mit Wechsel löschen: der Wechsel danach gilt weiter
+      final e = TabEditor(
+        [q, q, q, q, const TabBeat.bar(meter: '2/4'), q, q, const TabBeat.bar(meter: '4/4'), q, q, q, q],
+        meter: '4/4',
+      );
+      e.beat = 5;
+      e.deleteMeasure();
+      expect(measureLengths(e.beats, e.measure), [1.0, 1.0]);
+    });
+
+    test('Palm Mute: einzeln oder für Markiertes, nicht bei Pausen, gespeichert', () {
+      final e = TabEditor([
+        const TabBeat(frets: {5: 0}),
+        const TabBeat(),
+        const TabBeat.bar(),
+        const TabBeat(frets: {5: 3}),
+      ]);
+      e.togglePalmMute();
+      expect(e.beats[0].palmMute, isTrue);
+      e.anchor = 0;
+      e.beat = 3;
+      e.togglePalmMute(); // nicht alle gedämpft → alle an
+      expect([for (final b in e.beats) b.palmMute], [true, false, false, true]);
+      e.togglePalmMute(); // alle gedämpft → alle aus
+      expect(e.beats.any((b) => b.palmMute), isFalse);
+      const pm = TabBeat(frets: {4: 2}, palmMute: true);
+      expect(TabBeat.fromJson(pm.toJson()), pm);
+      expect(pm.copyWith(frets: const {}).palmMute, isFalse, reason: 'Pause ohne P.M.');
+    });
+
     test('Taktart wird gespeichert', () {
       final b = block('a').copyWith(meter: '6/8');
       expect(TabBlock.fromJson(b.toJson()).meter, '6/8');
@@ -635,16 +712,16 @@ void main() {
       expect(d.actionFor(LogicalKeyboardKey.keyA, ctrl: true, shift: false, alt: false), isNull);
       expect(digitOf(LogicalKeyboardKey.digit7), 7);
       expect(digitOf(LogicalKeyboardKey.numpad7), 7);
-      // M für Achtel: M gehörte niemandem
-      final r = d.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.keyM));
+      // Q für Achtel: Q gehörte niemandem
+      final r = d.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.keyQ));
       expect(r.swapped, isNull);
-      // S (Sechzehntel) für Achtel: getauscht, Sechzehntel bekommt M
+      // S (Sechzehntel) für Achtel: getauscht, Sechzehntel bekommt Q
       final r2 = r.map.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.keyS));
       expect(r2.swapped, TabAction.sixteenth);
-      expect(r2.map[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyM);
+      expect(r2.map[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyQ);
       final back = TabKeymap.fromJson(r2.map.toJson());
       expect(back[TabAction.eighth]!.key, LogicalKeyboardKey.keyS);
-      expect(back[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyM);
+      expect(back[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyQ);
       expect(back[TabAction.bar]!.key, LogicalKeyboardKey.keyT);
       expect(TabKeymap.fromJson('kaputt')[TabAction.rest]!.key, LogicalKeyboardKey.keyP);
       expect(const KeyBinding(LogicalKeyboardKey.keyK, ctrl: true).label, contains('K'));

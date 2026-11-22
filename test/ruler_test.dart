@@ -75,4 +75,22 @@ void main() {
     await b.up();
     await t.runAsync(() => tools.flush());
   });
+
+  testWidgets('Mausrad dreht das Lineal, wenn der Zeiger darauf liegt', (t) async {
+    final tools = await pump(t);
+    final mouse = TestPointer(9, PointerDeviceKind.mouse);
+    // Daneben: nichts
+    await t.sendEventToBinding(mouse.hover(const Offset(400, 100)));
+    await t.sendEventToBinding(mouse.scroll(const Offset(0, 100)));
+    expect(tools.rulerAngle, 0);
+    // Darauf: 3° pro Raste
+    await t.sendEventToBinding(mouse.hover(const Offset(420, 300)));
+    await t.sendEventToBinding(mouse.scroll(const Offset(0, 100)));
+    expect(tools.rulerAngle, closeTo(3 * math.pi / 180, 1e-9));
+    await t.sendEventToBinding(mouse.scroll(const Offset(0, -100)));
+    await t.sendEventToBinding(mouse.scroll(const Offset(0, -100)));
+    expect(tools.rulerAngle, closeTo(-3 * math.pi / 180, 1e-9));
+    await t.pump(const Duration(seconds: 2));
+    await t.runAsync(() => tools.flush());
+  });
 }

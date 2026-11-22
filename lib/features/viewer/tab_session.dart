@@ -44,8 +44,10 @@ class TabSession extends ChangeNotifier {
     _editor.beats = [...b.beats];
     _editor.beat = _editor.beat.clamp(0, b.beats.length);
     _editor.measure = b.measure;
+    _editor.meter = b.meter;
     op(_editor);
-    ink.updateTab(id, beats: _editor.beats);
+    final m = _editor.meter;
+    ink.updateTab(id, beats: _editor.beats, meter: m, clearMeter: m == null);
     notifyListeners();
   }
 
@@ -76,6 +78,25 @@ class TabSession extends ChangeNotifier {
   void extend(int by) => _move((e) => e.extend(by));
   void extendString(int by) => _move((e) => e.extendString(by));
   void selectColumn() => _move((e) => e.selectColumn());
+
+  /// Taktart im Takt mit dem Cursor (null = frei).
+  String? get measureMeter {
+    final b = block;
+    if (b == null) return null;
+    return meterOfMeasure(b.beats, b.meter, _measureIndex(b));
+  }
+
+  /// Nummer des Takts mit dem Cursor.
+  int get measureNumber {
+    final b = block;
+    return b == null ? 0 : _measureIndex(b);
+  }
+
+  int _measureIndex(TabBlock b) =>
+      (TabEditor(b.beats, meter: b.meter)..beat = _editor.beat.clamp(0, b.beats.length)).measureIndex;
+
+  /// Taktart nur für diesen Takt ändern.
+  void setMeasureMeter(String m) => _edit((e) => e.setMeasureMeter(m));
 
   /// Markierte Saiten (beide inklusive), null = alle.
   (int, int)? get stringSelection => _editor.stringSelection;
@@ -174,6 +195,8 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.toggleStaccato());
       case TabAction.accent:
         _edit((e) => e.toggleAccent());
+      case TabAction.palmMute:
+        _edit((e) => e.togglePalmMute());
       case TabAction.ghost:
         _edit((e) => e.toggleGhost());
       case TabAction.repeatStart:

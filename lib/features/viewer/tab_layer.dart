@@ -66,7 +66,7 @@ class _TabLayerState extends State<TabLayer> {
     final l = layoutTab(t, size);
     final beats = [...t.beats];
     // Die Art (Wiederholung, Schlussstrich …) bleibt beim Verschieben.
-    beats[i] = TabBeat.bar(at: l.fractionAt(_barX), kind: t.beats[i].kind);
+    beats[i] = TabBeat.bar(at: l.fractionAt(_barX), kind: t.beats[i].kind, meter: t.beats[i].meter);
     return t.copyWith(beats: beats);
   }
 
@@ -227,7 +227,7 @@ class _TabLayerState extends State<TabLayer> {
   void _resetBar(TabBlock t, int i) {
     if (i >= t.beats.length || t.beats[i].at == null) return;
     final beats = [...t.beats];
-    beats[i] = TabBeat.bar(kind: t.beats[i].kind);
+    beats[i] = TabBeat.bar(kind: t.beats[i].kind, meter: t.beats[i].meter);
     c.updateTab(t.id, beats: beats);
   }
 
@@ -393,7 +393,7 @@ class _TabLayerState extends State<TabLayer> {
     final handle = math.max(22.0, g * 1.8);
     return [
       // Takte mit falscher Länge (zu voll oder zu leer) leicht rot.
-      if (t.measure != null)
+      if (t.measure != null || t.beats.any((b) => b.meter != null))
         IgnorePointer(
           child: CustomPaint(painter: _MeasureCheckPainter(t, l, scheme.error, offset: _moveDelta)),
         ),
@@ -434,7 +434,7 @@ class _TabLayerState extends State<TabLayer> {
       for (var i = 0; i < t.beats.length; i++)
         if (t.beats[i].bar)
           Positioned(
-            left: l.xs[i] - handle * 0.4 + _moveDelta.dx,
+            left: l.lineXs[i] - handle * 0.4 + _moveDelta.dx,
             top: l.top - g * 0.9 - handle * 0.8 + _moveDelta.dy,
             width: handle * 0.8,
             height: handle * 0.8,
@@ -694,12 +694,12 @@ class _MeasureCheckPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final m = t.measure;
-    if (m == null) return;
     final all = measuresOf(t.beats);
+    final lengths = measureLengths(t.beats, t.measure);
     final g = l.gap;
     for (final (i, part) in all.indexed) {
-      if (part.end <= part.start) continue;
+      final m = lengths[i];
+      if (m == null || part.end <= part.start) continue;
       final last = i == all.length - 1;
       final wrong = (part.length - m).abs() > 1e-6 && !(last && part.length < m);
       if (!wrong) continue;
