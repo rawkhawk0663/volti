@@ -1486,64 +1486,7 @@ class _TabSettings extends StatelessWidget {
               ExcludeFocus(
                 child: _TabKeypad(session: session, tools: tools),
               ),
-            _Label(tr('Taktart', 'Time signature')),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                for (final m in <String?>[null, ...tabMeters])
-                  ChoiceChip(
-                    label: Text(m ?? tr('frei', 'free')),
-                    selected: (session == null ? tools.tabMeter : block?.meter) == m,
-                    showCheckmark: false,
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (_) {
-                      tools.setTabMeter(m);
-                      final b = block;
-                      if (session == null || b == null) return;
-                      // Neue Taktart: Taktstriche danach neu setzen (rückgängig machbar).
-                      final len = meterLength(m);
-                      session.ink.updateTab(
-                        b.id,
-                        meter: m,
-                        clearMeter: m == null,
-                        beats: len == null ? null : rebar(b.beats, len),
-                      );
-                    },
-                  ),
-              ],
-            ),
-            // Taktwechsel: nur der Takt mit dem Cursor (eingeschobener
-            // 2/4-Takt …), die Takte danach bleiben, nichts rutscht.
-            if (session != null)
-              ListenableBuilder(
-                listenable: session,
-                builder: (context, _) {
-                  final b = session.block;
-                  if (b == null || b.beats.isEmpty) return const SizedBox.shrink();
-                  final n = session.measureNumber + 1;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Label(tr('Nur dieser Takt (Takt $n)', 'This bar only (bar $n)')),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: [
-                          for (final m in tabMeters)
-                            ChoiceChip(
-                              label: Text(m),
-                              selected: session.measureMeter == m,
-                              showCheckmark: false,
-                              visualDensity: VisualDensity.compact,
-                              onSelected: (_) => session.setMeasureMeter(m),
-                            ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
+            _TabMeter(tools: tools, session: session),
             _TabSize(tools: tools, session: session, gap: block?.gap ?? tools.tabGap),
             if (block != null && block.beats.any((b) => b.at != null))
               Align(
@@ -1561,7 +1504,9 @@ class _TabSettings extends StatelessWidget {
             _TabBackground(tools: tools, session: session, background: bg),
             if (session != null) ...[
               const SizedBox(height: 12),
-              Row(
+              OverflowBar(
+                alignment: MainAxisAlignment.spaceBetween,
+                overflowAlignment: OverflowBarAlignment.end,
                 children: [
                   TextButton.icon(
                     onPressed: () {
@@ -1571,13 +1516,110 @@ class _TabSettings extends StatelessWidget {
                     icon: const Icon(Icons.delete_outline, size: 18),
                     label: Text(tr('Löschen', 'Delete')),
                   ),
-                  const Spacer(),
                   FilledButton(onPressed: () => tools.tabSession.value = null, child: Text(tr('Fertig', 'Done'))),
                 ],
               ),
             ],
             const SizedBox(height: 6),
             Text(tr('Tasten ändern: ⚙ → Noteneingabe', 'Change keys: ⚙ → Note input'), style: muted),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Taktart: ohne offene Tabulatur für neue, beim Schreiben wahlweise nur für
+/// den Takt mit dem Cursor (Standard, z. B. ein eingeschobener 2/4-Takt) oder
+/// für die ganze Zeile (dann werden die Taktstriche neu gesetzt).
+class _TabMeter extends StatefulWidget {
+  const _TabMeter({required this.tools, required this.session});
+  final ToolController tools;
+  final TabSession? session;
+
+  @override
+  State<_TabMeter> createState() => _TabMeterState();
+}
+
+class _TabMeterState extends State<_TabMeter> {
+  bool _wholeLine = false;
+
+  ToolController get tools => widget.tools;
+
+  Widget _chip(String label, bool selected, VoidCallback onTap) => ChoiceChip(
+    label: Text(label),
+    selected: selected,
+    showCheckmark: false,
+    visualDensity: VisualDensity.compact,
+    onSelected: (_) => onTap(),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    if (session == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Label(tr('Taktart', 'Time signature')),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: [
+              for (final m in <String?>[null, ...tabMeters])
+                _chip(m ?? tr('frei', 'free'), tools.tabMeter == m, () => tools.setTabMeter(m)),
+            ],
+          ),
+        ],
+      );
+    }
+    return ListenableBuilder(
+      listenable: session,
+      builder: (context, _) {
+        final b = session.block;
+        if (b == null) return const SizedBox.shrink();
+        final n = session.measureNumber + 1;
+        final whole = _wholeLine || b.beats.isEmpty;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Label(tr('Taktart', 'Time signature')),
+            if (b.beats.isNotEmpty) ...[
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                segments: [
+                  ButtonSegment(value: false, label: Text(tr('Nur Takt $n', 'Bar $n only'))),
+                  ButtonSegment(value: true, label: Text(tr('Ganze Zeile', 'Whole line'))),
+                ],
+                selected: {whole},
+                onSelectionChanged: (s) => setState(() => _wholeLine = s.first),
+              ),
+              const SizedBox(height: 6),
+            ],
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                if (whole)
+                  for (final m in <String?>[null, ...tabMeters])
+                    _chip(m ?? tr('frei', 'free'), b.meter == m, () {
+                      tools.setTabMeter(m);
+                      // Neue Taktart für alles: Taktstriche neu setzen (rückgängig machbar).
+                      final len = meterLength(m);
+                      session.ink.updateTab(
+                        b.id,
+                        meter: m,
+                        clearMeter: m == null,
+                        beats: len == null ? null : rebar(b.beats, len),
+                      );
+                    })
+                else
+                  // Nur dieser Takt: nichts verschiebt sich, der Takt danach
+                  // behält seine Taktart.
+                  for (final m in tabMeters) _chip(m, session.measureMeter == m, () => session.setMeasureMeter(m)),
+              ],
+            ),
           ],
         );
       },

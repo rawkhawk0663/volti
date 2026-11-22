@@ -455,6 +455,15 @@ String? activeLayerLabel(InkController ink) {
   return g == null ? l.name : '${g.name} › ${l.name}';
 }
 
+/// Ebene, auf der Tabulaturen landen (immer „TABS“, auch wenn sie noch
+/// nicht angelegt ist).
+String tabsLayerLabel(InkController ink) {
+  final l = ink.annotations.layer(AnnotationLayer.forTabs(ink.scope));
+  if (l == null || l.deleted) return AnnotationLayer.tabsName;
+  final g = ink.annotations.groupOf(l);
+  return g == null ? l.name : '${g.name} › ${l.name}';
+}
+
 /// Kleine Zeile "Ebene: …" für Werkzeug-Fenster; antippen öffnet die Ebenen.
 class ActiveLayerChip extends StatelessWidget {
   const ActiveLayerChip({super.key, required this.ink, required this.tools});
@@ -465,7 +474,9 @@ class ActiveLayerChip extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: ink,
     builder: (context, _) {
-      final name = activeLayerLabel(ink);
+      // Tabulaturen landen immer auf der Ebene „TABS“, egal welche Ebene
+      // sonst gewählt ist.
+      final name = tools.mode == ToolMode.tab ? tabsLayerLabel(ink) : activeLayerLabel(ink);
       if (name == null) return const SizedBox.shrink();
       final scheme = Theme.of(context).colorScheme;
       return Padding(
