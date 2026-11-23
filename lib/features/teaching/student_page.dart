@@ -553,6 +553,9 @@ class _StudentPageState extends State<StudentPage> {
           child: LayoutBuilder(
             builder: (context, box) {
               final twoColumns = box.maxWidth >= 900;
+              // Handy: Alles scrollt zusammen (Kopf und Absenzenkontrolle
+              // nähmen sonst den halben Bildschirm fest ein).
+              final phone = box.maxWidth < 600;
               final left = [
                 _newLesson(context, s),
                 const Divider(height: 48),
@@ -566,35 +569,53 @@ class _StudentPageState extends State<StudentPage> {
                 const Divider(height: 40),
                 _memos(context, s),
               ];
+              final top = [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(phone ? 16 : 20, 4, 8, 0),
+                  child: Row(
+                    children: [
+                      Text(tr('Unterrichten', 'Teach'), style: Theme.of(context).textTheme.titleMedium),
+                      const Spacer(),
+                      ...widget.actions,
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                ?widget.banner,
+                _header(context, s, phone: phone),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(phone ? 12 : 20, 0, phone ? 12 : 20, 14),
+                  child: AttendanceTable(
+                    students: s.isGroup ? _members(s) : [s],
+                    // Mitglied einer Gruppe: Unterrichtstag der Gruppe.
+                    weekday: s.weekday ?? library.groupOf(s.id)?.weekday,
+                    calendar: library.calendar,
+                    onSet: _setAttendance,
+                    onGrade: _setGrade,
+                    onEditStudent: _editStudent,
+                  ),
+                ),
+                const Divider(height: 1),
+              ];
+              if (phone) {
+                return ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    ...top,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [...left.take(2), ...right, const Divider(height: 48), ...left.skip(2)],
+                      ),
+                    ),
+                  ],
+                );
+              }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 8, 0),
-                    child: Row(
-                      children: [
-                        Text(tr('Unterrichten', 'Teach'), style: Theme.of(context).textTheme.titleMedium),
-                        const Spacer(),
-                        ...widget.actions,
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  ?widget.banner,
-                  _header(context, s),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-                    child: AttendanceTable(
-                      students: s.isGroup ? _members(s) : [s],
-                      // Mitglied einer Gruppe: Unterrichtstag der Gruppe.
-                      weekday: s.weekday ?? library.groupOf(s.id)?.weekday,
-                      calendar: library.calendar,
-                      onSet: _setAttendance,
-                      onGrade: _setGrade,
-                      onEditStudent: _editStudent,
-                    ),
-                  ),
-                  const Divider(height: 1),
+                  ...top,
                   Expanded(
                     child: twoColumns
                         ? Row(
@@ -624,7 +645,7 @@ class _StudentPageState extends State<StudentPage> {
     );
   }
 
-  Widget _header(BuildContext context, Student s) {
+  Widget _header(BuildContext context, Student s, {bool phone = false}) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final when = [
@@ -638,7 +659,7 @@ class _StudentPageState extends State<StudentPage> {
     ].join(' | ');
     final group = s.isGroup ? null : library.groupOf(s.id);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 16, 14),
+      padding: EdgeInsets.fromLTRB(phone ? 16 : 24, 12, phone ? 4 : 16, 14),
       child: Row(
         children: [
           Expanded(
@@ -653,7 +674,9 @@ class _StudentPageState extends State<StudentPage> {
                       child: Text(
                         s.name,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                        style: (phone ? theme.textTheme.titleLarge : theme.textTheme.headlineSmall)?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     PopupMenuButton<VoidCallback>(
@@ -779,13 +802,13 @@ class _StudentPageState extends State<StudentPage> {
               : Column(children: [lesson, const SizedBox(height: 16), homework]),
         ),
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        // Bricht auf dem Handy um, statt über den Rand zu laufen.
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            if (editing) ...[
-              TextButton(onPressed: () => setState(_clear), child: Text(tr('Abbrechen', 'Cancel'))),
-              const SizedBox(width: 8),
-            ],
+            if (editing) TextButton(onPressed: () => setState(_clear), child: Text(tr('Abbrechen', 'Cancel'))),
             // Speichern und gleich die Hausaufgaben senden.
             Builder(
               builder: (anchor) => OutlinedButton.icon(
@@ -802,17 +825,18 @@ class _StudentPageState extends State<StudentPage> {
                 label: Text(tr('Speichern & senden', 'Save & send')),
               ),
             ),
-            const SizedBox(width: 8),
             FilledButton(
               onPressed: _hasText || editing ? _save : null,
               child: Text.rich(
                 TextSpan(
                   children: [
                     TextSpan(text: tr('Speichern', 'Save')),
-                    TextSpan(
-                      text: '  Ctrl+S',
-                      style: theme.textTheme.labelSmall?.copyWith(color: Colors.white70),
-                    ),
+                    // Tastenkürzel nur mit genug Platz (auf dem Handy gibt es keine Tastatur).
+                    if (MediaQuery.sizeOf(context).width >= 600)
+                      TextSpan(
+                        text: '  Ctrl+S',
+                        style: theme.textTheme.labelSmall?.copyWith(color: Colors.white70),
+                      ),
                   ],
                 ),
               ),

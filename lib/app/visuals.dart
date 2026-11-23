@@ -13,9 +13,13 @@ class GradientButton extends StatelessWidget {
     this.colors,
     this.secondary = false,
     this.compact = false,
+    this.iconOnly = false,
   });
 
   final String label;
+
+  /// Nur das Symbol (rund), der Text erscheint als Hinweis.
+  final bool iconOnly;
 
   /// Symbol links (z. B. `Icon(Icons.add)` oder eine Ladeanzeige).
   final Widget? icon;
@@ -33,7 +37,7 @@ class GradientButton extends StatelessWidget {
     // Auf dem Verlauf immer weiss (Wunsch des Besitzers), auch im Dunkelmodus.
     final onColor = secondary ? scheme.onSurface : Colors.white;
     final enabled = onPressed != null;
-    return Opacity(
+    final button = Opacity(
       opacity: enabled ? 1 : 0.5,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -48,27 +52,32 @@ class GradientButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             onTap: onPressed,
             child: Padding(
-              padding: compact
+              padding: iconOnly
+                  ? EdgeInsets.all(compact ? 9 : 14)
+                  : compact
                   ? const EdgeInsets.symmetric(horizontal: 16, vertical: 9)
                   : const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               child: IconTheme.merge(
                 data: IconThemeData(size: 20, color: onColor),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (icon != null) ...[icon!, const SizedBox(width: 8)],
-                    Text(
-                      label,
-                      style: TextStyle(color: onColor, fontWeight: FontWeight.w600, fontSize: compact ? 14 : 15),
-                    ),
-                  ],
-                ),
+                child: iconOnly && icon != null
+                    ? icon!
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (icon != null) ...[icon!, const SizedBox(width: 8)],
+                          Text(
+                            label,
+                            style: TextStyle(color: onColor, fontWeight: FontWeight.w600, fontSize: compact ? 14 : 15),
+                          ),
+                        ],
+                      ),
               ),
             ),
           ),
         ),
       ),
     );
+    return iconOnly ? Tooltip(message: label, child: button) : button;
   }
 }
 
@@ -91,12 +100,15 @@ class GradientFab extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = context.volti;
     final glow = secondary ? Colors.black.withValues(alpha: 0.18) : v.brand.last.withValues(alpha: 0.35);
+    // Auf dem Handy zeigen Nebenknöpfe nur ihr Symbol, sonst passen zwei
+    // Knöpfe nicht nebeneinander.
+    final iconOnly = secondary && MediaQuery.sizeOf(context).width < 520;
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         boxShadow: [BoxShadow(color: glow, blurRadius: 24, offset: const Offset(0, 8))],
       ),
-      child: GradientButton(label: label, icon: icon, onPressed: onPressed, secondary: secondary),
+      child: GradientButton(label: label, icon: icon, onPressed: onPressed, secondary: secondary, iconOnly: iconOnly),
     );
   }
 }

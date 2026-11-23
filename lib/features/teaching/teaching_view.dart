@@ -212,6 +212,28 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
           case _Section.todos:
             content = _TodosSection(state: this);
         }
+        final sections = [
+          (Icons.dashboard_outlined, Icons.dashboard, tr('Übersicht', 'Overview')),
+          (Icons.co_present_outlined, Icons.co_present, tr('Unterrichten', 'Teach')),
+          (Icons.people_outline, Icons.people, tr('Schüler:innen', 'Students')),
+          (Icons.calendar_month_outlined, Icons.calendar_month, tr('Stundenplan', 'Timetable')),
+          (Icons.event_busy_outlined, Icons.event_busy, tr('Absenzen', 'Absences')),
+          (Icons.checklist_outlined, Icons.checklist, tr('To-Dos', 'To-dos')),
+        ];
+        void select(int i) => setState(() => _section = _Section.values[i]);
+        // Schmaler Bildschirm (Handy): Die zweite Menüleiste steht oben als
+        // waagrechte Leiste zum Wischen, sonst bliebe für den Inhalt zu wenig
+        // Platz.
+        if (MediaQuery.sizeOf(context).width < 600) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SectionBar(sections: sections, selected: _section.index, onSelected: select),
+              const Divider(height: 1),
+              Expanded(child: content),
+            ],
+          );
+        }
         return Row(
           children: [
             // Zweite Menüleiste des Unterrichts.
@@ -219,38 +241,10 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
               minWidth: 76,
               selectedIndex: _section.index,
               labelType: NavigationRailLabelType.all,
-              onDestinationSelected: (i) => setState(() => _section = _Section.values[i]),
+              onDestinationSelected: select,
               destinations: [
-                NavigationRailDestination(
-                  icon: const Icon(Icons.dashboard_outlined),
-                  selectedIcon: const Icon(Icons.dashboard),
-                  label: Text(tr('Übersicht', 'Overview')),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.co_present_outlined),
-                  selectedIcon: const Icon(Icons.co_present),
-                  label: Text(tr('Unterrichten', 'Teach')),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.people_outline),
-                  selectedIcon: const Icon(Icons.people),
-                  label: Text(tr('Schüler:innen', 'Students')),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.calendar_month_outlined),
-                  selectedIcon: const Icon(Icons.calendar_month),
-                  label: Text(tr('Stundenplan', 'Timetable')),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.event_busy_outlined),
-                  selectedIcon: const Icon(Icons.event_busy),
-                  label: Text(tr('Absenzen', 'Absences')),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.checklist_outlined),
-                  selectedIcon: const Icon(Icons.checklist),
-                  label: Text(tr('To-Dos', 'To-dos')),
-                ),
+                for (final (icon, selectedIcon, label) in sections)
+                  NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(selectedIcon), label: Text(label)),
               ],
             ),
             const VerticalDivider(width: 1),
@@ -262,36 +256,134 @@ class _TeachingViewState extends State<TeachingView> with LibraryActions {
   }
 }
 
+/// Zweite Menüleiste des Unterrichts auf schmalen Bildschirmen: waagrecht,
+/// zum Wischen; der gewählte Bereich rückt ins Bild.
+class _SectionBar extends StatefulWidget {
+  const _SectionBar({required this.sections, required this.selected, required this.onSelected});
+  final List<(IconData, IconData, String)> sections;
+  final int selected;
+  final ValueChanged<int> onSelected;
+
+  @override
+  State<_SectionBar> createState() => _SectionBarState();
+}
+
+class _SectionBarState extends State<_SectionBar> {
+  late final _keys = [for (final _ in widget.sections) GlobalKey()];
+
+  @override
+  void didUpdateWidget(_SectionBar old) {
+    super.didUpdateWidget(old);
+    if (old.selected != widget.selected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final c = _keys[widget.selected].currentContext;
+        if (c != null && mounted) {
+          Scrollable.ensureVisible(c, alignment: 0.5, duration: const Duration(milliseconds: 200));
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        children: [
+          for (final (i, (icon, selectedIcon, label)) in widget.sections.indexed)
+            Padding(
+              key: _keys[i],
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                avatar: Icon(
+                  i == widget.selected ? selectedIcon : icon,
+                  size: 18,
+                  color: i == widget.selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+                ),
+                label: Text(label),
+                showCheckmark: false,
+                selected: i == widget.selected,
+                selectedColor: scheme.primaryContainer,
+                onSelected: (_) => widget.onSelected(i),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Kopfzeile eines Unterrichts-Bereichs (Titel links, Knöpfe rechts).
+///
+/// [buttons] (Knöpfe mit Text) stehen neben dem Titel; auf schmalen
+/// Bildschirmen rutschen sie in eine eigene Zeile darunter, damit der Titel
+/// nicht Buchstabe für Buchstabe umbricht. [trailing] (Sync,
+/// Fensterknöpfe) bleibt immer oben rechts.
 class TeachingTopBar extends StatelessWidget {
-  const TeachingTopBar({super.key, required this.title, this.subtitle, this.trailing = const []});
+  const TeachingTopBar({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.trailing = const [],
+    this.buttons = const [],
+    this.leading,
+    this.large = false,
+  });
   final String title;
   final String? subtitle;
   final List<Widget> trailing;
+  final List<Widget> buttons;
+  final Widget? leading;
+
+  /// Grössere Überschrift (Stundenplan).
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: theme.textTheme.titleLarge),
-                if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-              ],
+    return LayoutBuilder(
+      builder: (context, box) {
+        final narrow = box.maxWidth < 600;
+        final titles = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: large && !narrow
+                  ? theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)
+                  : theme.textTheme.titleLarge,
             ),
+            if (subtitle != null)
+              Text(subtitle!, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ],
+        );
+        return Padding(
+          padding: EdgeInsets.fromLTRB(leading == null ? (narrow ? 16 : 20) : 8, 8, 8, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  ?leading,
+                  Expanded(child: titles),
+                  if (!narrow) ...buttons,
+                  ...trailing,
+                ],
+              ),
+              if (narrow && buttons.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Wrap(spacing: 4, runSpacing: 0, children: buttons),
+                ),
+            ],
           ),
-          ...trailing,
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -527,7 +619,7 @@ class _AbsencesSection extends StatelessWidget {
         TeachingTopBar(
           title: tr('Absenzen', 'Absences'),
           subtitle: tr('$thisYear seit August', '$thisYear since August'),
-          trailing: [
+          buttons: [
             Builder(
               builder: (anchor) => TextButton.icon(
                 onPressed: () => _exportPdf(anchor),
@@ -535,9 +627,8 @@ class _AbsencesSection extends StatelessWidget {
                 label: Text(tr('Absenzenliste als PDF', 'Attendance list as PDF')),
               ),
             ),
-            const SizedBox(width: 4),
-            ...state.headerActions(),
           ],
+          trailing: [...state.headerActions()],
         ),
         const Divider(height: 1),
         Expanded(

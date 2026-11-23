@@ -13,6 +13,7 @@ import '../library/library_controller.dart';
 import 'calendar_dialog.dart';
 import 'homework_share.dart';
 import 'student_dialog.dart';
+import 'teaching_view.dart';
 
 /// Wochentage, an denen jemand Unterricht hat (Mo–Fr immer, Sa/So nur wenn belegt).
 List<int> timetableDays(List<Student> students) => [
@@ -51,73 +52,86 @@ class TimetableView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-          child: Row(
-            children: [
-              if (onBack != null) IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tr('Stundenplan', 'Timetable'),
-                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      tr(
-                        '$people ${people == 1 ? 'Schüler:in' : 'Schüler:innen'} mit festem Unterrichtstag'
-                            '${groups == 0 ? '' : ' · $groups ${groups == 1 ? 'Gruppe' : 'Gruppen'}'}',
-                        '$people ${people == 1 ? 'student' : 'students'} with a fixed lesson day'
-                            '${groups == 0 ? '' : ' · $groups ${groups == 1 ? 'group' : 'groups'}'}',
-                      ),
-                      style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton.icon(
-                onPressed: () => showCalendarDialog(context, library),
-                icon: const Icon(Icons.event_available_outlined, size: 18),
-                label: Text(tr('Ferien & Semester', 'Holidays & terms')),
-              ),
-              TextButton.icon(
-                onPressed: () => _openPdf(context, students),
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                label: Text(tr('Als PDF', 'As PDF')),
-              ),
-              const SizedBox(width: 4),
-              ...actions,
-            ],
+        TeachingTopBar(
+          large: true,
+          leading: onBack == null ? null : IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
+          title: tr('Stundenplan', 'Timetable'),
+          subtitle: tr(
+            '$people ${people == 1 ? 'Schüler:in' : 'Schüler:innen'} mit festem Unterrichtstag'
+                '${groups == 0 ? '' : ' · $groups ${groups == 1 ? 'Gruppe' : 'Gruppen'}'}',
+            '$people ${people == 1 ? 'student' : 'students'} with a fixed lesson day'
+                '${groups == 0 ? '' : ' · $groups ${groups == 1 ? 'group' : 'groups'}'}',
           ),
+          buttons: [
+            TextButton.icon(
+              onPressed: () => showCalendarDialog(context, library),
+              icon: const Icon(Icons.event_available_outlined, size: 18),
+              label: Text(tr('Ferien & Semester', 'Holidays & terms')),
+            ),
+            TextButton.icon(
+              onPressed: () => _openPdf(context, students),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: Text(tr('Als PDF', 'As PDF')),
+            ),
+          ],
+          trailing: actions,
         ),
-        // Schullektionen und Pensum (Angaben unter ⚙ → Unterricht).
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _Stat(label: tr('Unterricht pro Woche', 'Teaching per week'), value: _hours(minutes)),
-              _Stat(
-                label: tr(
-                  'Schullektionen (à ${library.calendar.lessonMinutes} Min.)',
-                  'School lessons (${library.calendar.lessonMinutes} min each)',
+        // Schullektionen und Pensum (Angaben unter ⚙ → Unterricht). Auf dem
+        // Handy kurz nebeneinander, sonst stünden die Kästchen untereinander.
+        if (MediaQuery.sizeOf(context).width < 600)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _Stat(compact: true, label: tr('Pro Woche', 'Per week'), value: _hours(minutes)),
                 ),
-                value: _num(library.calendar.schoolLessons(minutes)),
-              ),
-              _Stat(
-                label: tr(
-                  'Pensum (100 % = ${library.calendar.fullLoad} Lektionen)',
-                  'Workload (100 % = ${library.calendar.fullLoad} lessons)',
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _Stat(
+                    compact: true,
+                    label: tr('Lektionen', 'Lessons'),
+                    value: _num(library.calendar.schoolLessons(minutes)),
+                  ),
                 ),
-                value: '${_num(library.calendar.loadPercent(minutes))} %',
-                highlight: true,
-              ),
-            ],
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _Stat(
+                    compact: true,
+                    label: tr('Pensum', 'Workload'),
+                    value: '${_num(library.calendar.loadPercent(minutes))} %',
+                    highlight: true,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _Stat(label: tr('Unterricht pro Woche', 'Teaching per week'), value: _hours(minutes)),
+                _Stat(
+                  label: tr(
+                    'Schullektionen (à ${library.calendar.lessonMinutes} Min.)',
+                    'School lessons (${library.calendar.lessonMinutes} min each)',
+                  ),
+                  value: _num(library.calendar.schoolLessons(minutes)),
+                ),
+                _Stat(
+                  label: tr(
+                    'Pensum (100 % = ${library.calendar.fullLoad} Lektionen)',
+                    'Workload (100 % = ${library.calendar.fullLoad} lessons)',
+                  ),
+                  value: '${_num(library.calendar.loadPercent(minutes))} %',
+                  highlight: true,
+                ),
+              ],
+            ),
           ),
-        ),
         const Divider(height: 1),
         Expanded(
           child: LayoutBuilder(
@@ -387,17 +401,20 @@ Future<List<int>> buildTimetablePdf(List<Student> students) async {
 
 /// Kleines Kästchen mit einer Kennzahl (Stundenplan).
 class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value, this.highlight = false});
+  const _Stat({required this.label, required this.value, this.highlight = false, this.compact = false});
   final String label, value;
   final bool highlight;
+
+  /// Kleiner (Handy).
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      constraints: const BoxConstraints(minWidth: 180),
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+      constraints: BoxConstraints(minWidth: compact ? 0 : 180),
+      padding: compact ? const EdgeInsets.fromLTRB(10, 6, 8, 8) : const EdgeInsets.fromLTRB(14, 8, 14, 10),
       decoration: BoxDecoration(
         color: highlight ? scheme.primaryContainer.withValues(alpha: 0.6) : scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(10),
@@ -406,9 +423,20 @@ class _Stat extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+          ),
           const SizedBox(height: 2),
-          Text(value, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            value,
+            maxLines: 1,
+            style: (compact ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

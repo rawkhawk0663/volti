@@ -375,13 +375,15 @@ class _AttendanceTableState extends State<AttendanceTable> {
           _scroll.jumpTo((scrollTo - 3 * _cell).clamp(0, _scroll.position.maxScrollExtent));
         });
       }
+      // Handy: schmalere Summen, damit mehr Wochen sichtbar bleiben.
+      final sumWidth = MediaQuery.sizeOf(context).width < 600 ? 44.0 : 58.0;
       Widget total(Widget child) => SizedBox(
-        width: 58,
+        width: sumWidth,
         height: _rowHeight,
         child: Center(child: child),
       );
       Widget label(String text) => SizedBox(
-        width: 58,
+        width: sumWidth,
         height: _headHeight,
         child: Align(
           alignment: Alignment.bottomCenter,
@@ -439,7 +441,7 @@ class _AttendanceTableState extends State<AttendanceTable> {
                     total(Text('${totals[i].absent}', style: theme.textTheme.titleMedium)),
                     total(
                       SizedBox(
-                        width: 48,
+                        width: sumWidth - 8,
                         child: TextField(
                           controller: _gradeOf(people[i], sem),
                           textAlign: TextAlign.center,
