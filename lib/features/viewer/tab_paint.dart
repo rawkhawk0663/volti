@@ -110,8 +110,12 @@ double _naturalWidth(TabBeat b) {
   final bend = b.bends.isNotEmpty ? 1.0 : 0.0;
   // Platz für Slides in den Ton hinein bzw. aus ihm heraus.
   // … und für den Haltebogen von davor samt Klammern.
+  // … und für Vorschlagsnoten davor.
   final slide =
-      (b.slideIns.isNotEmpty ? 0.9 : 0.0) + (b.slideOuts.isNotEmpty ? 0.7 : 0.0) + (b.tieIns.isNotEmpty ? 1.2 : 0.0);
+      (b.slideIns.isNotEmpty ? 0.9 : 0.0) +
+      (b.slideOuts.isNotEmpty ? 0.7 : 0.0) +
+      (b.tieIns.isNotEmpty ? 1.2 : 0.0) +
+      (b.graces.isNotEmpty ? 2.4 : 0.0);
   return math.max(w, twoDigits ? 2.3 : 1.6) + bend + slide;
 }
 
@@ -453,6 +457,16 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
         );
       }
       p.dispose();
+      // Vorschlagsnote: kleine Zahl gleich davor.
+      final grace = b.graces[e.key];
+      if (grace != null) {
+        final q = _text('$grace', g * _graceSize, color);
+        final gx = _graceX(b, e.key, cx, g);
+        final gr = Rect.fromCenter(center: Offset(gx, cy), width: q.width + g * 0.2, height: g * 0.8);
+        canvas.drawRect(gr, knockout);
+        q.paint(canvas, Offset(gx - q.width / 2, cy - q.height / 2));
+        q.dispose();
+      }
     }
     // Hals (nicht bei ganzen Noten)
     if (b.value >= 2) canvas.drawLine(Offset(cx, l.stemTop), Offset(cx, l.stemBottom), stem);
@@ -533,6 +547,105 @@ int? _nextOnString(List<TabBeat> beats, int i, int st) {
   return null;
 }
 
+/// Art eines Bogens an einer Bundzahl.
+enum TabArc { tie, tieIn, legato, grace }
+
+/// Wo jeder Bogen liegt: über (true) oder unter (false) seinen Zahlen.
+///
+/// Haltebögen liegen gewöhnlich unter den Zahlen, Hammer-on/Pull-off
+/// darüber. Teilen sich zwei Bögen benachbarter Saiten denselben
+/// Zwischenraum an derselben Stelle, weicht einer auf die andere Seite aus –
+/// am liebsten einer, der dann ganz ausserhalb der Linien liegt (über der
+/// obersten bzw. unter der untersten Linie), sonst einer, dessen andere
+/// Seite frei ist. Ein Hammer-on auf der untersten Saite bleibt oben (darunter
+/// sind die Hälse).
+Map<(int, int, TabArc), bool> arcSides(List<TabBeat> beats) {
+  final arcs = <({int beat, int string, TabArc kind, double from, double to})>[];
+  for (var i = 0; i < beats.length; i++) {
+    final b = beats[i];
+    if (b.bar) continue;
+    for (final st in b.tieIns) {
+      if (b.frets.containsKey(st)) arcs.add((beat: i, string: st, kind: TabArc.tieIn, from: i - 0.9, to: i.toDouble()));
+    }
+    for (final st in b.graces.keys) {
+      arcs.add((beat: i, string: st, kind: TabArc.grace, from: i - 0.6, to: i.toDouble()));
+    }
+    for (final (kind, set) in [(TabArc.tie, b.ties), (TabArc.legato, b.legato)]) {
+      for (final st in set) {
+        if (!b.frets.containsKey(st)) continue;
+        final j = _nextOnString(beats, i, st);
+        arcs.add((beat: i, string: st, kind: kind, from: i.toDouble(), to: (j ?? i + 0.9).toDouble()));
+      }
+    }
+  }
+  arcs.sort((a, b) => a.from.compareTo(b.from));
+  const last = TabBlock.strings - 1;
+  // Zwischenraum k liegt zwischen Linie k − 1 und Linie k; 0 und
+  // [TabBlock.strings] sind ausserhalb der Linien (dort ist immer Platz).
+  int gapOf(int st, bool above) => above ? st : st + 1;
+  bool outer(int gap) => gap == 0 || gap == TabBlock.strings;
+  bool canFlip(TabArc kind, int st, bool above) =>
+      !((kind == TabArc.legato || kind == TabArc.grace) && above && st == last);
+
+  final side = <int, bool>{}; // Index in arcs → über den Zahlen
+  bool overlaps(int a, int b) => arcs[a].from < arcs[b].to && arcs[b].from < arcs[a].to;
+  List<int> blockers(int a, bool above) {
+    final gap = gapOf(arcs[a].string, above);
+    if (outer(gap)) return const [];
+    return [
+      for (final e in side.entries)
+        if (e.key != a && gapOf(arcs[e.key].string, e.value) == gap && overlaps(a, e.key)) e.key,
+    ];
+  }
+
+  for (var a = 0; a < arcs.length; a++) {
+    final arc = arcs[a];
+    final preferred = arc.kind == TabArc.legato || arc.kind == TabArc.grace;
+    final inWay = blockers(a, preferred);
+    if (inWay.isEmpty) {
+      side[a] = preferred;
+      continue;
+    }
+    // 1. Ein Bogen im Weg kann ganz nach aussen ausweichen.
+    final toOuter = inWay.where(
+      (o) => canFlip(arcs[o].kind, arcs[o].string, side[o]!) && outer(gapOf(arcs[o].string, !side[o]!)),
+    );
+    if (toOuter.length == inWay.length) {
+      for (final o in inWay) {
+        side[o] = !side[o]!;
+      }
+      side[a] = preferred;
+      continue;
+    }
+    // 2. Dieser Bogen weicht auf seine andere Seite aus.
+    if (canFlip(arc.kind, arc.string, preferred) && blockers(a, !preferred).isEmpty) {
+      side[a] = !preferred;
+      continue;
+    }
+    // 3. Die Bögen im Weg weichen auf ihre (freie) andere Seite aus. Geht
+    //    auch das nicht, bleibt es an dieser Stelle eben eng.
+    for (final o in inWay) {
+      if (!canFlip(arcs[o].kind, arcs[o].string, side[o]!)) continue;
+      side[o] = !side[o]!;
+      if (blockers(o, side[o]!).isNotEmpty) side[o] = !side[o]!;
+    }
+    side[a] = preferred;
+  }
+  return {for (final e in side.entries) (arcs[e.key].beat, arcs[e.key].string, arcs[e.key].kind): e.value};
+}
+
+/// Grösse der Vorschlagsnoten (im Verhältnis zum Linienabstand).
+const _graceSize = 0.8;
+
+/// Mitte der Vorschlagsnote vor der Note auf Saite [st] (Platz dafür gibt
+/// [_naturalWidth]).
+double _graceX(TabBeat b, int st, double cx, double g) {
+  final main = b.frets[st] ?? 0;
+  final grace = b.graces[st] ?? 0;
+  final slideIn = b.slideIns.containsKey(st) ? g * 0.9 : 0.0;
+  return cx - _halfNumber(main, g) - g * 0.75 - _halfNumber(grace, g) * _graceSize - slideIn;
+}
+
 /// Halbe Breite einer Bundzahl (für den Abstand von Slides und Bendings).
 double _halfNumber(int fret, double g) => (fret >= 10 ? 1.25 : 0.65) * g * 0.5;
 
@@ -546,6 +659,7 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
     ..strokeCap = StrokeCap.round
     ..strokeWidth = math.max(0.9, lineWidth * 1.4);
   final held = tieTargets(t.beats);
+  final sides = arcSides(t.beats);
   // Grund hinter kleinen Buchstaben (H/P): Hintergrund bzw. Weiss.
   final knockout = Paint()
     ..color = t.background != TabBlock.noBackground
@@ -575,13 +689,15 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
     for (final st in b.tieIns) {
       final fret = b.frets[st];
       if (fret == null) continue;
-      final y = l.lineY(st) + g * 0.55;
+      final up = sides[(i, st, TabArc.tieIn)] ?? false;
+      final dir = up ? -1.0 : 1.0;
+      final y = l.lineY(st) + dir * g * 0.55;
       final x2 = cx - g * 0.2 - _halfNumber(fret, g) * 0.6;
       final x1 = x2 - g * 1.4;
       canvas.drawPath(
         Path()
           ..moveTo(x1, y)
-          ..quadraticBezierTo((x1 + x2) / 2, y + g * 0.6, x2, y),
+          ..quadraticBezierTo((x1 + x2) / 2, y + dir * g * 0.6, x2, y),
         line,
       );
     }
@@ -590,7 +706,9 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
       final fret = b.frets[st];
       final j = _nextOnString(t.beats, i, st);
       if (fret == null) continue;
-      final y = l.lineY(st) + g * 0.55;
+      final up = sides[(i, st, TabArc.tie)] ?? false;
+      final dir = up ? -1.0 : 1.0;
+      final y = l.lineY(st) + dir * g * 0.55;
       final x1 = cx + g * 0.2;
       final double x2;
       if (j != null) {
@@ -602,9 +720,35 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
       canvas.drawPath(
         Path()
           ..moveTo(x1, y)
-          ..quadraticBezierTo((x1 + x2) / 2, y + g * 0.6, x2, y),
+          ..quadraticBezierTo((x1 + x2) / 2, y + dir * g * 0.6, x2, y),
         line,
       );
+    }
+    // Vorschlagsnoten: kleiner Bogen in die Hauptnote, mit „H“ bzw. „P“.
+    for (final e in b.graces.entries) {
+      final st = e.key, fret = b.frets[st];
+      if (fret == null || fret == ghostNote) continue;
+      final up = sides[(i, st, TabArc.grace)] ?? true;
+      final dir = up ? -1.0 : 1.0;
+      final y = l.lineY(st) + dir * g * 0.45;
+      final x1 = _graceX(b, st, cx, g), x2 = cx - g * 0.05;
+      final crest = y + dir * g * 0.35;
+      canvas.drawPath(
+        Path()
+          ..moveTo(x1, y)
+          ..quadraticBezierTo((x1 + x2) / 2, y + dir * g * 0.7, x2, y),
+        line,
+      );
+      if (e.value == fret) continue;
+      final outside = (up && st == 0) || (!up && st == TabBlock.strings - 1);
+      final p = _text(fret > e.value ? 'H' : 'P', g * (outside ? 0.7 : 0.6), color, bold: true);
+      final at = Offset(
+        (x1 + x2) / 2 - p.width / 2,
+        outside ? (up ? crest - g * 0.05 - p.height : crest + g * 0.05) : crest - p.height / 2,
+      );
+      canvas.drawRect((at & p.size).inflate(g * 0.05), knockout);
+      p.paint(canvas, at);
+      p.dispose();
     }
     // Hammer-on / Pull-off: Bogen über den Zahlen zur nächsten Note auf
     // derselben Saite, darüber klein „H“ (höher) bzw. „P“ (tiefer).
@@ -612,20 +756,31 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
       final fret = b.frets[st];
       if (fret == null) continue;
       final j = _nextOnString(t.beats, i, st);
-      final y = l.lineY(st) - g * 0.5;
+      // Gewöhnlich darüber; liegt dort schon ein Bogen, darunter.
+      final up = sides[(i, st, TabArc.legato)] ?? true;
+      final dir = up ? -1.0 : 1.0;
+      final y = l.lineY(st) + dir * g * 0.5;
       final x1 = cx + g * 0.15;
       final x2 = j != null ? l.xs[j] - g * 0.15 : x1 + g * 1.4;
-      final top = y - g * 0.55;
+      final peak = y + dir * g * 0.55;
       canvas.drawPath(
         Path()
           ..moveTo(x1, y)
-          ..quadraticBezierTo((x1 + x2) / 2, top - g * 0.25, x2, y),
+          ..quadraticBezierTo((x1 + x2) / 2, peak + dir * g * 0.25, x2, y),
         line,
       );
       final to = j == null ? null : t.beats[j].frets[st];
       if (to == null || to == ghostNote || fret == ghostNote || to == fret) continue;
-      final p = _text(to > fret ? 'H' : 'P', g * 0.8, color, bold: true);
-      final at = Offset((x1 + x2) / 2 - p.width / 2, top - g * 0.05 - p.height);
+      // Ganz aussen (über der obersten bzw. unter der untersten Linie) steht
+      // der Buchstabe neben dem Bogen; zwischen den Linien sitzt er kleiner
+      // auf dessen Scheitel, damit er nicht in den nächsten Zwischenraum ragt.
+      final outside = (up && st == 0) || (!up && st == TabBlock.strings - 1);
+      final p = _text(to > fret ? 'H' : 'P', g * (outside ? 0.8 : 0.7), color, bold: true);
+      final crest = (y + peak + dir * g * 0.25) / 2; // höchster Punkt des Bogens
+      final at = Offset(
+        (x1 + x2) / 2 - p.width / 2,
+        outside ? (up ? peak - g * 0.05 - p.height : peak + g * 0.05) : crest - p.height / 2,
+      );
       canvas.drawRect((at & p.size).inflate(g * 0.06), knockout);
       p.paint(canvas, at);
       p.dispose();

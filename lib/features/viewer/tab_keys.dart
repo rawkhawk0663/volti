@@ -30,6 +30,7 @@ enum TabAction {
   tie,
   tieIn,
   legato,
+  grace,
   transposeUp,
   transposeDown,
   staccato,
@@ -76,6 +77,10 @@ enum TabAction {
     legato => tr(
       'Hammer-on / Pull-off zur nächsten Note ein/aus',
       'Hammer-on / pull-off to the next note on/off',
+    ),
+    grace => tr(
+      'Vorschlagsnote (Approach) vor der Note: danach Bund tippen; nochmals = entfernen',
+      'Grace note (approach) before the note: then type the fret; again = remove',
     ),
     transposeUp => tr(
       'Einen Halbton höher (Markiertes, sonst der Schlag unter dem Cursor)',
@@ -207,6 +212,7 @@ class TabKeymap {
     TabAction.tie: const KeyBinding(LogicalKeyboardKey.keyO),
     TabAction.tieIn: const KeyBinding(LogicalKeyboardKey.keyO, shift: true),
     TabAction.legato: const KeyBinding(LogicalKeyboardKey.keyH, shift: true),
+    TabAction.grace: const KeyBinding(LogicalKeyboardKey.keyG, shift: true),
     TabAction.transposeUp: const KeyBinding(LogicalKeyboardKey.arrowUp, ctrl: true),
     TabAction.transposeDown: const KeyBinding(LogicalKeyboardKey.arrowDown, ctrl: true),
     TabAction.staccato: const KeyBinding(LogicalKeyboardKey.keyD),

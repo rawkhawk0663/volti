@@ -61,6 +61,7 @@ class TabBeat {
     this.ties = const {},
     this.tieIns = const {},
     this.legato = const {},
+    this.graces = const {},
     this.staccato = false,
     this.accent = false,
     this.palmMute = false,
@@ -82,6 +83,7 @@ class TabBeat {
       ties = const {},
       tieIns = const {},
       legato = const {},
+      graces = const {},
       staccato = false,
       accent = false,
       palmMute = false,
@@ -148,6 +150,11 @@ class TabBeat {
   /// höher = Hammer-on, tiefer = Pull-off.
   final Set<int> legato;
 
+  /// Vorschlagsnoten (Approach-Noten): Saite → Bund einer kleinen Note gleich
+  /// vor der Hauptnote auf derselben Saite. Zählt nicht zum Rhythmus; ein
+  /// Bogen mit „H“ bzw. „P“ führt in die Hauptnote.
+  final Map<int, int> graces;
+
   /// Staccato (Punkt über dem Schlag) und Akzent („>“).
   final bool staccato, accent;
 
@@ -185,6 +192,7 @@ class TabBeat {
     Set<int>? ties,
     Set<int>? tieIns,
     Set<int>? legato,
+    Map<int, int>? graces,
     bool? staccato,
     bool? accent,
     bool? palmMute,
@@ -223,6 +231,11 @@ class TabBeat {
         for (final st in legato ?? this.legato)
           if (f.containsKey(st)) st,
       },
+      // Vorschlag nur vor einer echten Note (nicht vor einer Ghost Note).
+      graces: {
+        for (final e in (graces ?? this.graces).entries)
+          if ((f[e.key] ?? ghostNote) >= 0) e.key: e.value,
+      },
       tieIns: {
         for (final st in tieIns ?? this.tieIns)
           if (f.containsKey(st)) st,
@@ -254,6 +267,7 @@ class TabBeat {
           if (ties.isNotEmpty) 'tie': (ties.toList()..sort()),
           if (tieIns.isNotEmpty) 'tieIn': (tieIns.toList()..sort()),
           if (legato.isNotEmpty) 'hp': (legato.toList()..sort()),
+          if (graces.isNotEmpty) 'gr': {for (final e in graces.entries) '${e.key}': e.value},
           if (staccato) 'stacc': true,
           if (accent) 'acc': true,
           if (palmMute) 'pm': true,
@@ -306,6 +320,10 @@ class TabBeat {
         for (final st in j['hp'] as List<dynamic>? ?? const [])
           if (st is int && frets.containsKey(st)) st,
       },
+      graces: {
+        for (final e in strings(j['gr'] as Map<String, dynamic>? ?? const {}).entries)
+          if ((frets[e.key] ?? ghostNote) >= 0 && e.value >= 0) e.key: e.value,
+      },
       tieIns: {
         for (final st in j['tieIn'] as List<dynamic>? ?? const [])
           if (st is int && frets.containsKey(st)) st,
@@ -342,6 +360,7 @@ class TabBeat {
       other.tieIns.containsAll(tieIns) &&
       other.legato.length == legato.length &&
       other.legato.containsAll(legato) &&
+      _sameMap(other.graces, graces) &&
       other.staccato == staccato &&
       other.accent == accent &&
       other.palmMute == palmMute &&
@@ -363,6 +382,7 @@ class TabBeat {
     Object.hashAllUnordered(ties),
     Object.hashAllUnordered(tieIns),
     Object.hashAllUnordered(legato),
+    Object.hashAllUnordered(graces.entries.map((e) => e.key * 100 + e.value)),
     staccato,
     accent,
     palmMute,
@@ -679,6 +699,13 @@ TabBeat? transposeBeat(TabBeat b, int semitones) {
     ties: remapSet(b.ties),
     tieIns: remapSet(b.tieIns),
     legato: remapSet(b.legato),
+    // Vorschläge gehen im gleichen Abstand zur Hauptnote mit (sonst weg).
+    graces: {
+      for (final e in b.graces.entries)
+        if (target[e.key] case (final st, final fret)
+            when e.value + fret - b.frets[e.key]! >= 0 && e.value + fret - b.frets[e.key]! <= TabEditor.maxFret)
+          st: e.value + fret - b.frets[e.key]!,
+    },
   );
 }
 
@@ -880,11 +907,54 @@ class TabEditor {
     return beats[beat];
   }
 
-  void _resetDigits() => _lastDigit = null;
+  void _resetDigits() {
+    _lastDigit = null;
+    graceInput = false;
+    _graceDigitAt = null;
+  }
+
+  /// Die nächste getippte Bundzahl wird zur Vorschlagsnote der Note unter
+  /// dem Cursor (bis zu einer anderen Taste oder einer Pause).
+  bool graceInput = false;
+  DateTime? _graceDigitAt;
+
+  /// Vorschlagsnote (Approach-Note) vor der Note unter dem Cursor: Gibt es
+  /// schon eine, wird sie entfernt; sonst kommt die nächste Bundzahl dorthin.
+  void toggleGrace() {
+    final b = current;
+    if (b == null || b.bar || (b.frets[string] ?? ghostNote) < 0) return;
+    if (b.graces.containsKey(string)) {
+      beats[beat] = b.copyWith(graces: {...b.graces}..remove(string));
+      _resetDigits();
+      return;
+    }
+    _resetDigits();
+    graceInput = true;
+  }
+
+  /// Vorschlagsnote direkt setzen (Zahlenfeld, Tests).
+  void _setGrace(int fret) {
+    final b = beats[beat];
+    beats[beat] = b.copyWith(graces: {...b.graces, string: fret.clamp(0, maxFret)});
+  }
 
   /// Ziffer tippen. Kommt rasch eine zweite (z. B. 1 dann 2), entsteht 12.
   void digit(int d, {DateTime? now}) {
     final t = now ?? DateTime.now();
+    if (graceInput) {
+      // Vorschlagsnote: erste Ziffer, oder die zweite rasch danach.
+      final at = _graceDigitAt;
+      final cur = current;
+      if ((at == null || t.difference(at) <= digitPause) && cur != null && !cur.bar && (cur.frets[string] ?? ghostNote) >= 0) {
+        final last = _lastDigit;
+        final fret = at != null && last != null && last * 10 + d <= maxFret ? last * 10 + d : d;
+        _lastDigit = fret == d ? d : null;
+        _setGrace(fret);
+        _graceDigitAt = t;
+        return;
+      }
+      _resetDigits();
+    }
     final b = _ensureBeat();
     var fret = d;
     final last = _lastDigit, at = _lastDigitAt;
@@ -907,6 +977,12 @@ class TabEditor {
 
   /// Bund direkt setzen (Zahlenfeld 0–24).
   void setFret(int fret) {
+    final cur = current;
+    if (graceInput && cur != null && !cur.bar && (cur.frets[string] ?? ghostNote) >= 0) {
+      _setGrace(fret);
+      _resetDigits();
+      return;
+    }
     final b = _ensureBeat();
     beats[beat] = b.copyWith(frets: {...b.frets, string: fret.clamp(0, maxFret)});
     _resetDigits();

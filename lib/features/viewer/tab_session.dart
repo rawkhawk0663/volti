@@ -29,6 +29,9 @@ class TabSession extends ChangeNotifier {
   int get beat => _editor.beat.clamp(0, block?.beats.length ?? 0);
   int get string => _editor.string;
 
+  /// Wartet die nächste Bundzahl darauf, Vorschlagsnote zu werden?
+  bool get graceInput => _editor.graceInput;
+
   /// Schlag unter dem Cursor (null = freier Platz am Ende).
   TabBeat? get current {
     final b = block;
@@ -193,6 +196,8 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.toggleTieIn());
       case TabAction.legato:
         _edit((e) => e.toggleLegato());
+      case TabAction.grace:
+        _edit((e) => e.toggleGrace());
       case TabAction.transposeUp:
         _edit((e) => e.transpose(1));
       case TabAction.transposeDown:

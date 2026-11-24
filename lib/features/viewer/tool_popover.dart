@@ -1793,6 +1793,21 @@ class _TabKeypad extends StatelessWidget {
                     tooltip: tip(TabAction.legato),
                     width: 44,
                   ),
+                  // Vorschlagsnote (Approach-Note): kleine Zahl vor der Note.
+                  key(
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: '3', style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
+                          const TextSpan(text: '5', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    () => session.perform(TabAction.grace),
+                    selected: session.graceInput || (cur?.graces.containsKey(session.string) ?? false),
+                    tooltip: tip(TabAction.grace),
+                    width: 40,
+                  ),
                   key(
                     Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A2)),
                     () => session.perform(TabAction.staccato),

@@ -1005,5 +1005,71 @@ void main() {
       expect(d.actionFor(LogicalKeyboardKey.arrowDown, ctrl: true, shift: false, alt: false), TabAction.transposeDown);
       expect(d.actionFor(LogicalKeyboardKey.keyH, ctrl: false, shift: false, alt: false), TabAction.half);
     });
+
+    test('Bögen weichen einander aus', () {
+      // Haltebogen oben (unter der 13) und H/P darunter (über der 12): gleicher
+      // Zwischenraum → der Haltebogen geht ganz nach oben aus den Linien.
+      final a = arcSides(const [
+        TabBeat(frets: {0: 13, 1: 12}, ties: {0}, legato: {1}),
+        TabBeat(frets: {0: 13, 1: 14}),
+      ]);
+      expect(a[(0, 0, TabArc.tie)], isTrue, reason: 'Haltebogen über die oberste Linie');
+      expect(a[(0, 1, TabArc.legato)], isTrue, reason: 'H/P bleibt an seinem Platz');
+      // Mitten in den Linien: der zweite Bogen weicht auf seine freie Seite aus.
+      final b = arcSides(const [
+        TabBeat(frets: {2: 5, 3: 7}, ties: {2}, legato: {3}),
+        TabBeat(frets: {2: 5, 3: 9}),
+      ]);
+      expect(b[(0, 2, TabArc.tie)], isFalse);
+      expect(b[(0, 3, TabArc.legato)], isFalse, reason: 'H/P geht unter die Zahlen');
+      // Ohne Konflikt: wie gewohnt
+      final c = arcSides(const [
+        TabBeat(frets: {1: 5, 4: 7}, ties: {1}, legato: {4}),
+        TabBeat(frets: {1: 5, 4: 9}),
+      ]);
+      expect(c[(0, 1, TabArc.tie)], isFalse);
+      expect(c[(0, 4, TabArc.legato)], isTrue);
+      // Hammer-on auf der untersten Saite bleibt oben (darunter die Hälse)
+      final d = arcSides(const [
+        TabBeat(frets: {4: 5, 5: 3}, ties: {4}, legato: {5}),
+        TabBeat(frets: {4: 5, 5: 5}),
+      ]);
+      expect(d[(0, 5, TabArc.legato)], isTrue);
+      expect(d[(0, 4, TabArc.tie)], isTrue, reason: 'der Haltebogen weicht nach oben aus');
+    });
+
+    test('Vorschlagsnote: Umschalt+G, dann Bund tippen; zählt nicht zum Rhythmus', () {
+      final t0 = DateTime(2026);
+      final e = TabEditor([const TabBeat(frets: {1: 7})]);
+      e.string = 1;
+      e.toggleGrace();
+      expect(e.graceInput, isTrue);
+      e.digit(5, now: t0);
+      expect(e.beats.single.graces, {1: 5});
+      expect(e.beats.single.frets, {1: 7}, reason: 'Hauptnote bleibt');
+      expect(e.beats.single.length, 0.25, reason: 'zählt nicht zum Rhythmus');
+      // zweistellig rasch hintereinander
+      e.toggleGrace(); // entfernen
+      expect(e.beats.single.graces, isEmpty);
+      e.toggleGrace();
+      e.digit(1, now: t0);
+      e.digit(2, now: t0.add(const Duration(milliseconds: 300)));
+      expect(e.beats.single.graces, {1: 12});
+      // nach einer Pause wieder die Hauptnote
+      e.digit(9, now: t0.add(const Duration(seconds: 3)));
+      expect(e.beats.single.frets, {1: 9});
+      expect(e.beats.single.graces, {1: 12});
+      // gespeichert; ohne Hauptnote kein Vorschlag; transponiert mit
+      final b = e.beats.single;
+      expect(TabBeat.fromJson(b.toJson()), b);
+      expect(b.copyWith(frets: const {}).graces, isEmpty);
+      expect(transposeBeat(b, 2)!.graces, {1: 14});
+      // auf einer leeren Saite geht es nicht
+      e.string = 0;
+      e.toggleGrace();
+      expect(e.graceInput, isFalse);
+      expect(TabKeymap.defaults.actionFor(LogicalKeyboardKey.keyG, ctrl: false, shift: true, alt: false), TabAction.grace);
+    });
+
   });
 }
