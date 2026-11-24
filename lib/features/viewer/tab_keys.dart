@@ -61,7 +61,7 @@ enum TabAction {
     thirtySecond => tr('Zweiunddreissigstelnote', 'Thirty-second note'),
     shorter => tr('Notenwert kürzer', 'Shorter note value'),
     longer => tr('Notenwert länger', 'Longer note value'),
-    dot => tr('Punktiert ein/aus', 'Dotted on/off'),
+    dot => tr('Punktiert → doppelt punktiert → ohne', 'Dotted → double-dotted → none'),
     triplet => tr('Triole ein/aus (3 im Raum von 2)', 'Triplet on/off (3 in the time of 2)'),
     rest => tr('Pause', 'Rest'),
     bar => tr('Taktstrich', 'Bar line'),

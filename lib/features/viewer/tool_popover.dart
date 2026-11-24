@@ -1687,9 +1687,17 @@ class _TabKeypad extends StatelessWidget {
                   ),
                 key(
                   const Text('·', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                  () => session.perform(TabAction.dot),
-                  selected: cur?.dotted ?? false,
+                  () => session.setDots(cur?.dots == 1 ? 0 : 1),
+                  selected: cur?.dots == 1,
                   tooltip: tip(TabAction.dot),
+                  width: 37,
+                ),
+                // Doppelt punktiert
+                key(
+                  const Text('··', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                  () => session.setDots(cur?.dots == 2 ? 0 : 2),
+                  selected: cur?.dots == 2,
+                  tooltip: tr('Doppelt punktiert ein/aus', 'Double-dotted on/off'),
                   width: 37,
                 ),
                 key(

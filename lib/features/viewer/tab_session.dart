@@ -149,6 +149,7 @@ class TabSession extends ChangeNotifier {
   });
   void setFret(int f) => _edit((e) => e.setFret(f));
   void setValue(int v) => _edit((e) => e.setValue(v));
+  void setDots(int n) => _edit((e) => e.setDots(n));
   void bend(int quarters) => _edit((e) => e.bend(quarters));
   void slideIn(int dir) => _edit((e) => e.slideIn(dir));
   void slideOut(int dir) => _edit((e) => e.slideOut(dir));

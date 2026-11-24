@@ -104,7 +104,7 @@ double _naturalWidth(TabBeat b) {
     16 => 1.9,
     _ => 1.7,
   };
-  final w = base * (b.dotted ? 1.2 : 1);
+  final w = base * (b.dotted ? (b.doubleDot ? 1.32 : 1.2) : 1);
   final twoDigits = b.frets.values.any((f) => f >= 10);
   // Platz für den Bending-Pfeil rechts neben der Zahl.
   final bend = b.bends.isNotEmpty ? 1.0 : 0.0;
@@ -287,7 +287,15 @@ TabLayout layoutTab(TabBlock t, Size page) {
 (double, double) measureSpanOf(TabBlock t, TabLayout l, int i) {
   for (final m in measuresOf(t.beats)) {
     if (i >= m.start && i < m.end) {
-      return _measureSpan(m.start, m.end, t.beats.length, l.xs, l.slotWidths, l.contentStart, l.contentEnd - l.gap * _tail);
+      return _measureSpan(
+        m.start,
+        m.end,
+        t.beats.length,
+        l.xs,
+        l.slotWidths,
+        l.contentStart,
+        l.contentEnd - l.gap * _tail,
+      );
     }
   }
   return (l.contentStart, l.contentEnd);
@@ -406,7 +414,9 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   }
 
   // Taktart nach „TAB“: Zähler oben, Nenner unten.
-  if (t.measure != null) _paintMeter(canvas, t.meter!, l.origin.dx + g * (_clef + 0.1 + _meterWidth(t.meter!) / 2), l, color);
+  if (t.measure != null) {
+    _paintMeter(canvas, t.meter!, l.origin.dx + g * (_clef + 0.1 + _meterWidth(t.meter!) / 2), l, color);
+  }
 
   final knockout = Paint()..color = ground;
   // Gehaltene Noten (Ziel eines Haltebogens) stehen in Klammern.
@@ -430,8 +440,12 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
       // Ganze Pause hängt an einer Linie, die anderen sitzen in der Mitte.
       final y = b.value == 1 ? l.lineY(2) : (b.value == 2 ? l.lineY(3) : mid);
       p.paint(canvas, Offset(cx - p.width / 2, y - base));
-      if (b.dotted) {
-        canvas.drawCircle(Offset(cx + p.width / 2 + g * 0.35, mid - g * 0.5), g * 0.17, Paint()..color = color);
+      for (var k = 0; k < b.dots; k++) {
+        canvas.drawCircle(
+          Offset(cx + p.width / 2 + g * (0.35 + k * 0.42), mid - g * 0.5),
+          g * 0.17,
+          Paint()..color = color,
+        );
       }
       p.dispose();
       continue;
@@ -473,7 +487,10 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     if (b.dotted) {
       // Oben neben dem Hals: Dort liegen nie Balken (die sind unten, bis zu
       // drei übereinander bei 32steln).
-      canvas.drawCircle(Offset(cx + g * 0.5, l.stemTop + g * 0.45), g * 0.17, Paint()..color = color);
+      // Doppelt punktiert: zweiter Punkt gleich daneben.
+      for (var k = 0; k < b.dots; k++) {
+        canvas.drawCircle(Offset(cx + g * (0.5 + k * 0.42), l.stemTop + g * 0.45), g * 0.17, Paint()..color = color);
+      }
     }
   }
 
@@ -867,7 +884,6 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
   }
 }
 
-
 /// Palm Mute: kleines „P.M.“ gleich über der obersten Linie, bei mehreren
 /// Schlägen hintereinander eine gestrichelte Linie bis zum letzten mit einem
 /// kurzen Strich am Ende. Taktstriche unterbrechen nicht, Pausen schon.
@@ -988,7 +1004,6 @@ void _paintBar(
       dotsAt(cx + g * 1.15);
   }
 }
-
 
 /// Triolen: eine „3“ unter den Balken; sind die Schläge nicht durch einen
 /// Balken verbunden (z. B. Viertel-Triole), dazu eine Klammer.

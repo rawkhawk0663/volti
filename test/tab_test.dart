@@ -1071,5 +1071,25 @@ void main() {
       expect(TabKeymap.defaults.actionFor(LogicalKeyboardKey.keyG, ctrl: false, shift: true, alt: false), TabAction.grace);
     });
 
+
+    test('Doppelt punktiert: Punkt-Taste schaltet durch, dauert 1¾-mal, gespeichert', () {
+      final e = TabEditor([const TabBeat(frets: {0: 3})]);
+      e.toggleDot();
+      expect(e.beats.single.dots, 1);
+      expect(e.beats.single.length, closeTo(0.375, 1e-9));
+      e.toggleDot();
+      expect(e.beats.single.dots, 2);
+      expect(e.beats.single.length, closeTo(0.4375, 1e-9), reason: 'Viertel × 1¾');
+      final b = e.beats.single;
+      expect(TabBeat.fromJson(b.toJson()), b);
+      expect(TabBeat.fromJson(b.toJson()).dots, 2);
+      e.toggleDot();
+      expect(e.beats.single.dots, 0);
+      e.setDots(2);
+      expect(e.beats.single.dots, 2);
+      expect(e.beats.single.copyWith(dotted: false).doubleDot, isFalse, reason: 'ohne Punkt kein zweiter');
+      expect(const TabBeat(doubleDot: true).length, 0.25, reason: 'zweiter Punkt nur zusammen mit dem ersten');
+    });
+
   });
 }

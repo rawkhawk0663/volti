@@ -53,6 +53,7 @@ class TabBeat {
     this.frets = const {},
     this.value = 4,
     this.dotted = false,
+    this.doubleDot = false,
     this.bar = false,
     this.bends = const {},
     this.slides = const {},
@@ -75,6 +76,7 @@ class TabBeat {
     : frets = const {},
       value = 4,
       dotted = false,
+      doubleDot = false,
       bar = true,
       bends = const {},
       slides = const {},
@@ -169,6 +171,12 @@ class TabBeat {
   final int value;
   final bool dotted;
 
+  /// Doppelt punktiert (nur zusammen mit [dotted]): dauert 1¾-mal so lang.
+  final bool doubleDot;
+
+  /// Zahl der Punkte (0, 1 oder 2).
+  int get dots => dotted ? (doubleDot ? 2 : 1) : 0;
+
   /// Taktstrich statt Schlag.
   final bool bar;
 
@@ -179,12 +187,13 @@ class TabBeat {
   double get length => bar ? 0 : nominal * (triplet ? 2 / 3 : 1);
 
   /// Dauer ohne Triole (wie geschrieben).
-  double get nominal => bar ? 0 : (1 / value) * (dotted ? 1.5 : 1);
+  double get nominal => bar ? 0 : (1 / value) * (dotted ? (doubleDot ? 1.75 : 1.5) : 1);
 
   TabBeat copyWith({
     Map<int, int>? frets,
     int? value,
     bool? dotted,
+    bool? doubleDot,
     Map<int, int>? bends,
     Set<int>? slides,
     Map<int, int>? slideIns,
@@ -205,6 +214,7 @@ class TabBeat {
       frets: f,
       value: value ?? this.value,
       dotted: dotted ?? this.dotted,
+      doubleDot: (dotted ?? this.dotted) && (doubleDot ?? this.doubleDot),
       bar: bar,
       // Eine Ghost Note hat keine Tonhöhe, also kein Bending.
       bends: {
@@ -260,6 +270,7 @@ class TabBeat {
           if (frets.isNotEmpty) 'f': {for (final e in frets.entries) '${e.key}': e.value},
           'v': value,
           if (dotted) 'dot': true,
+          if (dotted && doubleDot) 'dot2': true,
           if (bends.isNotEmpty) 'bend': {for (final e in bends.entries) '${e.key}': e.value},
           if (slides.isNotEmpty) 'slide': (slides.toList()..sort()),
           if (slideIns.isNotEmpty) 'sIn': {for (final e in slideIns.entries) '${e.key}': e.value},
@@ -302,6 +313,7 @@ class TabBeat {
       frets: frets,
       value: tabValues.contains(v) ? v : 4,
       dotted: j['dot'] == true,
+      doubleDot: j['dot'] == true && j['dot2'] == true,
       bends: {
         for (final e in strings(j['bend'] as Map<String, dynamic>? ?? const {}).entries)
           if ((frets[e.key] ?? ghostNote) >= 0 && tabBends.contains(e.value)) e.key: e.value,
@@ -348,6 +360,7 @@ class TabBeat {
       other.meter == meter &&
       other.value == value &&
       other.dotted == dotted &&
+      other.doubleDot == doubleDot &&
       _sameMap(other.frets, frets) &&
       _sameMap(other.bends, bends) &&
       other.slides.length == slides.length &&
@@ -367,13 +380,14 @@ class TabBeat {
       other.triplet == triplet;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     bar,
     at,
     kind,
     meter,
     value,
     dotted,
+    doubleDot,
     Object.hashAllUnordered(frets.entries.map((e) => e.key * 100 + e.value)),
     Object.hashAllUnordered(bends.entries.map((e) => e.key * 100 + e.value)),
     Object.hashAllUnordered(slides),
@@ -387,7 +401,7 @@ class TabBeat {
     accent,
     palmMute,
     triplet,
-  );
+  ]);
 }
 
 /// Taktarten zur Auswahl.
@@ -1004,9 +1018,13 @@ class TabEditor {
     _resetDigits();
   }
 
-  void toggleDot() {
+  /// Punkte durchschalten: ohne → punktiert → doppelt punktiert → ohne.
+  void toggleDot() => setDots((current?.dots ?? 0) == 2 ? 0 : (current?.dots ?? 0) + 1);
+
+  /// Zahl der Punkte (0–2) für den Schlag unter dem Cursor.
+  void setDots(int n) {
     final b = _ensureBeat();
-    beats[beat] = b.copyWith(dotted: !b.dotted);
+    beats[beat] = b.copyWith(dotted: n >= 1, doubleDot: n >= 2);
     _resetDigits();
   }
 
