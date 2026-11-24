@@ -546,6 +546,11 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
     ..strokeCap = StrokeCap.round
     ..strokeWidth = math.max(0.9, lineWidth * 1.4);
   final held = tieTargets(t.beats);
+  // Grund hinter kleinen Buchstaben (H/P): Hintergrund bzw. Weiss.
+  final knockout = Paint()
+    ..color = t.background != TabBlock.noBackground
+        ? Color.alphaBlend(Color(t.background), const Color(0xFFFFFFFF))
+        : const Color(0xFFFFFFFF);
   for (var i = 0; i < t.beats.length; i++) {
     final b = t.beats[i];
     if (b.bar) continue;
@@ -600,6 +605,30 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
           ..quadraticBezierTo((x1 + x2) / 2, y + g * 0.6, x2, y),
         line,
       );
+    }
+    // Hammer-on / Pull-off: Bogen über den Zahlen zur nächsten Note auf
+    // derselben Saite, darüber klein „H“ (höher) bzw. „P“ (tiefer).
+    for (final st in b.legato) {
+      final fret = b.frets[st];
+      if (fret == null) continue;
+      final j = _nextOnString(t.beats, i, st);
+      final y = l.lineY(st) - g * 0.5;
+      final x1 = cx + g * 0.15;
+      final x2 = j != null ? l.xs[j] - g * 0.15 : x1 + g * 1.4;
+      final top = y - g * 0.55;
+      canvas.drawPath(
+        Path()
+          ..moveTo(x1, y)
+          ..quadraticBezierTo((x1 + x2) / 2, top - g * 0.25, x2, y),
+        line,
+      );
+      final to = j == null ? null : t.beats[j].frets[st];
+      if (to == null || to == ghostNote || fret == ghostNote || to == fret) continue;
+      final p = _text(to > fret ? 'H' : 'P', g * 0.8, color, bold: true);
+      final at = Offset((x1 + x2) / 2 - p.width / 2, top - g * 0.05 - p.height);
+      canvas.drawRect((at & p.size).inflate(g * 0.06), knockout);
+      p.paint(canvas, at);
+      p.dispose();
     }
     for (final st in b.slides) {
       final fret = b.frets[st];

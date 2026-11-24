@@ -1785,6 +1785,14 @@ class _TabKeypad extends StatelessWidget {
                     tooltip: tip(TabAction.tieIn),
                     width: 50,
                   ),
+                  // Hammer-on / Pull-off (Bogen über den Zahlen).
+                  key(
+                    const Text('H/P', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    () => session.perform(TabAction.legato),
+                    selected: cur?.legato.contains(session.string) ?? false,
+                    tooltip: tip(TabAction.legato),
+                    width: 44,
+                  ),
                   key(
                     Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A2)),
                     () => session.perform(TabAction.staccato),
@@ -1848,6 +1856,27 @@ class _TabKeypad extends StatelessWidget {
                   ],
                 );
               },
+            ),
+            // Transponieren: Markiertes (sonst der Schlag unter dem Cursor)
+            // um einen Halbton tiefer bzw. höher.
+            _Label(tr('Transponieren', 'Transpose')),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                key(
+                  Text(tr('−½ Ton', '−½ tone'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  () => session.perform(TabAction.transposeDown),
+                  tooltip: tip(TabAction.transposeDown),
+                  width: 72,
+                ),
+                key(
+                  Text(tr('+½ Ton', '+½ tone'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  () => session.perform(TabAction.transposeUp),
+                  tooltip: tip(TabAction.transposeUp),
+                  width: 72,
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             Wrap(

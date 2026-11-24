@@ -60,6 +60,7 @@ class TabBeat {
     this.slideOuts = const {},
     this.ties = const {},
     this.tieIns = const {},
+    this.legato = const {},
     this.staccato = false,
     this.accent = false,
     this.palmMute = false,
@@ -80,6 +81,7 @@ class TabBeat {
       slideOuts = const {},
       ties = const {},
       tieIns = const {},
+      legato = const {},
       staccato = false,
       accent = false,
       palmMute = false,
@@ -141,6 +143,11 @@ class TabBeat {
   /// Haltebogen über einen Zeilenumbruch.
   final Set<int> tieIns;
 
+  /// Hammer-on bzw. Pull-off zur nächsten Note auf derselben Saite (Bogen
+  /// über den Zahlen). Ob „H“ oder „P“ dabeisteht, ergibt sich aus den Bünden:
+  /// höher = Hammer-on, tiefer = Pull-off.
+  final Set<int> legato;
+
   /// Staccato (Punkt über dem Schlag) und Akzent („>“).
   final bool staccato, accent;
 
@@ -177,6 +184,7 @@ class TabBeat {
     Map<int, int>? slideOuts,
     Set<int>? ties,
     Set<int>? tieIns,
+    Set<int>? legato,
     bool? staccato,
     bool? accent,
     bool? palmMute,
@@ -211,6 +219,10 @@ class TabBeat {
         for (final st in ties ?? this.ties)
           if (f.containsKey(st)) st,
       },
+      legato: {
+        for (final st in legato ?? this.legato)
+          if (f.containsKey(st)) st,
+      },
       tieIns: {
         for (final st in tieIns ?? this.tieIns)
           if (f.containsKey(st)) st,
@@ -241,6 +253,7 @@ class TabBeat {
           if (slideOuts.isNotEmpty) 'sOut': {for (final e in slideOuts.entries) '${e.key}': e.value},
           if (ties.isNotEmpty) 'tie': (ties.toList()..sort()),
           if (tieIns.isNotEmpty) 'tieIn': (tieIns.toList()..sort()),
+          if (legato.isNotEmpty) 'hp': (legato.toList()..sort()),
           if (staccato) 'stacc': true,
           if (accent) 'acc': true,
           if (palmMute) 'pm': true,
@@ -289,6 +302,10 @@ class TabBeat {
         for (final st in j['tie'] as List<dynamic>? ?? const [])
           if (st is int && frets.containsKey(st)) st,
       },
+      legato: {
+        for (final st in j['hp'] as List<dynamic>? ?? const [])
+          if (st is int && frets.containsKey(st)) st,
+      },
       tieIns: {
         for (final st in j['tieIn'] as List<dynamic>? ?? const [])
           if (st is int && frets.containsKey(st)) st,
@@ -323,6 +340,8 @@ class TabBeat {
       other.ties.containsAll(ties) &&
       other.tieIns.length == tieIns.length &&
       other.tieIns.containsAll(tieIns) &&
+      other.legato.length == legato.length &&
+      other.legato.containsAll(legato) &&
       other.staccato == staccato &&
       other.accent == accent &&
       other.palmMute == palmMute &&
@@ -343,6 +362,7 @@ class TabBeat {
     Object.hashAllUnordered(slideOuts.entries.map((e) => e.key * 10 + e.value)),
     Object.hashAllUnordered(ties),
     Object.hashAllUnordered(tieIns),
+    Object.hashAllUnordered(legato),
     staccato,
     accent,
     palmMute,
@@ -616,6 +636,49 @@ class TabBlock {
     deleted: j['deleted'] == true,
     layer: j['layer'] as String?,
     meter: meterLength(j['meter'] as String?) == null ? null : j['meter'] as String,
+  );
+}
+
+/// Halbtöne zwischen Saite [s] + 1 (tiefer) und Saite [s] in
+/// Standardstimmung (e-H-G-D-A-E): zwischen G und H vier, sonst fünf.
+int _stringStep(int s) => s == 1 ? 4 : 5;
+
+/// Ein Schlag um [semitones] Halbtöne verschoben, oder null, wenn ein Ton
+/// nicht unterzubringen ist. Techniken wandern mit ihrer Note mit.
+TabBeat? transposeBeat(TabBeat b, int semitones) {
+  final target = <int, (int, int)>{}; // alte Saite → (neue Saite, Bund)
+  for (final e in b.frets.entries) {
+    if (e.value == ghostNote) {
+      target[e.key] = (e.key, ghostNote);
+      continue;
+    }
+    var st = e.key, fret = e.value + semitones;
+    // Zu tief: auf die tiefere Saite (grösserer Index), zu hoch: auf die höhere.
+    while (fret < 0 && st < TabBlock.strings - 1) {
+      fret += _stringStep(st);
+      st++;
+    }
+    while (fret > TabEditor.maxFret && st > 0) {
+      st--;
+      fret -= _stringStep(st);
+    }
+    if (fret < 0 || fret > TabEditor.maxFret) return null;
+    target[e.key] = (st, fret);
+  }
+  final used = target.values.map((v) => v.$1).toList();
+  if (used.toSet().length != used.length) return null; // zwei Töne auf einer Saite
+  int to(int st) => target[st]!.$1;
+  Map<int, int> remap(Map<int, int> m) => {for (final e in m.entries) if (target.containsKey(e.key)) to(e.key): e.value};
+  Set<int> remapSet(Set<int> m) => {for (final st in m) if (target.containsKey(st)) to(st)};
+  return b.copyWith(
+    frets: {for (final v in target.values) v.$1: v.$2},
+    bends: remap(b.bends),
+    slides: remapSet(b.slides),
+    slideIns: remap(b.slideIns),
+    slideOuts: remap(b.slideOuts),
+    ties: remapSet(b.ties),
+    tieIns: remapSet(b.tieIns),
+    legato: remapSet(b.legato),
   );
 }
 
@@ -1008,7 +1071,42 @@ class TabEditor {
     _resetDigits();
   }
 
-  /// Haltebogen von davor (der Ton ist von einer früheren Note gehalten,
+  /// Hammer-on bzw. Pull-off zur nächsten Note auf dieser Saite ein/aus.
+  void toggleLegato() {
+    final b = current;
+    if (b == null || b.bar) return;
+    final fret = b.frets[string];
+    if (fret == null || fret == ghostNote) return;
+    final l = {...b.legato};
+    l.contains(string) ? l.remove(string) : l.add(string);
+    beats[beat] = b.copyWith(legato: l);
+    _resetDigits();
+  }
+
+  /// Transponieren: Bünde der markierten Schläge (ohne Markierung: des
+  /// Schlags unter dem Cursor) um [semitones] Halbtöne verschieben. Geht ein
+  /// Ton unter Bund 0 bzw. über [maxFret], wandert er auf die tiefere bzw.
+  /// höhere Nachbarsaite (Standardstimmung), wenn sie in diesem Schlag frei
+  /// ist; sonst bleibt der ganze Schlag, wie er ist. Ghost Notes bleiben.
+  /// Gibt die Zahl der Schläge zurück, die nicht passten.
+  int transpose(int semitones) {
+    if (semitones == 0) return 0;
+    final sel = selection ?? (beat, beat);
+    var failed = 0;
+    for (var i = sel.$1; i <= sel.$2 && i < beats.length; i++) {
+      final b = beats[i];
+      if (b.bar || b.frets.isEmpty) continue;
+      final moved = transposeBeat(b, semitones);
+      if (moved == null) {
+        failed++;
+      } else {
+        beats[i] = moved;
+      }
+    }
+    _resetDigits();
+    return failed;
+  }
+
   /// z. B. über einen Zeilenumbruch) auf dieser Saite ein/aus.
   void toggleTieIn() {
     final b = current;

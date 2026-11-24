@@ -191,6 +191,12 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.toggleTie());
       case TabAction.tieIn:
         _edit((e) => e.toggleTieIn());
+      case TabAction.legato:
+        _edit((e) => e.toggleLegato());
+      case TabAction.transposeUp:
+        _edit((e) => e.transpose(1));
+      case TabAction.transposeDown:
+        _edit((e) => e.transpose(-1));
       case TabAction.staccato:
         _edit((e) => e.toggleStaccato());
       case TabAction.accent:

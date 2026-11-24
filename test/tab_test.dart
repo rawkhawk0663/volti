@@ -937,4 +937,73 @@ void main() {
       ink.dispose();
     });
   });
+
+  group('Hammer-on, Pull-off und Transponieren', () {
+    test('Hammer-on/Pull-off: ein/aus, nur mit Bundzahl, gespeichert', () {
+      final e = TabEditor([
+        const TabBeat(frets: {2: 5}),
+        const TabBeat(frets: {2: 7}),
+      ]);
+      e.string = 2;
+      e.toggleLegato();
+      expect(e.beats[0].legato, {2});
+      expect(TabBeat.fromJson(e.beats[0].toJson()), e.beats[0]);
+      expect(e.beats[0].copyWith(frets: const {}).legato, isEmpty, reason: 'ohne Bundzahl kein Bogen');
+      e.toggleLegato();
+      expect(e.beats[0].legato, isEmpty);
+      e.string = 0;
+      e.toggleLegato();
+      expect(e.beats[0].legato, isEmpty, reason: 'auf einer leeren Saite nichts');
+    });
+
+    test('Transponieren: Markiertes um Halbtöne, Techniken wandern mit', () {
+      final e = TabEditor([
+        const TabBeat(frets: {0: 3, 1: 5}, bends: {1: 2}, legato: {0}),
+        const TabBeat.bar(),
+        const TabBeat(frets: {2: 7}),
+        const TabBeat(frets: {5: ghostNote}),
+      ]);
+      e.anchor = 0;
+      e.beat = 3;
+      expect(e.transpose(2), 0);
+      expect(e.beats[0].frets, {0: 5, 1: 7});
+      expect(e.beats[0].bends, {1: 2});
+      expect(e.beats[0].legato, {0});
+      expect(e.beats[2].frets, {2: 9});
+      expect(e.beats[3].frets, {5: ghostNote}, reason: 'Ghost Notes bleiben');
+      expect(e.beats[1].bar, isTrue);
+      // Ohne Markierung nur der Schlag unter dem Cursor
+      e.anchor = null;
+      e.beat = 2;
+      e.transpose(-1);
+      expect(e.beats[2].frets, {2: 8});
+      expect(e.beats[0].frets, {0: 5, 1: 7});
+    });
+
+    test('Transponieren über die Saite hinaus: auf die Nachbarsaite, sonst unverändert', () {
+      // H-Saite leer (1: 0) einen Halbton tiefer = G-Saite Bund 3
+      expect(transposeBeat(const TabBeat(frets: {1: 0}), -1)!.frets, {2: 3});
+      // e-Saite leer zwei Halbtöne tiefer = H-Saite Bund 3
+      expect(transposeBeat(const TabBeat(frets: {0: 0}), -2)!.frets, {1: 3});
+      // Bund 24 auf der D-Saite höher = G-Saite Bund 20
+      expect(transposeBeat(const TabBeat(frets: {3: 24}), 1)!.frets, {2: 20});
+      // Bending wandert mit der Note auf die neue Saite
+      expect(transposeBeat(const TabBeat(frets: {1: 0}, bends: {1: 4}), -1)!.bends, {2: 4});
+      // Ziel-Saite besetzt: passt nicht
+      expect(transposeBeat(const TabBeat(frets: {1: 0, 2: 5}), -1), isNull);
+      // Tiefe E-Saite leer noch tiefer: geht nicht
+      expect(transposeBeat(const TabBeat(frets: {5: 0}), -1), isNull);
+      final e = TabEditor([const TabBeat(frets: {5: 0})]);
+      expect(e.transpose(-1), 1, reason: 'meldet, was nicht passte');
+      expect(e.beats.single.frets, {5: 0}, reason: 'bleibt dann, wie er war');
+    });
+
+    test('Tasten: Umschalt+H, Strg+↑ und Strg+↓', () {
+      final d = TabKeymap.defaults;
+      expect(d.actionFor(LogicalKeyboardKey.keyH, ctrl: false, shift: true, alt: false), TabAction.legato);
+      expect(d.actionFor(LogicalKeyboardKey.arrowUp, ctrl: true, shift: false, alt: false), TabAction.transposeUp);
+      expect(d.actionFor(LogicalKeyboardKey.arrowDown, ctrl: true, shift: false, alt: false), TabAction.transposeDown);
+      expect(d.actionFor(LogicalKeyboardKey.keyH, ctrl: false, shift: false, alt: false), TabAction.half);
+    });
+  });
 }

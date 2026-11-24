@@ -29,6 +29,9 @@ enum TabAction {
   bend,
   tie,
   tieIn,
+  legato,
+  transposeUp,
+  transposeDown,
   staccato,
   accent,
   palmMute,
@@ -69,6 +72,18 @@ enum TabAction {
     tieIn => tr(
       'Haltebogen von davor ein/aus (z. B. über einen Zeilenumbruch)',
       'Tie from before on/off (e.g. across a line break)',
+    ),
+    legato => tr(
+      'Hammer-on / Pull-off zur nächsten Note ein/aus',
+      'Hammer-on / pull-off to the next note on/off',
+    ),
+    transposeUp => tr(
+      'Einen Halbton höher (Markiertes, sonst der Schlag unter dem Cursor)',
+      'One semitone up (the selection, otherwise the beat under the cursor)',
+    ),
+    transposeDown => tr(
+      'Einen Halbton tiefer (Markiertes, sonst der Schlag unter dem Cursor)',
+      'One semitone down (the selection, otherwise the beat under the cursor)',
     ),
     staccato => tr('Staccato ein/aus', 'Staccato on/off'),
     accent => tr('Akzent ein/aus', 'Accent on/off'),
@@ -191,6 +206,9 @@ class TabKeymap {
     TabAction.bend: const KeyBinding(LogicalKeyboardKey.keyB),
     TabAction.tie: const KeyBinding(LogicalKeyboardKey.keyO),
     TabAction.tieIn: const KeyBinding(LogicalKeyboardKey.keyO, shift: true),
+    TabAction.legato: const KeyBinding(LogicalKeyboardKey.keyH, shift: true),
+    TabAction.transposeUp: const KeyBinding(LogicalKeyboardKey.arrowUp, ctrl: true),
+    TabAction.transposeDown: const KeyBinding(LogicalKeyboardKey.arrowDown, ctrl: true),
     TabAction.staccato: const KeyBinding(LogicalKeyboardKey.keyD),
     TabAction.accent: const KeyBinding(LogicalKeyboardKey.keyX),
     TabAction.palmMute: const KeyBinding(LogicalKeyboardKey.keyM),
