@@ -13,6 +13,7 @@ import 'package:volti/core/teaching/todo.dart';
 import 'package:volti/features/teaching/absence_pdf.dart';
 import 'package:volti/features/teaching/dashboard.dart';
 import 'package:volti/features/teaching/homework_share.dart';
+import 'package:volti/features/teaching/student_dialog.dart' show playingSinceText, instrumentLabel;
 import 'package:volti/features/teaching/teaching_view.dart' show upcomingBirthdays;
 import 'package:volti/features/teaching/timetable.dart';
 import 'package:volti/features/viewer/ink_controller.dart';
@@ -475,5 +476,26 @@ void main() {
     expect(AbsenceExportOptions.decode(opt.encode()).byName, isTrue);
     final bytes = await buildAbsencePdf(rows, cal, cal.semesterFor(DateTime(2026, 11, 17)), options: opt);
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+  });
+
+  test('Spielt seit: Dauer in Jahren und Monaten, gespeichert, angezeigt', () {
+    final now = DateTime(2026, 11, 25);
+    expect(playingFor(DateTime(2024, 8, 15), now), (years: 2, months: 3));
+    expect(playingFor(DateTime(2024, 11, 26), now), (years: 1, months: 11), reason: 'der Tag zählt mit');
+    expect(playingFor(DateTime(2026, 11, 3), now), (years: 0, months: 0));
+    expect(playingFor(DateTime(2027, 1, 1), now), (years: 0, months: 0), reason: 'nie negativ');
+    expect(playingSinceText(DateTime(2024, 8, 15), now), 'seit 2 Jahren und 3 Monaten');
+    expect(playingSinceText(DateTime(2025, 11, 1), now), 'seit 1 Jahr');
+    expect(playingSinceText(DateTime(2026, 10, 1), now), 'seit 1 Monat');
+    expect(playingSinceText(DateTime(2026, 11, 20), now), 'seit diesem Monat');
+    final s = Student.create('Mia')
+      ..instrument = 'E-Gitarre'
+      ..playingSince = DateTime(2024, 8, 15);
+    final back = Student.fromJson(s.toJson());
+    expect(back.playingSince, DateTime(2024, 8, 15));
+    expect(instrumentLabel(back, now), 'E-Gitarre seit 2 Jahren und 3 Monaten');
+    expect(instrumentLabel(back..instrument = '', now), 'spielt seit 2 Jahren und 3 Monaten');
+    expect(instrumentLabel(Student.create('Noah')..instrument = 'Bass', now), 'Bass');
+    expect(Student.fromJson(Student.create('Lea').toJson()).playingSince, isNull);
   });
 }

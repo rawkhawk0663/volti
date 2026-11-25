@@ -35,6 +35,7 @@ class Student {
     this.notes = '',
     this.archived = false,
     this.birthday,
+    this.playingSince,
     this.level,
     this.levelYear,
     this.track,
@@ -77,6 +78,9 @@ class Student {
 
   /// Geburtstag (null = unbekannt).
   DateTime? birthday;
+
+  /// Seit wann die Person das Instrument spielt (für „spielt seit …“).
+  DateTime? playingSince;
 
   /// Klassenstufe beim Eintragen (z. B. „P3“, „S1“) und das Schuljahr dazu.
   /// Die heutige Stufe berechnet `SchoolLevel.current` (steigt am 15. Juli).
@@ -178,6 +182,9 @@ class Student {
     if (birthday != null)
       'birthday':
           '${birthday!.year.toString().padLeft(4, '0')}-${birthday!.month.toString().padLeft(2, '0')}-${birthday!.day.toString().padLeft(2, '0')}',
+    if (playingSince != null)
+      'since':
+          '${playingSince!.year.toString().padLeft(4, '0')}-${playingSince!.month.toString().padLeft(2, '0')}-${playingSince!.day.toString().padLeft(2, '0')}',
     'level': ?level,
     'levelYear': ?levelYear,
     'track': ?track,
@@ -202,6 +209,7 @@ class Student {
     notes: j['notes'] as String? ?? '',
     archived: j['archived'] as bool? ?? false,
     birthday: _parseDay(j['birthday']),
+    playingSince: _parseDay(j['since']),
     level: j['level'] as String?,
     levelYear: (j['levelYear'] as num?)?.toInt(),
     track: j['track'] as String?,

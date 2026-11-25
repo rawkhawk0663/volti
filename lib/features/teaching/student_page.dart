@@ -652,7 +652,7 @@ class _StudentPageState extends State<StudentPage> {
       if (s.weekday != null)
         s.time == null ? weekdayName(s.weekday!) : '${weekdayName(s.weekday!)}, ${s.time} – ${s.endTime}',
       if (s.weekday != null || s.time != null) tr('${s.duration} Minuten', '${s.duration} minutes'),
-      if (s.instrument.isNotEmpty) s.instrument,
+      ?instrumentLabel(s),
       ?levelLabel(s.currentLevel()),
       if (s.birthday != null)
         tr('${ageOn(s.birthday!, DateTime.now())} Jahre', '${ageOn(s.birthday!, DateTime.now())} years'),

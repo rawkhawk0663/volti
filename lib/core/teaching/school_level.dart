@@ -61,6 +61,14 @@ int ageOn(DateTime birthday, DateTime now) {
   return age;
 }
 
+/// Wie lange jemand schon spielt (ganze Jahre und Monate seit [since]).
+({int years, int months}) playingFor(DateTime since, DateTime now) {
+  var total = (now.year - since.year) * 12 + now.month - since.month;
+  if (now.day < since.day) total--;
+  if (total < 0) total = 0;
+  return (years: total ~/ 12, months: total % 12);
+}
+
 /// Nächster Geburtstag ab [now] (heute zählt mit).
 DateTime nextBirthday(DateTime birthday, DateTime now) {
   final today = DateTime(now.year, now.month, now.day);

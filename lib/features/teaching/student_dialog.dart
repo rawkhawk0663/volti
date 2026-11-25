@@ -18,13 +18,33 @@ String weekdayName(int d) => switch (d) {
   _ => tr('Sonntag', 'Sunday'),
 };
 
+/// „seit 2 Jahren und 3 Monaten“ (wie lange jemand schon spielt).
+String playingSinceText(DateTime since, [DateTime? now]) {
+  final (:years, :months) = playingFor(since, now ?? DateTime.now());
+  final y = tr('$years ${years == 1 ? 'Jahr' : 'Jahren'}', '$years ${years == 1 ? 'year' : 'years'}');
+  final m = tr('$months ${months == 1 ? 'Monat' : 'Monaten'}', '$months ${months == 1 ? 'month' : 'months'}');
+  if (years == 0 && months == 0) return tr('seit diesem Monat', 'since this month');
+  if (years == 0) return tr('seit $m', 'for $m');
+  if (months == 0) return tr('seit $y', 'for $y');
+  return tr('seit $y und $m', 'for $y and $m');
+}
+
+/// Instrument mit Spieldauer: „E-Gitarre seit 2 Jahren“ (ohne Instrument
+/// „spielt seit …“), null = nichts bekannt.
+String? instrumentLabel(Student s, [DateTime? now]) {
+  final since = s.playingSince;
+  if (since == null) return s.instrument.isEmpty ? null : s.instrument;
+  final d = playingSinceText(since, now);
+  return s.instrument.isEmpty ? tr('spielt $d', 'playing $d') : '${s.instrument} $d';
+}
+
 /// „Dienstag, 11:25–11:50 · 25 Minuten · Gitarre“
 String studentSummary(Student s) {
   final parts = <String>[
     if (s.weekday != null)
       s.time == null ? weekdayName(s.weekday!) : '${weekdayName(s.weekday!)}, ${s.time}–${s.endTime}',
     if (s.weekday != null || s.time != null) tr('${s.duration} Minuten', '${s.duration} minutes'),
-    if (s.instrument.isNotEmpty) s.instrument,
+    ?instrumentLabel(s),
     if (s.place.isNotEmpty) s.place,
     ?levelLabel(s.currentLevel()),
     if (s.birthday != null)
@@ -102,6 +122,7 @@ class _StudentDialogState extends State<_StudentDialog> {
   late int _duration = s.duration;
   late final _durationText = TextEditingController(text: '${s.duration}');
   late DateTime? _birthday = s.birthday;
+  late DateTime? _since = s.playingSince;
 
   /// Heutige Klassenstufe (Kürzel), null = keine Angabe.
   late String? _level = s.currentLevel();
@@ -135,6 +156,7 @@ class _StudentDialogState extends State<_StudentDialog> {
       ..time = _time == null ? null : _fmt(_time!)
       ..duration = _duration
       ..birthday = _birthday
+      ..playingSince = _since
       ..touch();
     // Klassenstufe: die heutige mit dem heutigen Schuljahr speichern.
     final level = _level;
@@ -173,6 +195,43 @@ class _StudentDialogState extends State<_StudentDialog> {
               ),
               const SizedBox(height: 8),
               TextField(controller: _instrument, decoration: deco(tr('Instrument', 'Instrument'))),
+              const SizedBox(height: 8),
+              // Seit wann gespielt wird: daraus wird „seit 2 Jahren und 3 Monaten“.
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.event_outlined, size: 18),
+                    label: Text(
+                      _since == null
+                          ? tr('Spielt seit … (Datum eintragen)', 'Playing since … (add date)')
+                          : tr('Spielt seit ${longDate(_since!)}', 'Playing since ${longDate(_since!)}'),
+                    ),
+                    onPressed: () async {
+                      final d = await showDatePicker(
+                        context: context,
+                        initialDate: _since ?? DateTime.now(),
+                        firstDate: DateTime(1920),
+                        lastDate: DateTime.now(),
+                        initialDatePickerMode: DatePickerMode.year,
+                      );
+                      if (d != null) setState(() => _since = d);
+                    },
+                  ),
+                  if (_since != null) ...[
+                    Text(
+                      playingSinceText(_since!),
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    IconButton(
+                      tooltip: tr('Entfernen', 'Remove'),
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => setState(() => _since = null),
+                    ),
+                  ],
+                ],
+              ),
               const SizedBox(height: 20),
               Text(tr('Unterricht', 'Lessons'), style: theme.textTheme.labelLarge),
               const SizedBox(height: 8),
