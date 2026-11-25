@@ -98,6 +98,9 @@ class TabBeat {
   /// nächsten Wechsel. null = wie davor. Steht nach dem Taktstrich.
   final String? meter;
 
+  /// Gleicher Eintrag mit von Hand gesetzter Lage [at] (siehe [at]).
+  TabBeat withAt(double? at) => bar ? TabBeat.bar(at: at, kind: kind, meter: meter) : copyWith(at: at);
+
   /// Gleicher Eintrag ohne von Hand gesetzte Lage (wieder automatisch).
   TabBeat get withoutAt =>
       at == null ? this : (bar ? TabBeat.bar(kind: kind, meter: meter) : copyWith(at: null));
@@ -862,6 +865,14 @@ class TabEditor {
   /// danach hinter dem Eingefügten.
   void paste(List<TabBeat> clip) {
     if (clip.isEmpty) return;
+    // Ohne Kenntnis der Anordnung: von Hand gesetzte Lagen wieder automatisch
+    // (die Notenansicht fügt mit Anordnung ein, siehe TabSession.paste).
+    insertPasted(preparePaste(), [for (final b in clip) b.withoutAt]);
+  }
+
+  /// Einfügen vorbereiten: eine Markierung wird ersetzt (bzw. bei einzelnen
+  /// markierten Saiten wird davor eingefügt). Gibt die Einfügestelle zurück.
+  int preparePaste() {
     if (_partialStrings) {
       // Nur Noten markiert: nichts ersetzen, vor dem markierten Bereich einfügen.
       beat = selection?.$1 ?? beat;
@@ -870,11 +881,13 @@ class TabEditor {
     } else {
       deleteSelection();
     }
-    final at = beat.clamp(0, beats.length);
-    // Von Hand gesetzte Lagen gelten im Takt, aus dem kopiert wurde – hier
-    // wieder automatisch.
-    beats.insertAll(at, [for (final b in clip) b.withoutAt]);
-    beat = at + clip.length;
+    return beat.clamp(0, beats.length);
+  }
+
+  /// Einträge an der Stelle [at] einfügen, der Cursor steht danach dahinter.
+  void insertPasted(int at, List<TabBeat> items) {
+    beats.insertAll(at, items);
+    beat = at + items.length;
     _resetDigits();
   }
 

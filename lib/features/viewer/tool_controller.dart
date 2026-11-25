@@ -175,7 +175,7 @@ class ToolController extends ChangeNotifier {
 
   /// Kopierte Schläge einer Tabulatur (zum Einfügen, auch in einem anderen
   /// Stück). null = nichts kopiert.
-  List<TabBeat>? tabClip;
+  TabClip? tabClip;
 
   /// Tastenbelegung für Tabulaturen (nur auf diesem Gerät gemerkt, weil jede
   /// Tastatur anders ist).

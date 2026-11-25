@@ -893,7 +893,7 @@ void main() {
       await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await t.sendKeyEvent(LogicalKeyboardKey.keyC);
       await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      expect(tools.tabClip?.length, 2);
+      expect(tools.tabClip?.beats.length, 2);
       await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -1091,5 +1091,43 @@ void main() {
       expect(const TabBeat(doubleDot: true).length, 0.25, reason: 'zweiter Punkt nur zusammen mit dem ersten');
     });
 
+  });
+
+  test('Kopieren und Einfügen behält die Breite der Takte', () {
+    final dir = Directory.systemTemp.createTempSync('volti_tabclip');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final ink = InkController(pdfPath: '${dir.path}/x.pdf');
+    addTearDown(ink.dispose);
+    const q = TabBeat(frets: {0: 1});
+    const unit = Size(1000, 1000);
+    // Quelle: Taktstriche von Hand weit auseinander gezogen
+    final a = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
+    ink.updateTab(a, beats: const [q, q, TabBeat.bar(at: 0.3), q, q, TabBeat.bar(at: 0.65), q]);
+    final src = TabSession(ink: ink, id: a, page: 1)..selectRange(3, 5);
+    final clip = src.copy();
+    expect(clip.beats.length, 3);
+    final ls = layoutTab(ink.annotations.tab(a)!, unit);
+    final sourceWidth = ls.xs[5] - (ls.xs[3] - ls.slotWidths[3] / 2);
+
+    // Ziel: ein von Hand gesetzter Taktstrich hinter der Einfügestelle
+    final b = ink.addTab(page: 1, x: 0.05, y: 0.4, width: 0.9);
+    ink.updateTab(b, beats: const [q, q, TabBeat.bar(at: 0.3), q]);
+    final before = layoutTab(ink.annotations.tab(b)!, unit);
+    final dst = TabSession(ink: ink, id: b, page: 1)..moveTo(3, 0);
+    dst.paste(clip);
+    final t = ink.annotations.tab(b)!;
+    expect(t.beats.map((x) => x.bar).toList(), [false, false, true, false, false, true, false]);
+    final l = layoutTab(t, unit);
+    // Der eingefügte Takt ist gleich breit wie beim Kopieren
+    final pastedWidth = l.xs[5] - (l.xs[3] - l.slotWidths[3] / 2);
+    expect(pastedWidth, closeTo(sourceWidth, 1.0));
+    // Der Taktstrich vor der Einfügestelle bleibt, wo er war
+    expect(l.xs[2], closeTo(before.xs[2], 1e-6));
+    expect(t.beats[5].at, isNotNull, reason: 'von Hand verschobener Taktstrich bleibt von Hand');
+    // Von Taktstrich zu Taktstrich genau gleich breit
+    expect(l.xs[5] - l.xs[2], closeTo(ls.xs[5] - ls.xs[2], 0.5));
+    // Ohne Anordnung (nur der Editor): wieder automatisch
+    final e = TabEditor(const [q])..paste(clip.beats);
+    expect(e.beats.where((x) => x.bar).every((x) => x.at == null), isTrue);
   });
 }

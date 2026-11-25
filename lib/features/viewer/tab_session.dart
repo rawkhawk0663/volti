@@ -1,7 +1,11 @@
+import 'dart:math' as math;
+import 'dart:ui' show Size;
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/ink/tab_block.dart';
 import 'ink_controller.dart';
+import 'tab_paint.dart';
 import 'tab_keys.dart';
 
 /// Gerade wird in dieser Tabulatur geschrieben: Cursor und Änderungen.
@@ -125,12 +129,49 @@ class TabSession extends ChangeNotifier {
     });
   }
 
-  /// Kopieren: die markierten Einträge (ohne Markierung der unter dem Cursor).
-  List<TabBeat> copy() {
+  /// Grösse, mit der die Anordnung berechnet wird. Waagrecht hängt alles nur
+  /// von der Breite ab (Lagen sind Anteile), die Zahl selbst ist beliebig.
+  static const _unit = Size(1000, 1000);
+
+  /// Kopieren: die markierten Einträge (ohne Markierung der unter dem Cursor),
+  /// dazu die Anordnung, damit die Takte beim Einfügen gleich breit sind.
+  TabClip copy() {
     final b = block;
-    if (b == null) return const [];
+    if (b == null) return const TabClip([]);
     _editor.beats = [...b.beats];
-    return _editor.copySelection();
+    final beats = _editor.copySelection();
+    if (beats.isEmpty || b.beats.isEmpty) return TabClip(beats);
+    final sel = _editor.selection ?? (_editor.beat.clamp(0, b.beats.length - 1), _editor.beat.clamp(0, b.beats.length - 1));
+    if (sel.$2 - sel.$1 + 1 != beats.length) return TabClip(beats);
+    final l = layoutTab(b, _unit);
+    final g = l.gap;
+    final left = l.xs[sel.$1] - l.slotWidths[sel.$1] / 2;
+    final right = l.xs[sel.$2] + l.slotWidths[sel.$2] / 2;
+    // Abstand jedes Taktstrichs zum Taktstrich davor (bzw. zum Anfang der
+    // Zeile), in Linienabständen: So wird jeder Takt beim Einfügen gleich
+    // breit, auch in einer anderen Tabulatur.
+    var prev = l.contentStart;
+    for (var i = sel.$1 - 1; i >= 0; i--) {
+      if (b.beats[i].bar) {
+        prev = l.xs[i];
+        break;
+      }
+    }
+    final steps = <double?>[];
+    for (var i = sel.$1; i <= sel.$2; i++) {
+      if (b.beats[i].bar) {
+        steps.add((l.xs[i] - prev) / g);
+        prev = l.xs[i];
+      } else {
+        steps.add(null);
+      }
+    }
+    return TabClip(
+      beats,
+      barSteps: steps,
+      anchored: [for (var i = sel.$1; i <= sel.$2; i++) b.beats[i].at != null],
+      width: (right - left) / g,
+    );
   }
 
   void deleteSelection() {
@@ -138,9 +179,57 @@ class TabSession extends ChangeNotifier {
     _edit((e) => e.deleteSelection());
   }
 
-  void paste(List<TabBeat> clip) {
+  /// Einfügen mit der Anordnung des Kopierten: Von Hand verschobene
+  /// Taktstriche stehen im gleichen Abstand wie beim Kopieren, von Hand
+  /// verschobene Noten behalten ihre Lage im Takt. Verschobene Taktstriche
+  /// dahinter rücken um die eingefügte Breite nach rechts.
+  void paste(TabClip clip) {
     markMode = false;
-    _edit((e) => e.paste(clip));
+    if (clip.beats.isEmpty) return;
+    _edit((e) {
+      final b = block!;
+      // Wird eine Markierung ersetzt: ihre Stelle und Breite vor dem Löschen.
+      final ss = e.stringSelection;
+      final replaced = ss == null || (ss.$1 == 0 && ss.$2 == TabBlock.strings - 1) ? e.selection : null;
+      var replacedWidth = 0.0;
+      if (replaced != null) {
+        final before = layoutTab(b.copyWith(beats: e.beats), _unit);
+        replacedWidth =
+            before.xs[replaced.$2] +
+            before.slotWidths[replaced.$2] / 2 -
+            (before.xs[replaced.$1] - before.slotWidths[replaced.$1] / 2);
+      }
+      final at = e.preparePaste();
+      final l = layoutTab(b.copyWith(beats: e.beats), _unit);
+      final g = l.gap, span = l.contentEnd - l.contentStart;
+      final n = e.beats.length;
+      double frac(double x) => ((x - l.contentStart) / span).clamp(0.0, 1.0);
+      final shift = (clip.width * g - replacedWidth) / span;
+      for (var i = at; i < n; i++) {
+        final x = e.beats[i];
+        if (x.bar && x.at != null) e.beats[i] = x.withAt((x.at! + shift).clamp(0.0, 1.0));
+      }
+      // Taktstrich vor der Einfügestelle (bzw. Anfang der Zeile): von dort
+      // aus bekommt jeder eingefügte Takt seine Breite.
+      var prevX = l.contentStart;
+      for (var i = math.min(at, n) - 1; i >= 0; i--) {
+        if (e.beats[i].bar) {
+          prevX = l.xs[i];
+          break;
+        }
+      }
+      final items = <TabBeat>[];
+      for (final (k, x) in clip.beats.indexed) {
+        final step = clip.stepOf(k);
+        if (!x.bar || step == null) {
+          items.add(x.bar ? x.withoutAt : x);
+          continue;
+        }
+        prevX += step * g;
+        items.add(clip.isAnchored(k) ? x.withAt(frac(prevX)) : x.withoutAt);
+      }
+      e.insertPasted(at, items);
+    });
   }
 
   void digit(int d) => _edit((e) {
@@ -236,4 +325,27 @@ class TabSession extends ChangeNotifier {
     }
     return true;
   }
+}
+
+/// Kopierte Schläge einer Tabulatur mit ihrer Anordnung.
+class TabClip {
+  const TabClip(this.beats, {this.barSteps = const [], this.anchored = const [], this.width = 0});
+
+  final List<TabBeat> beats;
+
+  /// Pro Eintrag: bei einem Taktstrich sein Abstand zum Taktstrich davor
+  /// (in Linienabständen), sonst null.
+  final List<double?> barSteps;
+
+  /// Pro Eintrag: war der Taktstrich von Hand verschoben?
+  final List<bool> anchored;
+
+  /// Breite des Kopierten (in Linienabständen).
+  final double width;
+
+  bool get isEmpty => beats.isEmpty;
+  bool get isNotEmpty => beats.isNotEmpty;
+
+  double? stepOf(int i) => i < barSteps.length ? barSteps[i] : null;
+  bool isAnchored(int i) => i < anchored.length && anchored[i];
 }
