@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/ink/text_note.dart';
 import '../../app/theme.dart';
 import '../../core/ink/text_marks.dart';
+import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
 import 'rich_text.dart';
 import 'tool_controller.dart';
@@ -101,6 +102,13 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
   final _text = RichNoteController();
   final _focus = FocusNode();
 
+  /// Eigener Stil für dieses Feld (Nummer eines Hauses), sonst der des
+  /// Text-Werkzeugs.
+  TextStyleSetting? _override;
+  String? _hint;
+
+  TextStyleSetting get _style => _override ?? tools.textStyle;
+
   /// Verschieben: ID und aktuelle Verschiebung in Pixeln.
   String? _dragId;
   Offset _dragDelta = Offset.zero;
@@ -114,6 +122,18 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
     _focus.addListener(() {
       if (!_focus.hasFocus && _editAt != null) _commit();
     });
+    tools.textRequest.addListener(_onTextRequest);
+  }
+
+  /// Ein gerade aufgezogenes Haus möchte seine Nummer: Feld sofort öffnen.
+  void _onTextRequest() {
+    final r = tools.textRequest.value;
+    if (r == null || r.controller != c || r.page != widget.page) return;
+    tools.textRequest.value = null;
+    if (_editAt != null) _commit();
+    _override = r.style;
+    _hint = r.hint;
+    _startEditing(r.at);
   }
 
   @override
@@ -126,9 +146,10 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
   void dispose() {
     // Ungespeicherten Text noch übernehmen – erst nach dem Abbau, weil die
     // Anzeige währenddessen nicht verändert werden darf.
+    tools.textRequest.removeListener(_onTextRequest);
     final at = _editAt, id = _editId, text = _text.text, marks = _text.marks, page = widget.page, ctrl = c;
     if (tools.richText.value?.controller == _text) tools.richText.value = null;
-    final st = tools.textStyle;
+    final st = _style;
     if (at != null) {
       Future.microtask(() {
         if (ctrl.isDisposed) return;
@@ -206,7 +227,9 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
       _editId = null;
     });
     if (tools.richText.value?.controller == _text) tools.richText.value = null;
-    final st = tools.textStyle;
+    final st = _style;
+    _override = null;
+    _hint = null;
     if (id == null) {
       c.addText(
         page: widget.page,
@@ -244,6 +267,9 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
       if (bold) t.toggleBold();
       if (italic) t.toggleItalic();
       if (underline) t.toggleUnderline();
+    } else if ((bold || italic) && _override != null) {
+      final o = _override!;
+      setState(() => _override = o.copyWith(bold: bold ? !o.bold : null, italic: italic ? !o.italic : null));
     } else if (bold || italic) {
       tools.setTextStyle(st.copyWith(bold: bold ? !st.bold : null, italic: italic ? !st.italic : null));
     } else if (underline) {
@@ -255,6 +281,8 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
 
   void _cancel() {
     if (tools.richText.value?.controller == _text) tools.richText.value = null;
+    _override = null;
+    _hint = null;
     setState(() {
       _editAt = null;
       _editId = null;
@@ -344,7 +372,8 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
   Widget _buildEditor(Size size) {
     final at = _editAt!;
     // Stil aus dem Text-Werkzeug – Änderungen im Fenster sieht man sofort.
-    final st = tools.textStyle;
+    final st = _style;
+    final small = _override != null;
     final style = voltiTextStyle(
       font: st.font,
       bold: st.bold,
@@ -357,7 +386,10 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
       left: left,
       top: at.dy * size.height,
       child: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 140, maxWidth: (size.width - left).clamp(140, size.width)),
+        constraints: BoxConstraints(
+          minWidth: small ? 40 : 140,
+          maxWidth: (size.width - left).clamp(small ? 40 : 140, size.width),
+        ),
         child: IntrinsicWidth(
           child: CallbackShortcuts(
             bindings: {
@@ -381,7 +413,7 @@ class _TextNotesLayerState extends State<TextNotesLayer> {
                 isDense: true,
                 filled: true,
                 fillColor: st.background == TextNote.noBackground ? const Color(0xE6FFFFFF) : Color(st.background),
-                hintText: tr('Notiz …', 'Note …'),
+                hintText: _hint ?? tr('Notiz …', 'Note …'),
                 hintStyle: style.copyWith(color: const Color(0x66000000)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 border: OutlineInputBorder(

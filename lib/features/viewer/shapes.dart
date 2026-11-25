@@ -32,6 +32,23 @@ const kStaffLineWidth = 0.45;
 /// Öffnung von Crescendo/Decrescendo relativ zur Seitenbreite.
 const kHairpinOpening = 0.016;
 
+/// Höhe der Haken eines Hauses relativ zur Seitenbreite (≈ 5 mm auf A4).
+const kVoltaHeight = 0.024;
+
+/// Schriftgrösse der Nummer in einem Haus relativ zur Seitenbreite.
+const kVoltaTextSize = kVoltaHeight * 0.62;
+
+/// Ist das ein Haus (1., 2. … oder ohne Nummer)?
+bool isVolta(ShapeKind k) => k == ShapeKind.volta || k == ShapeKind.voltaOpen;
+
+/// Stelle (oben links, in Bildpunkten), an der die Nummer eines Hauses steht,
+/// das von [a] nach [b] gezogen wurde: gleich rechts vom linken Haken, knapp
+/// unter der Linie.
+Offset voltaLabelAt(Offset a, Offset b, double pageWidth) {
+  final h = pageWidth * kVoltaHeight;
+  return Offset(math.min(a.dx, b.dx) + h * 0.28, a.dy + h * 0.08);
+}
+
 /// Ein Linienzug einer Form.
 class ShapePiece {
   const ShapePiece(this.points, {this.closed = false, this.solid = false, this.widthFactor = 1});
@@ -64,7 +81,7 @@ List<ShapeKind> get offeredShapeKinds => [
 List<ShapePiece> shapeGeometry(ShapeKind kind, Offset a, Offset b, double strokePx, {double? pageWidth}) {
   kind = normalizeShapeKind(kind);
   // Gabeln liegen immer waagrecht (sie werden nie schräg gebraucht).
-  if (kind == ShapeKind.crescendo) b = Offset(b.dx, a.dy);
+  if (kind == ShapeKind.crescendo || isVolta(kind)) b = Offset(b.dx, a.dy);
   final d = b - a;
   final len = d.distance;
   if (len < 2) return const [];
@@ -134,6 +151,17 @@ List<ShapePiece> shapeGeometry(ShapeKind kind, Offset a, Offset b, double stroke
             Offset(a.dx, a.dy + down * height * i / (lines - 1)),
             Offset(b.dx, a.dy + down * height * i / (lines - 1)),
           ], widthFactor: kStaffLineWidth),
+      ];
+    case ShapeKind.volta:
+    case ShapeKind.voltaOpen:
+      // Haus: waagrechte Linie mit Haken nach unten am Anfang und (geschlossen)
+      // am Ende. Immer gleich hoch, egal wie lang. Die Nummer ist eine
+      // Text-Notiz, die gleich nach dem Aufziehen zum Tippen aufgeht.
+      final h = (pageWidth ?? 800) * kVoltaHeight;
+      final l = math.min(a.dx, b.dx), r = math.max(a.dx, b.dx), y = a.dy;
+      if (r - l < 4) return const [];
+      return [
+        ShapePiece([Offset(l, y + h), Offset(l, y), Offset(r, y), if (kind == ShapeKind.volta) Offset(r, y + h)]),
       ];
     case ShapeKind.slur:
       // Bogen nach oben (bzw. zur linken Seite der Zugrichtung).

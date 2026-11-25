@@ -169,6 +169,10 @@ class ToolController extends ChangeNotifier {
   /// Teil). null = es wird keine Notiz getippt.
   final richText = ValueNotifier<RichTextTarget?>(null);
 
+  /// Bitte an die Text-Ebene einer Seite, sofort ein Feld zum Tippen zu
+  /// öffnen (z. B. für die Nummer eines gerade aufgezogenen Hauses).
+  final textRequest = ValueNotifier<TextRequest?>(null);
+
   /// Die Tabulatur, in der gerade geschrieben wird (für das Zahlenfeld im
   /// Werkzeugfenster). null = keine.
   final tabSession = ValueNotifier<TabSession?>(null);
@@ -197,10 +201,8 @@ class ToolController extends ChangeNotifier {
   }
 
   /// Bund-Knöpfe im Tab-Fenster: automatisch (nur im Tablet-Modus), immer, nie.
-  TabKeypad get tabKeypad => TabKeypad.values.firstWhere(
-    (k) => k.name == settings.text('tabKeypad'),
-    orElse: () => TabKeypad.auto,
-  );
+  TabKeypad get tabKeypad =>
+      TabKeypad.values.firstWhere((k) => k.name == settings.text('tabKeypad'), orElse: () => TabKeypad.auto);
 
   Future<void> setTabKeypad(TabKeypad k) async {
     await settings.setText('tabKeypad', k.name);
@@ -605,8 +607,28 @@ class ToolController extends ChangeNotifier {
     linkStart.dispose();
     isDrawing.dispose();
     rulerChanged.dispose();
+    textRequest.dispose();
     super.dispose();
   }
+}
+
+/// Siehe [ToolController.textRequest]: Die Text-Ebene von [controller] und
+/// [page] öffnet an [at] (normiert) ein Feld mit dem Stil [style].
+class TextRequest {
+  const TextRequest({
+    required this.controller,
+    required this.page,
+    required this.at,
+    required this.style,
+    required this.hint,
+  });
+  final InkController controller;
+  final int page;
+  final Offset at;
+  final TextStyleSetting style;
+
+  /// Platzhalter im leeren Feld.
+  final String hint;
 }
 
 /// Stellt den [ToolController] allen Bildschirmen zur Verfügung.

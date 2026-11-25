@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:volti/core/ink/score_annotations.dart';
 import 'package:volti/core/ink/text_note.dart';
+import 'package:volti/core/ink/tool_settings.dart';
 import 'package:volti/core/library/sidecar_store.dart';
 import 'package:volti/features/viewer/ink_controller.dart';
 import 'package:volti/features/viewer/ink_layer.dart';
+import 'package:volti/features/viewer/shapes.dart';
 import 'package:volti/features/viewer/text_layer.dart';
 import 'package:volti/features/viewer/tool_controller.dart';
 
@@ -128,6 +130,61 @@ void main() {
       expect(n.y, closeTo(0.5, 0.01));
       expect(editing, isFalse);
       expect(find.text('Bogen ab'), findsOneWidget);
+      c.dispose();
+    });
+
+    Future<void> drawVolta(WidgetTester t, ShapeKind kind) async {
+      tools.setMode(ToolMode.shape);
+      tools.setShapeKind(kind);
+      await t.pump();
+      final o = t.getTopLeft(find.byType(TextNotesLayer));
+      final g = await t.startGesture(o + const Offset(100, 100), kind: PointerDeviceKind.stylus);
+      for (var x = 110.0; x <= 300; x += 10) {
+        await g.moveTo(o + Offset(x, 104));
+        await t.pump();
+      }
+      await g.up();
+      await t.pumpAndSettle();
+      await t.pump(const Duration(seconds: 1)); // Stift-Nähe abgelaufen
+    }
+
+    testWidgets('Haus aufziehen → Feld für die Nummer geht sofort auf', (t) async {
+      await pump(t);
+      await drawVolta(t, ShapeKind.volta);
+      // Ein Linienzug: Haken links, Linie, Haken rechts – immer waagrecht.
+      final s = c.annotations.visibleStrokesOn(1).single;
+      expect(s.points.length, 4);
+      expect(s.points[1].y, closeTo(100 / 600, 0.001));
+      expect(s.points[2].y, closeTo(100 / 600, 0.001));
+      expect(s.points[0].y, greaterThan(s.points[1].y));
+      expect(s.points[3].y, greaterThan(s.points[2].y));
+      expect(editing, isTrue);
+      expect(find.text('1.'), findsOneWidget, reason: 'Platzhalter');
+
+      await t.enterText(find.byType(TextField), '1.');
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      final n = c.annotations.visibleTextsOn(1).single;
+      expect(n.text, '1.');
+      expect(n.size, kVoltaTextSize);
+      expect(n.background, TextNote.noBackground);
+      // Gleich rechts vom linken Haken, knapp unter der Linie.
+      expect(n.x, closeTo(s.points[1].x + 400 * kVoltaHeight * 0.28 / 400, 0.002));
+      expect(n.y, greaterThan(s.points[1].y));
+      expect(editing, isFalse);
+      // Das Text-Werkzeug behält seinen eigenen Stil.
+      expect(tools.textStyle.size, isNot(kVoltaTextSize));
+      c.dispose();
+    });
+
+    testWidgets('Haus ohne Nummer (leer lassen) und rechts offen', (t) async {
+      await pump(t);
+      await drawVolta(t, ShapeKind.voltaOpen);
+      expect(c.annotations.visibleStrokesOn(1).single.points.length, 3);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      expect(c.annotations.visibleTextsOn(1), isEmpty);
+      expect(editing, isFalse);
       c.dispose();
     });
 

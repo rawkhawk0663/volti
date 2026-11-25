@@ -11,6 +11,7 @@ import '../../core/ink/annotation_layer.dart';
 import '../../core/ink/selection.dart';
 import '../../core/ink/stamp.dart';
 import '../../core/ink/stroke.dart';
+import '../../core/ink/text_note.dart';
 import '../../app/theme.dart';
 import '../../core/ink/tool_settings.dart';
 import 'ink_controller.dart';
@@ -640,6 +641,22 @@ class _InkLayerState extends State<InkLayer> {
         );
       }
       c.endBatch();
+      // Haus: gleich ein Feld für die Nummer öffnen (leer lassen = ohne Nummer).
+      if (isVolta(tools.shapeKind)) {
+        final at = voltaLabelAt(a, b, size.width);
+        tools.textRequest.value = TextRequest(
+          controller: c,
+          page: widget.page,
+          at: Offset(at.dx / size.width, at.dy / size.height),
+          style: TextStyleSetting(
+            id: 'volta',
+            size: kVoltaTextSize,
+            color: style.color,
+            background: TextNote.noBackground,
+          ),
+          hint: '1.',
+        );
+      }
     }
     _shapeStart = _shapeEnd = null;
     _pointer = null;

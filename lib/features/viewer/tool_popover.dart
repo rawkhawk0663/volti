@@ -825,6 +825,8 @@ Map<ShapeKind, String> get _shapeNames => {
   ShapeKind.slur: tr('Bogen', 'Slur'),
   ShapeKind.staff: tr('Notenlinien', 'Staff lines'),
   ShapeKind.tab: tr('Tabulatur (6 Linien)', 'Tablature (6 lines)'),
+  ShapeKind.volta: tr('Haus (rechts geschlossen)', 'Volta bracket (closed)'),
+  ShapeKind.voltaOpen: tr('Haus (rechts offen)', 'Volta bracket (open)'),
 };
 
 class _ShapeSettings extends StatelessWidget {
@@ -857,6 +859,10 @@ class _ShapeSettings extends StatelessWidget {
             ShapeKind.staff || ShapeKind.tab => tr(
               'Vom Anfang zum Ende ziehen. Nach unten ziehen bestimmt die Höhe, nur waagrecht ergibt die übliche Höhe.',
               'Drag from start to end. Dragging downwards sets the height; dragging only sideways gives the usual height.',
+            ),
+            ShapeKind.volta || ShapeKind.voltaOpen => tr(
+              'Über den Takten von links nach rechts ziehen. Danach gleich die Nummer tippen (z. B. «1.» oder «1.–3.»), Enter = fertig. Leer lassen = Haus ohne Nummer. Die Nummer lässt sich später mit dem Text-Werkzeug ändern.',
+              'Drag above the bars from left to right. Then type the number straight away (e.g. «1.» or «1.–3.»), Enter = done. Leave it empty for a bracket without a number. You can change the number later with the text tool.',
             ),
             ShapeKind.crescendo || ShapeKind.decrescendo => tr(
               'Von der Spitze zum offenen Ende ziehen: nach rechts = crescendo, nach links = decrescendo.',
@@ -936,13 +942,26 @@ class _ShapeIconPainter extends CustomPainter {
       ShapeKind.line || ShapeKind.arrow => (Offset(3, size.height - 5), Offset(size.width - 3, 5)),
       ShapeKind.staff => (const Offset(2, 7), Offset(size.width - 2, size.height - 7)),
       ShapeKind.tab => (const Offset(2, 4), Offset(size.width - 2, size.height - 4)),
+      ShapeKind.volta || ShapeKind.voltaOpen => (const Offset(3, 7), Offset(size.width - 3, 7)),
       _ => (Offset(2, size.height / 2 + 4), Offset(size.width - 2, size.height / 2 + 4)),
     };
     // Die Tabulatur ist höher – mit kleinerer „Seite“ passt sie ins Symbol.
-    final page = size.width * (kind == ShapeKind.tab ? 12 : 28);
+    final page = size.width * (kind == ShapeKind.tab ? 12 : (isVolta(kind) ? 22 : 28));
     for (final piece in shapeGeometry(kind, a, b, 1.5, pageWidth: page)) {
       if (piece.solid) canvas.drawPath(Path()..addPolygon(piece.points, true), Paint()..color = paint.color);
       canvas.drawPoints(PointMode.polygon, piece.points, paint);
+    }
+    // Häuser mit Nummer: geschlossen „1.“, offen „2.“ (wie meist gebraucht).
+    if (isVolta(kind)) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: kind == ShapeKind.volta ? '1.' : '2.',
+          style: TextStyle(color: paint.color, fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(a.dx + 4, a.dy + 1.5));
+      tp.dispose();
     }
   }
 
@@ -1492,10 +1511,7 @@ class _TabSettings extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  onPressed: () => session!.ink.updateTab(
-                    block.id,
-                    beats: [for (final b in block.beats) b.withoutAt],
-                  ),
+                  onPressed: () => session!.ink.updateTab(block.id, beats: [for (final b in block.beats) b.withoutAt]),
                   icon: const Icon(Icons.auto_fix_high, size: 18),
                   label: Text(tr('Abstände wieder automatisch', 'Spacing automatic again')),
                 ),
@@ -1701,7 +1717,10 @@ class _TabKeypad extends StatelessWidget {
                   width: 37,
                 ),
                 key(
-                  const Text('3', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, fontStyle: FontStyle.italic)),
+                  const Text(
+                    '3',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, fontStyle: FontStyle.italic),
+                  ),
                   () => session.perform(TabAction.triplet),
                   selected: cur?.triplet ?? false,
                   tooltip: tip(TabAction.triplet),
@@ -1759,7 +1778,8 @@ class _TabKeypad extends StatelessWidget {
                       SlideIcon(into: into, dir: dir),
                       () => into ? session.slideIn(dir) : session.slideOut(dir),
                       selected: (into ? cur?.slideIns : cur?.slideOuts)?[session.string] == dir,
-                      tooltip: '${tr(de, en)} (${tools.tabKeys[into ? TabAction.slideIn : TabAction.slideOut]?.label ?? ''})',
+                      tooltip:
+                          '${tr(de, en)} (${tools.tabKeys[into ? TabAction.slideIn : TabAction.slideOut]?.label ?? ''})',
                       width: 46,
                     ),
                 ],
@@ -1806,8 +1826,14 @@ class _TabKeypad extends StatelessWidget {
                     Text.rich(
                       TextSpan(
                         children: [
-                          TextSpan(text: '3', style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
-                          const TextSpan(text: '5', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                          TextSpan(
+                            text: '3',
+                            style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
+                          ),
+                          const TextSpan(
+                            text: '5',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                          ),
                         ],
                       ),
                     ),
@@ -1831,7 +1857,10 @@ class _TabKeypad extends StatelessWidget {
                     width: 37,
                   ),
                   key(
-                    const Text('P.M.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
+                    const Text(
+                      'P.M.',
+                      style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700),
+                    ),
                     () => session.perform(TabAction.palmMute),
                     selected: cur?.palmMute ?? false,
                     tooltip: tip(TabAction.palmMute),

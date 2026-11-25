@@ -112,7 +112,7 @@ Volti also runs on phones but is made for tablets.
 - **Fingers never draw.** Your hand can rest on the screen while you write.
 - **Text notes** with three fonts, colours and background. Inside a note you can make single words bold, italic, underlined or coloured.
 - **Stamps** with more than a hundred music symbols in groups (dynamics, articulation, strings, winds, keys, guitar …), plus **your own stamps** from images.
-- **Shapes**: line, arrow, rectangle and ellipse (also filled, e.g. white to cover things up), crescendo/decrescendo, slur, staff lines and tablature lines.
+- **Shapes**: line, arrow, rectangle and ellipse (also filled, e.g. white to cover things up), crescendo/decrescendo, slur, staff lines, tablature lines and volta brackets (1st, 2nd … or without a number; you type the number right after drawing).
 - **Write tablature**: drag a tablature onto the page with the “TAB” tool and type fret numbers with the keyboard (no number pad needed) or the on-screen keypad, with rhythm (whole to 32nd notes, dotted, rests), time signatures with automatic bar lines, inserting and deleting bars, select, copy and paste, slides (to the next note, or for a single note: into it from below/above, out of it upwards/downwards), bends (¼, ½, full, 1½), ties, staccato, accents, ghost notes (x), triplets, repeat signs, double and final bar lines, movable bar lines, adjustable size and a background colour. Keys can be changed under ⚙ → Note input.
 - **Ruler** for straight lines, moved and rotated with your fingers.
 - **Lasso** to move, resize, copy and recolour, plus a **move tool**.

@@ -130,7 +130,13 @@ enum ShapeKind {
   staff,
 
   /// Sechs waagrechte Linien für Gitarren-Tabulatur.
-  tab;
+  tab,
+
+  /// Haus (1., 2. … oder ohne Nummer) mit Haken links und rechts.
+  volta,
+
+  /// Haus, rechts offen (ohne Haken am Ende).
+  voltaOpen;
 
   static ShapeKind fromName(String? n) => ShapeKind.values.firstWhere((k) => k.name == n, orElse: () => line);
 }
