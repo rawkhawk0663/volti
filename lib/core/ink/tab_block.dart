@@ -104,15 +104,11 @@ class TabBeat {
   TabBeat withAt(double? at) => bar ? TabBeat.bar(at: at, kind: kind, meter: meter) : copyWith(at: at);
 
   /// Gleicher Eintrag ohne von Hand gesetzte Lage (wieder automatisch).
-  TabBeat get withoutAt =>
-      at == null ? this : (bar ? TabBeat.bar(kind: kind, meter: meter) : copyWith(at: null));
+  TabBeat get withoutAt => at == null ? this : (bar ? TabBeat.bar(kind: kind, meter: meter) : copyWith(at: null));
 
   /// Gleicher Taktstrich mit anderer Art bzw. Taktart (Lage bleibt).
-  TabBeat barWith({BarKind? kind, Object? meter = _keepMeter}) => TabBeat.bar(
-    at: at,
-    kind: kind ?? this.kind,
-    meter: identical(meter, _keepMeter) ? this.meter : meter as String?,
-  );
+  TabBeat barWith({BarKind? kind, Object? meter = _keepMeter}) =>
+      TabBeat.bar(at: at, kind: kind ?? this.kind, meter: identical(meter, _keepMeter) ? this.meter : meter as String?);
 
   /// Von Hand gesetzte Lage, null = automatisch.
   ///
@@ -462,7 +458,10 @@ List<TabBeat> restsFor(double length) {
 /// Arten der Reihe nach.
 List<TabBeat> rebar(List<TabBeat> beats, double measure) {
   // Die Takte ändern sich: von Hand gesetzte Lagen der Noten gelten nicht mehr.
-  final notes = [for (final b in beats) if (!b.bar) b.at == null ? b : b.copyWith(at: null)];
+  final notes = [
+    for (final b in beats)
+      if (!b.bar) b.at == null ? b : b.copyWith(at: null),
+  ];
   final first = beats.isNotEmpty && beats.first.bar ? beats.first : null;
   final last = beats.length > 1 && beats.last.bar ? beats.last : null;
   // Arten und Taktwechsel der Taktstriche in der Mitte, der Reihe nach.
@@ -717,8 +716,14 @@ TabBeat? transposeBeat(TabBeat b, int semitones) {
   final used = target.values.map((v) => v.$1).toList();
   if (used.toSet().length != used.length) return null; // zwei Töne auf einer Saite
   int to(int st) => target[st]!.$1;
-  Map<int, int> remap(Map<int, int> m) => {for (final e in m.entries) if (target.containsKey(e.key)) to(e.key): e.value};
-  Set<int> remapSet(Set<int> m) => {for (final st in m) if (target.containsKey(st)) to(st)};
+  Map<int, int> remap(Map<int, int> m) => {
+    for (final e in m.entries)
+      if (target.containsKey(e.key)) to(e.key): e.value,
+  };
+  Set<int> remapSet(Set<int> m) => {
+    for (final st in m)
+      if (target.containsKey(st)) to(st),
+  };
   return b.copyWith(
     frets: {for (final v in target.values) v.$1: v.$2},
     bends: remap(b.bends),
@@ -846,7 +851,14 @@ class TabEditor {
     if (!_partialStrings || ss == null) return part;
     return [
       for (final b in part)
-        b.bar ? b : b.copyWith(frets: {for (final e in b.frets.entries) if (e.key >= ss.$1 && e.key <= ss.$2) e.key: e.value}),
+        b.bar
+            ? b
+            : b.copyWith(
+                frets: {
+                  for (final e in b.frets.entries)
+                    if (e.key >= ss.$1 && e.key <= ss.$2) e.key: e.value,
+                },
+              ),
     ];
   }
 
@@ -861,7 +873,12 @@ class TabEditor {
       for (var i = sel.$1; i <= sel.$2; i++) {
         final b = beats[i];
         if (b.bar) continue;
-        beats[i] = b.copyWith(frets: {for (final e in b.frets.entries) if (e.key < ss.$1 || e.key > ss.$2) e.key: e.value});
+        beats[i] = b.copyWith(
+          frets: {
+            for (final e in b.frets.entries)
+              if (e.key < ss.$1 || e.key > ss.$2) e.key: e.value,
+          },
+        );
       }
     } else {
       beats.removeRange(sel.$1, sel.$2 + 1);
@@ -984,7 +1001,10 @@ class TabEditor {
       // Vorschlagsnote: erste Ziffer, oder die zweite rasch danach.
       final at = _graceDigitAt;
       final cur = current;
-      if ((at == null || t.difference(at) <= digitPause) && cur != null && !cur.bar && (cur.frets[string] ?? ghostNote) >= 0) {
+      if ((at == null || t.difference(at) <= digitPause) &&
+          cur != null &&
+          !cur.bar &&
+          (cur.frets[string] ?? ghostNote) >= 0) {
         final last = _lastDigit;
         final fret = at != null && last != null && last * 10 + d <= maxFret ? last * 10 + d : d;
         _lastDigit = fret == d ? d : null;

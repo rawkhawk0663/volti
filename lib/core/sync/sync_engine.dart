@@ -109,8 +109,7 @@ class SyncEngine {
 
     bool isPdf(String rel) => rel.startsWith('Noten/') && rel.toLowerCase().endsWith('.pdf');
     // Bilder eigener Stempel: wie PDFs (neu oder gelöscht, nie verändert).
-    bool isStampImage(String rel) =>
-        (rel.startsWith('.volti/stamps/') && rel.endsWith('.png')) || isAudioFile(rel);
+    bool isStampImage(String rel) => (rel.startsWith('.volti/stamps/') && rel.endsWith('.png')) || isAudioFile(rel);
     // Setlists, Stift-Vorlagen, Liste der eigenen Stempel: ganze Datei, die
     // jüngste Fassung gewinnt.
     bool isSetlist(String rel) =>

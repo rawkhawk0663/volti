@@ -83,19 +83,14 @@ void main() {
     );
     final dl = <double>[], dr = <double>[], rl = <double>[], rr = <double>[];
     final steps = <int>[];
-    final ok = await sep.separate(
-      l,
-      r,
-      (ch) {
-        expect(ch.length, 8);
-        dl.addAll(ch[0]);
-        dr.addAll(ch[1]);
-        // Bass, Instrumente und Gesang zusammen
-        rl.addAll(List.generate(ch[2].length, (i) => ch[2][i] + ch[4][i] + ch[6][i]));
-        rr.addAll(List.generate(ch[3].length, (i) => ch[3][i] + ch[5][i] + ch[7][i]));
-      },
-      progress: (done, total) => steps.add(done),
-    );
+    final ok = await sep.separate(l, r, (ch) {
+      expect(ch.length, 8);
+      dl.addAll(ch[0]);
+      dr.addAll(ch[1]);
+      // Bass, Instrumente und Gesang zusammen
+      rl.addAll(List.generate(ch[2].length, (i) => ch[2][i] + ch[4][i] + ch[6][i]));
+      rr.addAll(List.generate(ch[3].length, (i) => ch[3][i] + ch[5][i] + ch[7][i]));
+    }, progress: (done, total) => steps.add(done));
     expect(ok, isTrue);
     expect(runs, sep.chunksFor(n));
     expect(steps.last, sep.chunksFor(n));

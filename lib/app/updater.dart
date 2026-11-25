@@ -169,7 +169,12 @@ class Updater {
 
     final target = File(Platform.resolvedExecutable).parent.path;
     final log = await _logFile();
-    final lines = <String>['Update ${u.tag}', 'Ziel ${u.number}', 'Zielversion ${u.tag}', 'Heruntergeladen und ausgepackt'];
+    final lines = <String>[
+      'Update ${u.tag}',
+      'Ziel ${u.number}',
+      'Zielversion ${u.tag}',
+      'Heruntergeladen und ausgepackt',
+    ];
     Future<void> writeLog() => log.writeAsString('${lines.join('\r\n')}\r\n');
     await writeLog();
 
@@ -327,9 +332,7 @@ class Updater {
       // die letzte Zahl („Ziel 101“).
       final goalTag = RegExp(r'Zielversion (\S+)').firstMatch(text)?.group(1);
       final goal = int.tryParse(RegExp(r'Ziel (\d+)').firstMatch(text)?.group(1) ?? '');
-      final arrived = goalTag != null
-          ? !newerThan(goalTag, voltiVersion)
-          : goal == null || currentNumber >= goal;
+      final arrived = goalTag != null ? !newerThan(goalTag, voltiVersion) : goal == null || currentNumber >= goal;
       if (text.contains('FERTIG') && arrived) {
         return (
           ok: true,

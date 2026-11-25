@@ -66,18 +66,21 @@ enum TabAction {
     rest => tr('Pause', 'Rest'),
     bar => tr('Taktstrich', 'Bar line'),
     slide => tr('Slide zur nächsten Note ein/aus', 'Slide to the next note on/off'),
-    slideIn => tr('Slide in den Ton (von unten → von oben → aus)', 'Slide into the note (from below → from above → off)'),
-    slideOut => tr('Slide aus dem Ton (nach oben → nach unten → aus)', 'Slide out of the note (upwards → downwards → off)'),
+    slideIn => tr(
+      'Slide in den Ton (von unten → von oben → aus)',
+      'Slide into the note (from below → from above → off)',
+    ),
+    slideOut => tr(
+      'Slide aus dem Ton (nach oben → nach unten → aus)',
+      'Slide out of the note (upwards → downwards → off)',
+    ),
     bend => tr('Bending (¼ → ½ → 1 → 1½ → aus)', 'Bend (¼ → ½ → full → 1½ → off)'),
     tie => tr('Haltebogen zur nächsten Note ein/aus', 'Tie to the next note on/off'),
     tieIn => tr(
       'Haltebogen von davor ein/aus (z. B. über einen Zeilenumbruch)',
       'Tie from before on/off (e.g. across a line break)',
     ),
-    legato => tr(
-      'Hammer-on / Pull-off zur nächsten Note ein/aus',
-      'Hammer-on / pull-off to the next note on/off',
-    ),
+    legato => tr('Hammer-on / Pull-off zur nächsten Note ein/aus', 'Hammer-on / pull-off to the next note on/off'),
     grace => tr(
       'Vorschlagsnote (Approach) vor der Note: danach Bund tippen; nochmals = entfernen',
       'Grace note (approach) before the note: then type the fret; again = remove',

@@ -685,10 +685,11 @@ class _CursorPainter extends CustomPainter {
       final left = l.xs[sel.$1] - l.slotWidths[sel.$1] / 2;
       final right = l.xs[sel.$2] + l.slotWidths[sel.$2] / 2;
       final ss = strings;
-      final r = (ss == null
-              ? Rect.fromLTRB(left, l.top - g * 0.7, right, l.stemBottom)
-              : Rect.fromLTRB(left, l.lineY(ss.$1) - g * 0.55, right, l.lineY(ss.$2) + g * 0.55))
-          .shift(offset);
+      final r =
+          (ss == null
+                  ? Rect.fromLTRB(left, l.top - g * 0.7, right, l.stemBottom)
+                  : Rect.fromLTRB(left, l.lineY(ss.$1) - g * 0.55, right, l.lineY(ss.$2) + g * 0.55))
+              .shift(offset);
       canvas.drawRRect(
         RRect.fromRectAndRadius(r, Radius.circular(g * 0.3)),
         Paint()..color = color.withValues(alpha: 0.22),

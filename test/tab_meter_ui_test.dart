@@ -70,7 +70,13 @@ void main() {
     await t.pump();
     final tab = ink.annotations.tab(id)!;
     expect(tab.meter, '4/4', reason: 'die Zeile bleibt 4/4');
-    expect([for (final b in tab.beats) if (b.bar) b.meter], ['2/4']);
+    expect(
+      [
+        for (final b in tab.beats)
+          if (b.bar) b.meter,
+      ],
+      ['2/4'],
+    );
     expect(measureLengths(tab.beats, tab.measure), [1.0, 0.5]);
 
     // Ganze Zeile: Taktart vorne, Taktstriche neu

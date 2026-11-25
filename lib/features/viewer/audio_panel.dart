@@ -357,12 +357,18 @@ class _StemsSection extends StatelessWidget {
     if (s.busyWith(path)) {
       final (label, value) = switch (s.phase) {
         StemPhase.downloading => (
-          tr('Modell wird heruntergeladen … ${(s.progress * 100).round()} %', 'Downloading model … ${(s.progress * 100).round()} %'),
+          tr(
+            'Modell wird heruntergeladen … ${(s.progress * 100).round()} %',
+            'Downloading model … ${(s.progress * 100).round()} %',
+          ),
           s.progress,
         ),
         StemPhase.decoding => (tr('Aufnahme wird vorbereitet …', 'Preparing the recording …'), null),
         _ => (
-          tr('Spuren werden getrennt … ${(s.progress * 100).round()} %', 'Separating tracks … ${(s.progress * 100).round()} %'),
+          tr(
+            'Spuren werden getrennt … ${(s.progress * 100).round()} %',
+            'Separating tracks … ${(s.progress * 100).round()} %',
+          ),
           s.progress,
         ),
       };
@@ -413,10 +419,7 @@ class _StemsSection extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                tr(
-                  'Das Trennen hat nicht geklappt: ${s.error ?? ''}',
-                  'Separating did not work: ${s.error ?? ''}',
-                ),
+                tr('Das Trennen hat nicht geklappt: ${s.error ?? ''}', 'Separating did not work: ${s.error ?? ''}'),
                 style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
               ),
             ),
@@ -476,8 +479,7 @@ class StemMixer extends StatelessWidget {
         Row(
           children: [
             Expanded(child: Text(tr('Spuren', 'Tracks'), style: theme.textTheme.titleSmall)),
-            if (a.mixChanged)
-              TextButton(onPressed: a.resetMix, child: Text(tr('Alle zurücksetzen', 'Reset all'))),
+            if (a.mixChanged) TextButton(onPressed: a.resetMix, child: Text(tr('Alle zurücksetzen', 'Reset all'))),
             IconButton(
               tooltip: tr('Getrennte Spuren löschen', 'Delete separated tracks'),
               icon: const Icon(Icons.delete_outline, size: 20),
@@ -505,20 +507,11 @@ class StemMixer extends StatelessWidget {
                   Expanded(
                     child: SliderTheme(
                       data: SliderTheme.of(context).copyWith(overlayShape: SliderComponentShape.noOverlay),
-                      child: Slider(
-                        value: a.stemVolume[i],
-                        onChanged: (v) => a.setStemVolume(i, v),
-                      ),
+                      child: Slider(value: a.stemVolume[i], onChanged: (v) => a.setStemVolume(i, v)),
                     ),
                   ),
                   const SizedBox(width: 6),
-                  toggle(
-                    'M',
-                    a.stemMuted[i],
-                    () => a.toggleMute(i),
-                    tr('Stumm', 'Mute'),
-                    scheme.error,
-                  ),
+                  toggle('M', a.stemMuted[i], () => a.toggleMute(i), tr('Stumm', 'Mute'), scheme.error),
                   const SizedBox(width: 4),
                   toggle(
                     'S',
@@ -535,10 +528,7 @@ class StemMixer extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              tr(
-                'Beim Transponieren bleibt das Schlagzeug unverändert.',
-                'The drums stay unchanged when transposing.',
-              ),
+              tr('Beim Transponieren bleibt das Schlagzeug unverändert.', 'The drums stay unchanged when transposing.'),
               style: muted,
             ),
           ),

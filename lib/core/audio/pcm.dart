@@ -14,9 +14,18 @@ class RawAudio {
   final int channels;
 }
 
-typedef _DecodeNative =
-    ffi.Int32 Function(ffi.Pointer<Utf16>, ffi.Pointer<Utf16>, ffi.Pointer<ffi.Int32>, ffi.Pointer<ffi.Int32>);
-typedef _DecodeDart = int Function(ffi.Pointer<Utf16>, ffi.Pointer<Utf16>, ffi.Pointer<ffi.Int32>, ffi.Pointer<ffi.Int32>);
+typedef _DecodeNative = ffi.Int32 Function(
+  ffi.Pointer<Utf16>,
+  ffi.Pointer<Utf16>,
+  ffi.Pointer<ffi.Int32>,
+  ffi.Pointer<ffi.Int32>,
+);
+typedef _DecodeDart = int Function(
+  ffi.Pointer<Utf16>,
+  ffi.Pointer<Utf16>,
+  ffi.Pointer<ffi.Int32>,
+  ffi.Pointer<ffi.Int32>,
+);
 
 /// Wandelt [input] (MP3, M4A/AAC, WAV, FLAC …) mit den Decodern des Systems
 /// in rohe Tondaten nach [output] um.
@@ -28,10 +37,8 @@ typedef _DecodeDart = int Function(ffi.Pointer<Utf16>, ffi.Pointer<Utf16>, ffi.P
 /// * Linux (nur zum Testen): ffmpeg.
 Future<RawAudio> decodeAudio(String input, String output) async {
   if (Platform.isAndroid) {
-    final r = await const MethodChannel('volti/audio').invokeMapMethod<String, int>('decode', {
-      'input': input,
-      'output': output,
-    });
+    final r = await const MethodChannel('volti/audio')
+        .invokeMapMethod<String, int>('decode', {'input': input, 'output': output});
     return RawAudio(output, r!['rate']!, r['channels']!);
   }
   if (Platform.isWindows) return decodeAudioWindows(input, output);

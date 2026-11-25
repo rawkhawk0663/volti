@@ -7,8 +7,11 @@ import 'stft.dart';
 /// (links, rechts), [mag] das Spektrum dazu. [use] bekommt die Ausgaben
 /// `spec` [4 Spuren][4][bins][frames] und `wave` [4 Spuren][2][segment]
 /// (nur während des Aufrufs gültig).
-typedef StemModelRun =
-    void Function(Float32List mix, Float32List mag, void Function(Float32List spec, Float32List wave) use);
+typedef StemModelRun = void Function(
+  Float32List mix,
+  Float32List mag,
+  void Function(Float32List spec, Float32List wave) use,
+);
 
 /// Gibt fertige Werte der vier Spuren weiter: [channels] hat 8 Listen
 /// (Spur s, Kanal c an Stelle 2·s + c), alle gleich lang.

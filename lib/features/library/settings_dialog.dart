@@ -397,7 +397,10 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         style: muted,
       ),
       const SizedBox(height: 12),
-      Text(tr('Bund-Knöpfe (0–24) im Tab-Fenster', 'Fret buttons (0–24) in the tab window'), style: theme.textTheme.bodyMedium),
+      Text(
+        tr('Bund-Knöpfe (0–24) im Tab-Fenster', 'Fret buttons (0–24) in the tab window'),
+        style: theme.textTheme.bodyMedium,
+      ),
       const SizedBox(height: 6),
       AdaptiveChoice<TabKeypad>(
         options: [

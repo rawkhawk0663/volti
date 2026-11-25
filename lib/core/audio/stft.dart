@@ -69,10 +69,7 @@ class Fft {
 /// Ein Stück hat [length] Werte je Kanal (stereo). Das Spektrum hat
 /// [bins] Frequenzen × [frames] Zeitschritte.
 class DemucsSpectrum {
-  DemucsSpectrum(this.length)
-    : frames = (length + hop - 1) ~/ hop,
-      _fft = Fft(nfft),
-      _window = Float64List(nfft) {
+  DemucsSpectrum(this.length) : frames = (length + hop - 1) ~/ hop, _fft = Fft(nfft), _window = Float64List(nfft) {
     for (var i = 0; i < nfft; i++) {
       _window[i] = 0.5 - 0.5 * math.cos(2 * math.pi * i / nfft);
     }

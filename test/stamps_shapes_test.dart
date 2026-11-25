@@ -150,6 +150,8 @@ void main() {
       // Alte Einstellung „decrescendo“ wird zur Gabel.
       expect(normalizeShapeKind(ShapeKind.decrescendo), ShapeKind.crescendo);
       expect(offeredShapeKinds, isNot(contains(ShapeKind.decrescendo)));
+      // Jede andere Form wird angeboten (keine neue vergessen).
+      expect(offeredShapeKinds.toSet(), {...ShapeKind.values}..remove(ShapeKind.decrescendo));
       // Notenlinien: 5 waagrechte Linien; nur waagrecht gezogen → übliche Höhe
       final flat = geo(ShapeKind.staff, const Offset(100, 200), const Offset(500, 203), 2, pageWidth: 1000);
       expect(flat.length, 5);

@@ -109,8 +109,7 @@ class ScoreAudioPlayer extends ChangeNotifier {
   final List<bool> stemSolo = List.filled(Stem.values.length, false);
 
   /// Ist die Mischung verändert (nicht alles voll, nichts stumm oder solo)?
-  bool get mixChanged =>
-      stemVolume.any((v) => v != 1) || stemMuted.any((m) => m) || stemSolo.any((s) => s);
+  bool get mixChanged => stemVolume.any((v) => v != 1) || stemMuted.any((m) => m) || stemSolo.any((s) => s);
 
   /// Was von Spur [i] gerade zu hören ist (0..1).
   double stemGain(int i) {

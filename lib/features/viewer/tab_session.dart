@@ -141,7 +141,8 @@ class TabSession extends ChangeNotifier {
     _editor.beats = [...b.beats];
     final beats = _editor.copySelection();
     if (beats.isEmpty || b.beats.isEmpty) return TabClip(beats);
-    final sel = _editor.selection ?? (_editor.beat.clamp(0, b.beats.length - 1), _editor.beat.clamp(0, b.beats.length - 1));
+    final sel =
+        _editor.selection ?? (_editor.beat.clamp(0, b.beats.length - 1), _editor.beat.clamp(0, b.beats.length - 1));
     if (sel.$2 - sel.$1 + 1 != beats.length) return TabClip(beats);
     final l = layoutTab(b, _unit);
     final g = l.gap;
@@ -263,8 +264,7 @@ class TabSession extends ChangeNotifier {
       e.beats[f.key] = e.beats[f.key].withAt(frac(f.value));
     }
     final items = [
-      for (final (k, x) in clip.beats.indexed)
-        x.bar && pasted[k] != null ? x.withAt(frac(pasted[k]!)) : x.withoutAt,
+      for (final (k, x) in clip.beats.indexed) x.bar && pasted[k] != null ? x.withAt(frac(pasted[k]!)) : x.withoutAt,
     ];
     e.insertPasted(at, items);
     // Noten: Mit den nun festen Taktstrichen ihre Lage im Takt so setzen,
@@ -279,11 +279,7 @@ class TabSession extends ChangeNotifier {
         e.beats[i] = e.beats[i].withAt(((p.value - lo) / (hi - lo)).clamp(0.0, 1.0));
       }
     }
-    ink.updateTab(
-      id,
-      beats: e.beats,
-      width: widthPx != l.width ? widthPx / _unit.width : null,
-    );
+    ink.updateTab(id, beats: e.beats, width: widthPx != l.width ? widthPx / _unit.width : null);
     notifyListeners();
   }
 
@@ -309,6 +305,7 @@ class TabSession extends ChangeNotifier {
     }
     return 0;
   }
+
   void bend(int quarters) => _edit((e) => e.bend(quarters));
   void slideIn(int dir) => _edit((e) => e.slideIn(dir));
   void slideOut(int dir) => _edit((e) => e.slideOut(dir));

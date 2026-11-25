@@ -188,7 +188,12 @@ class StemService extends ChangeNotifier {
   Future<String> _runWorker(StemWorkerJob job) async {
     final events = ReceivePort();
     final done = Completer<String>();
-    final iso = await Isolate.spawn(stemWorker, (job, events.sendPort), onError: events.sendPort, onExit: events.sendPort);
+    final iso = await Isolate.spawn(
+      stemWorker,
+      (job, events.sendPort),
+      onError: events.sendPort,
+      onExit: events.sendPort,
+    );
     events.listen((m) {
       if (m is SendPort) {
         _workerControl = m;

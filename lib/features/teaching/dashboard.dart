@@ -633,10 +633,7 @@ class _TodosCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 // Grosse, feine Zahl.
-                Text(
-                  '${open.length}',
-                  style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w300, height: 1),
-                ),
+                Text('${open.length}', style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w300, height: 1)),
                 const SizedBox(width: 8),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),

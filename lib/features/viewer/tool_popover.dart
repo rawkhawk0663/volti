@@ -1484,43 +1484,48 @@ class _TabSettings extends StatelessWidget {
       builder: (context, session, _) {
         final block = session?.block;
         final bg = block?.background ?? tools.tabBackground;
+        // Darstellung: Grösse, Abstände, Hintergrund (für neue bzw. diese Tabulatur).
+        final look = [
+          _TabSize(tools: tools, session: session, gap: block?.gap ?? tools.tabGap),
+          if (block != null && block.beats.any((b) => b.at != null))
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => session!.ink.updateTab(block.id, beats: [for (final b in block.beats) b.withoutAt]),
+                icon: const Icon(Icons.auto_fix_high, size: 18),
+                label: Text(tr('Abstände wieder automatisch', 'Spacing automatic again')),
+              ),
+            ),
+          _Label(tr('Hintergrund', 'Background')),
+          _TabBackground(tools: tools, session: session, background: bg),
+        ];
+        if (session == null) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                tr(
+                  'Mit Stift oder Maus auf der Seite ziehen (oder tippen), um eine Tabulatur anzulegen. '
+                      'Eine vorhandene antippen, um darin zu schreiben.',
+                  'Drag (or tap) on the page with the pen or mouse to add a tablature. '
+                      'Tap an existing one to write in it.',
+                ),
+                style: muted,
+              ),
+              _TabMeter(tools: tools, session: null),
+              ...look,
+              const SizedBox(height: 6),
+              Text(tr('Tasten ändern: ⚙ → Noteneingabe', 'Change keys: ⚙ → Note input'), style: muted),
+            ],
+          );
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              session == null
-                  ? tr(
-                      'Mit Stift oder Maus auf der Seite ziehen (oder tippen), um eine Tabulatur anzulegen. '
-                          'Eine vorhandene antippen, um darin zu schreiben.',
-                      'Drag (or tap) on the page with the pen or mouse to add a tablature. '
-                          'Tap an existing one to write in it.',
-                    )
-                  : tr(
-                      'Bundzahl tippen (Ziffern-Reihe oben, Ziffernblock oder hier). Zweistellig: rasch hintereinander.',
-                      'Type the fret number (top row, number pad or here). Two digits: type them quickly.',
-                    ),
-              style: muted,
-            ),
-            if (session != null)
-              ExcludeFocus(
-                child: _TabKeypad(session: session, tools: tools),
-              ),
-            _TabMeter(tools: tools, session: session),
-            _TabSize(tools: tools, session: session, gap: block?.gap ?? tools.tabGap),
-            if (block != null && block.beats.any((b) => b.at != null))
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => session!.ink.updateTab(block.id, beats: [for (final b in block.beats) b.withoutAt]),
-                  icon: const Icon(Icons.auto_fix_high, size: 18),
-                  label: Text(tr('Abstände wieder automatisch', 'Spacing automatic again')),
-                ),
-              ),
-            _Label(tr('Hintergrund', 'Background')),
-            _TabBackground(tools: tools, session: session, background: bg),
-            if (session != null) ...[
-              const SizedBox(height: 12),
-              OverflowBar(
+            // „Fertig“ und „Löschen“ immer gleich oben, nicht am Ende der langen Liste.
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: OverflowBar(
                 alignment: MainAxisAlignment.spaceBetween,
                 overflowAlignment: OverflowBarAlignment.end,
                 children: [
@@ -1535,12 +1540,46 @@ class _TabSettings extends StatelessWidget {
                   FilledButton(onPressed: () => tools.tabSession.value = null, child: Text(tr('Fertig', 'Done'))),
                 ],
               ),
-            ],
-            const SizedBox(height: 6),
+            ),
+            Text(
+              tr(
+                'Bundzahl tippen (Ziffern-Reihe oben, Ziffernblock oder hier). Zweistellig: rasch hintereinander.',
+                'Type the fret number (top row, number pad or here). Two digits: type them quickly.',
+              ),
+              style: muted,
+            ),
+            ExcludeFocus(
+              child: _TabKeypad(session: session, tools: tools),
+            ),
+            _Section(tr('Darstellung', 'Appearance')),
+            ...look,
+            const SizedBox(height: 10),
             Text(tr('Tasten ändern: ⚙ → Noteneingabe', 'Change keys: ⚙ → Note input'), style: muted),
           ],
         );
       },
+    );
+  }
+}
+
+/// Überschrift eines Abschnitts im Werkzeugfenster (darunter stehen
+/// [_Label]s für die einzelnen Reihen).
+class _Section extends StatelessWidget {
+  const _Section(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Divider(height: 1, color: theme.colorScheme.outlineVariant),
+          const SizedBox(height: 8),
+          Text(text, style: theme.textTheme.titleSmall),
+        ],
+      ),
     );
   }
 }
@@ -1688,7 +1727,67 @@ class _TabKeypad extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Label(tr('Notenwert', 'Note value')),
+            // Bund-Knöpfe und Cursor: braucht nur, wer keine Tastatur hat (Tablet-Modus).
+            ValueListenableBuilder<bool>(
+              valueListenable: TouchKeyboard.tabletMode,
+              builder: (context, tablet, _) {
+                final show = switch (tools.tabKeypad) {
+                  TabKeypad.always => true,
+                  TabKeypad.never => false,
+                  TabKeypad.auto => tablet,
+                };
+                if (!show) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Section(tr('Bund', 'Fret')),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (var f = 0; f <= TabEditor.maxFret; f++)
+                          key(Text('$f'), () => session.setFret(f), selected: fret == f, width: 44),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        key(
+                          const Icon(Icons.arrow_back, size: 18),
+                          () => session.perform(TabAction.left),
+                          tooltip: tip(TabAction.left),
+                        ),
+                        key(
+                          const Icon(Icons.arrow_upward, size: 18),
+                          () => session.perform(TabAction.up),
+                          tooltip: tip(TabAction.up),
+                        ),
+                        key(
+                          const Icon(Icons.arrow_downward, size: 18),
+                          () => session.perform(TabAction.down),
+                          tooltip: tip(TabAction.down),
+                        ),
+                        key(
+                          const Icon(Icons.arrow_forward, size: 18),
+                          () => session.perform(TabAction.right),
+                          tooltip: tip(TabAction.right),
+                        ),
+                        key(
+                          const Icon(Icons.backspace_outlined, size: 18),
+                          () => session.perform(TabAction.clearNote),
+                          tooltip: tip(TabAction.clearNote),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+            _Section(tr('Notenwert', 'Note value')),
+            const SizedBox(height: 6),
             Wrap(
               spacing: 4,
               runSpacing: 4,
@@ -1729,11 +1828,56 @@ class _TabKeypad extends StatelessWidget {
                 key(glyph(0xE4E5), () => session.perform(TabAction.rest), tooltip: tip(TabAction.rest), width: 37),
               ],
             ),
-            _Label(tr('Technik', 'Technique')),
+            _Section(tr('Spieltechnik', 'Technique')),
+            _Label(tr('Bögen und Slides', 'Arcs and slides')),
             Wrap(
               spacing: 4,
               runSpacing: 4,
               children: [
+                // Hammer-on / Pull-off (Bogen über den Zahlen).
+                key(
+                  const Text('H/P', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  () => session.perform(TabAction.legato),
+                  selected: cur?.legato.contains(session.string) ?? false,
+                  tooltip: tip(TabAction.legato),
+                  width: 44,
+                ),
+                // Vorschlagsnote (Approach-Note): kleine Zahl vor der Note.
+                key(
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '3',
+                          style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
+                        ),
+                        const TextSpan(
+                          text: '5',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  () => session.perform(TabAction.grace),
+                  selected: session.graceInput || (cur?.graces.containsKey(session.string) ?? false),
+                  tooltip: tip(TabAction.grace),
+                  width: 40,
+                ),
+                key(
+                  const Text('⌒', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  () => session.perform(TabAction.tie),
+                  selected: cur?.ties.contains(session.string) ?? false,
+                  tooltip: tip(TabAction.tie),
+                  width: 37,
+                ),
+                // Haltebogen von davor (z. B. über einen Zeilenumbruch).
+                key(
+                  const Text('⌒(5)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  () => session.perform(TabAction.tieIn),
+                  selected: cur?.tieIns.contains(session.string) ?? false,
+                  tooltip: tip(TabAction.tieIn),
+                  width: 50,
+                ),
                 key(
                   const Text('/', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                   () => session.perform(TabAction.slide),
@@ -1741,6 +1885,34 @@ class _TabKeypad extends StatelessWidget {
                   tooltip: tip(TabAction.slide),
                   width: 44,
                 ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final (into, dir, de, en) in [
+                  (true, 1, 'Slide in den Ton, von unten', 'Slide into the note, from below'),
+                  (true, -1, 'Slide in den Ton, von oben', 'Slide into the note, from above'),
+                  (false, 1, 'Slide aus dem Ton, nach oben', 'Slide out of the note, upwards'),
+                  (false, -1, 'Slide aus dem Ton, nach unten', 'Slide out of the note, downwards'),
+                ])
+                  key(
+                    SlideIcon(into: into, dir: dir),
+                    () => into ? session.slideIn(dir) : session.slideOut(dir),
+                    selected: (into ? cur?.slideIns : cur?.slideOuts)?[session.string] == dir,
+                    tooltip:
+                        '${tr(de, en)} (${tools.tabKeys[into ? TabAction.slideIn : TabAction.slideOut]?.label ?? ''})',
+                    width: 46,
+                  ),
+              ],
+            ),
+            _Label(tr('Bending', 'Bend')),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
                 for (final q in tabBends)
                   key(
                     Row(
@@ -1760,232 +1932,80 @@ class _TabKeypad extends StatelessWidget {
                   ),
               ],
             ),
-            // Slides, die zu einem einzelnen Ton gehören: davor (in den Ton
-            // hinein) oder danach (heraus), steigend oder fallend.
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  for (final (into, dir, de, en) in [
-                    (true, 1, 'Slide in den Ton, von unten', 'Slide into the note, from below'),
-                    (true, -1, 'Slide in den Ton, von oben', 'Slide into the note, from above'),
-                    (false, 1, 'Slide aus dem Ton, nach oben', 'Slide out of the note, upwards'),
-                    (false, -1, 'Slide aus dem Ton, nach unten', 'Slide out of the note, downwards'),
-                  ])
-                    key(
-                      SlideIcon(into: into, dir: dir),
-                      () => into ? session.slideIn(dir) : session.slideOut(dir),
-                      selected: (into ? cur?.slideIns : cur?.slideOuts)?[session.string] == dir,
-                      tooltip:
-                          '${tr(de, en)} (${tools.tabKeys[into ? TabAction.slideIn : TabAction.slideOut]?.label ?? ''})',
-                      width: 46,
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  key(
-                    const Text('x', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                    () => session.perform(TabAction.ghost),
-                    selected: fret == ghostNote,
-                    tooltip: tip(TabAction.ghost),
-                    width: 37,
-                  ),
-                  key(
-                    const Text('⌒', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                    () => session.perform(TabAction.tie),
-                    selected: cur?.ties.contains(session.string) ?? false,
-                    tooltip: tip(TabAction.tie),
-                    width: 37,
-                  ),
-                  // Haltebogen von davor (z. B. über einen Zeilenumbruch).
-                  key(
-                    const Text('⌒(5)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                    () => session.perform(TabAction.tieIn),
-                    selected: cur?.tieIns.contains(session.string) ?? false,
-                    tooltip: tip(TabAction.tieIn),
-                    width: 50,
-                  ),
-                  // Hammer-on / Pull-off (Bogen über den Zahlen).
-                  key(
-                    const Text('H/P', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                    () => session.perform(TabAction.legato),
-                    selected: cur?.legato.contains(session.string) ?? false,
-                    tooltip: tip(TabAction.legato),
-                    width: 44,
-                  ),
-                  // Vorschlagsnote (Approach-Note): kleine Zahl vor der Note.
-                  key(
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '3',
-                            style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
-                          ),
-                          const TextSpan(
-                            text: '5',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
-                    ),
-                    () => session.perform(TabAction.grace),
-                    selected: session.graceInput || (cur?.graces.containsKey(session.string) ?? false),
-                    tooltip: tip(TabAction.grace),
-                    width: 40,
-                  ),
-                  key(
-                    Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A2)),
-                    () => session.perform(TabAction.staccato),
-                    selected: cur?.staccato ?? false,
-                    tooltip: tip(TabAction.staccato),
-                    width: 37,
-                  ),
-                  key(
-                    Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A0)),
-                    () => session.perform(TabAction.accent),
-                    selected: cur?.accent ?? false,
-                    tooltip: tip(TabAction.accent),
-                    width: 37,
-                  ),
-                  key(
-                    const Text(
-                      'P.M.',
-                      style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700),
-                    ),
-                    () => session.perform(TabAction.palmMute),
-                    selected: cur?.palmMute ?? false,
-                    tooltip: tip(TabAction.palmMute),
-                    width: 44,
-                  ),
-                  // Taktstriche: normal (fügt einen ein), dann die besonderen Arten.
-                  for (final (kind, action) in [
-                    (BarKind.normal, TabAction.bar),
-                    (BarKind.repeatStart, TabAction.repeatStart),
-                    (BarKind.repeatEnd, TabAction.repeatEnd),
-                    (BarKind.doubleLine, TabAction.doubleBar),
-                    (BarKind.last, TabAction.finalBar),
-                  ])
-                    key(
-                      BarKindIcon(kind, color: scheme.onSurface),
-                      () => session.perform(action),
-                      tooltip: tip(action),
-                      width: 37,
-                    ),
-                ],
-              ),
-            ),
-            // Bund-Knöpfe: braucht nur, wer keine Tastatur hat (Tablet-Modus).
-            ValueListenableBuilder<bool>(
-              valueListenable: TouchKeyboard.tabletMode,
-              builder: (context, tablet, _) {
-                final show = switch (tools.tabKeypad) {
-                  TabKeypad.always => true,
-                  TabKeypad.never => false,
-                  TabKeypad.auto => tablet,
-                };
-                if (!show) return const SizedBox.shrink();
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Label(tr('Bund', 'Fret')),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        for (var f = 0; f <= TabEditor.maxFret; f++)
-                          key(Text('$f'), () => session.setFret(f), selected: fret == f, width: 44),
-                      ],
-                    ),
-                  ],
-                );
-              },
-            ),
-            // Farbig markieren (wie mit dem Leuchtstift): Markiertes bzw. der
-            // Schlag unter dem Cursor.
-            _Label(tr('Farbig markieren', 'Highlight')),
-            _TabHighlight(session: session, tools: tools),
-            // Transponieren: Markiertes (sonst der Schlag unter dem Cursor)
-            // um einen Halbton tiefer bzw. höher.
-            _Label(tr('Transponieren', 'Transpose')),
+            _Label(tr('Anschlag', 'Attack')),
             Wrap(
               spacing: 4,
               runSpacing: 4,
               children: [
                 key(
-                  Text(tr('−½ Ton', '−½ tone'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  () => session.perform(TabAction.transposeDown),
-                  tooltip: tip(TabAction.transposeDown),
-                  width: 72,
+                  const Text('x', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  () => session.perform(TabAction.ghost),
+                  selected: fret == ghostNote,
+                  tooltip: tip(TabAction.ghost),
+                  width: 37,
                 ),
                 key(
-                  Text(tr('+½ Ton', '+½ tone'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  () => session.perform(TabAction.transposeUp),
-                  tooltip: tip(TabAction.transposeUp),
-                  width: 72,
+                  const Text(
+                    'P.M.',
+                    style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700),
+                  ),
+                  () => session.perform(TabAction.palmMute),
+                  selected: cur?.palmMute ?? false,
+                  tooltip: tip(TabAction.palmMute),
+                  width: 44,
+                ),
+                key(
+                  Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A2)),
+                  () => session.perform(TabAction.staccato),
+                  selected: cur?.staccato ?? false,
+                  tooltip: tip(TabAction.staccato),
+                  width: 37,
+                ),
+                key(
+                  Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A0)),
+                  () => session.perform(TabAction.accent),
+                  selected: cur?.accent ?? false,
+                  tooltip: tip(TabAction.accent),
+                  width: 37,
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            _Section(tr('Takt', 'Bar')),
+            _Label(tr('Taktstriche, Takt einfügen/löschen', 'Barlines, insert/delete bar')),
             Wrap(
               spacing: 4,
               runSpacing: 4,
               children: [
-                key(
-                  const Icon(Icons.arrow_back, size: 18),
-                  () => session.perform(TabAction.left),
-                  tooltip: tip(TabAction.left),
-                ),
-                key(
-                  const Icon(Icons.arrow_upward, size: 18),
-                  () => session.perform(TabAction.up),
-                  tooltip: tip(TabAction.up),
-                ),
-                key(
-                  const Icon(Icons.arrow_downward, size: 18),
-                  () => session.perform(TabAction.down),
-                  tooltip: tip(TabAction.down),
-                ),
-                key(
-                  const Icon(Icons.arrow_forward, size: 18),
-                  () => session.perform(TabAction.right),
-                  tooltip: tip(TabAction.right),
-                ),
-                key(
-                  const Icon(Icons.backspace_outlined, size: 18),
-                  () => session.perform(TabAction.clearNote),
-                  tooltip: tip(TabAction.clearNote),
-                ),
-                key(
-                  const Icon(Icons.playlist_remove, size: 18),
-                  () => session.perform(TabAction.deleteBeat),
-                  tooltip: tip(TabAction.deleteBeat),
-                ),
-                key(
-                  const Icon(Icons.playlist_add, size: 18),
-                  () => session.perform(TabAction.insertBeat),
-                  tooltip: tip(TabAction.insertBeat),
-                ),
+                // Taktstriche: normal (fügt einen ein), dann die besonderen Arten.
+                for (final (kind, action) in [
+                  (BarKind.normal, TabAction.bar),
+                  (BarKind.repeatStart, TabAction.repeatStart),
+                  (BarKind.repeatEnd, TabAction.repeatEnd),
+                  (BarKind.doubleLine, TabAction.doubleBar),
+                  (BarKind.last, TabAction.finalBar),
+                ])
+                  key(
+                    BarKindIcon(kind, color: scheme.onSurface),
+                    () => session.perform(action),
+                    tooltip: tip(action),
+                    width: 31,
+                  ),
                 key(
                   const Icon(Icons.add_box_outlined, size: 18),
                   () => session.perform(TabAction.insertMeasure),
                   tooltip: tip(TabAction.insertMeasure),
+                  width: 31,
                 ),
                 key(
                   const Icon(Icons.indeterminate_check_box_outlined, size: 18),
                   () => session.perform(TabAction.deleteMeasure),
                   tooltip: tip(TabAction.deleteMeasure),
+                  width: 31,
                 ),
               ],
             ),
+            _TabMeter(tools: tools, session: session),
+            _Section(tr('Bearbeiten', 'Edit')),
             _Label(tr('Auswahl', 'Selection')),
             Wrap(
               spacing: 4,
@@ -2032,6 +2052,41 @@ class _TabKeypad extends StatelessWidget {
                 ),
               ],
             ),
+            _Label(tr('Schläge und Transponieren', 'Beats and transposing')),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                key(
+                  const Icon(Icons.playlist_remove, size: 18),
+                  () => session.perform(TabAction.deleteBeat),
+                  tooltip: tip(TabAction.deleteBeat),
+                  width: 44,
+                ),
+                key(
+                  const Icon(Icons.playlist_add, size: 18),
+                  () => session.perform(TabAction.insertBeat),
+                  tooltip: tip(TabAction.insertBeat),
+                  width: 44,
+                ),
+                key(
+                  Text(tr('−½ Ton', '−½ tone'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  () => session.perform(TabAction.transposeDown),
+                  tooltip: tip(TabAction.transposeDown),
+                  width: 72,
+                ),
+                key(
+                  Text(tr('+½ Ton', '+½ tone'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  () => session.perform(TabAction.transposeUp),
+                  tooltip: tip(TabAction.transposeUp),
+                  width: 72,
+                ),
+              ],
+            ),
+            // Farbig markieren (wie mit dem Leuchtstift): Markiertes bzw. der
+            // Schlag unter dem Cursor.
+            _Label(tr('Farbig markieren', 'Highlight')),
+            _TabHighlight(session: session, tools: tools),
           ],
         );
       },

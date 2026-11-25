@@ -85,7 +85,10 @@ class _Row<T> extends StatelessWidget {
             children: [
               if (option.icon != null) ...[Icon(option.icon, size: 20, color: fg), const SizedBox(width: 12)],
               Expanded(
-                child: Text(option.label, style: TextStyle(color: fg, fontWeight: selected ? FontWeight.w600 : null)),
+                child: Text(
+                  option.label,
+                  style: TextStyle(color: fg, fontWeight: selected ? FontWeight.w600 : null),
+                ),
               ),
               if (selected) Icon(Icons.check, size: 20, color: fg),
             ],

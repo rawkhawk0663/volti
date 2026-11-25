@@ -72,10 +72,19 @@ bool shapeCanFill(ShapeKind kind) => kind == ShapeKind.rectangle || kind == Shap
 /// decrescendo). Gespeicherte Einstellungen mit „decrescendo“ gelten als Gabel.
 ShapeKind normalizeShapeKind(ShapeKind k) => k == ShapeKind.decrescendo ? ShapeKind.crescendo : k;
 
-/// Die Formen, die das Werkzeug anbietet (ohne das alte „Decrescendo“).
-List<ShapeKind> get offeredShapeKinds => [
-  for (final k in ShapeKind.values)
-    if (k != ShapeKind.decrescendo) k,
+/// Die Formen, die das Werkzeug anbietet (ohne das alte „Decrescendo“):
+/// zuerst die allgemeinen, dann die Zeichen für Noten, zuletzt die Linien.
+const offeredShapeKinds = [
+  ShapeKind.line,
+  ShapeKind.arrow,
+  ShapeKind.rectangle,
+  ShapeKind.ellipse,
+  ShapeKind.crescendo,
+  ShapeKind.slur,
+  ShapeKind.volta,
+  ShapeKind.voltaOpen,
+  ShapeKind.staff,
+  ShapeKind.tab,
 ];
 
 List<ShapePiece> shapeGeometry(ShapeKind kind, Offset a, Offset b, double strokePx, {double? pageWidth}) {

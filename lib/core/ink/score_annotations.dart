@@ -344,9 +344,7 @@ class ScoreAnnotations {
     final bookmarks = (json['bookmarks'] as List<dynamic>? ?? const []).map(
       (l) => Bookmark.fromJson(l as Map<String, dynamic>),
     );
-    final tabs = (json['tabs'] as List<dynamic>? ?? const []).map(
-      (t) => TabBlock.fromJson(t as Map<String, dynamic>),
-    );
+    final tabs = (json['tabs'] as List<dynamic>? ?? const []).map((t) => TabBlock.fromJson(t as Map<String, dynamic>));
     return ScoreAnnotations(strokes, texts, stamps, layers, links, bookmarks, tabs);
   }
 }

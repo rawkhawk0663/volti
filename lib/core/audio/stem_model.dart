@@ -37,11 +37,7 @@ class StemModelFile {
 
   /// Lädt die Modell-Datei herunter und prüft sie (Prüfsumme). [progress]
   /// bekommt 0..1. Gibt false zurück, wenn [cancelled] vorher true wurde.
-  static Future<bool> download(
-    String supportDir, {
-    void Function(double)? progress,
-    bool Function()? cancelled,
-  }) async {
+  static Future<bool> download(String supportDir, {void Function(double)? progress, bool Function()? cancelled}) async {
     final target = File(pathIn(supportDir));
     await target.parent.create(recursive: true);
     final part = File('${target.path}.part');
@@ -159,7 +155,9 @@ class StemModelRunner {
   /// Pfad in UTF-16 (`OrtSession.fromFile` übergibt UTF-8, das gab beim
   /// Besitzer „File doesn't exist“ mit Zeichensalat).
   OrtSession _openSession(String path) {
-    final name = Platform.isWindows ? path.toNativeUtf16(allocator: calloc).cast<ffi.Char>() : path.toNativeUtf8(allocator: calloc).cast<ffi.Char>();
+    final name = Platform.isWindows
+        ? path.toNativeUtf16(allocator: calloc).cast<ffi.Char>()
+        : path.toNativeUtf8(allocator: calloc).cast<ffi.Char>();
     final out = calloc<ffi.Pointer<bg.OrtSession>>();
     try {
       OrtStatus.checkOrtStatus(

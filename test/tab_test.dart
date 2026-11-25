@@ -215,7 +215,10 @@ void main() {
       expect(e.beats.single.frets, {0: 7}, reason: 'eine Zahl ersetzt das x');
       const b = TabBeat(frets: {2: ghostNote, 3: 5});
       expect(TabBeat.fromJson(b.toJson()), b);
-      expect(TabKeymap.defaults.actionFor(LogicalKeyboardKey.keyX, ctrl: false, shift: true, alt: false), TabAction.ghost);
+      expect(
+        TabKeymap.defaults.actionFor(LogicalKeyboardKey.keyX, ctrl: false, shift: true, alt: false),
+        TabAction.ghost,
+      );
     });
 
     test('Slides davor/danach speichern, lesen und zeichnen', () {
@@ -231,11 +234,23 @@ void main() {
       expect(odd.slideIns, isEmpty);
       // Platz für die Linie vor der Zahl
       final plain = layoutTab(
-        block('a', beats: const [TabBeat(frets: {1: 5}), TabBeat(frets: {1: 7})]),
+        block(
+          'a',
+          beats: const [
+            TabBeat(frets: {1: 5}),
+            TabBeat(frets: {1: 7}),
+          ],
+        ),
         const Size(1000, 1400),
       );
       final slid = layoutTab(
-        block('a', beats: const [TabBeat(frets: {1: 5}), TabBeat(frets: {1: 7}, slideIns: {1: 1})]),
+        block(
+          'a',
+          beats: const [
+            TabBeat(frets: {1: 5}),
+            TabBeat(frets: {1: 7}, slideIns: {1: 1}),
+          ],
+        ),
         const Size(1000, 1400),
       );
       expect(slid.xs[1] - slid.xs[0], greaterThan(plain.xs[1] - plain.xs[0]));
@@ -299,11 +314,20 @@ void main() {
       expect(e.currentMeter, '2/4');
       expect(measureLengths(e.beats, e.measure), [1.0, 0.5, 1.0], reason: 'nur der zweite Takt ist 2/4');
       expect(e.beats.length, beats.length, reason: 'nichts wird verschoben');
-      final bars = [for (final b in e.beats) if (b.bar) b.meter];
+      final bars = [
+        for (final b in e.beats)
+          if (b.bar) b.meter,
+      ];
       expect(bars, ['2/4', '4/4']);
       // Wieder 4/4 wählen: kein Taktwechsel mehr
       e.setMeasureMeter('4/4');
-      expect([for (final b in e.beats) if (b.bar) b.meter], [null, null]);
+      expect(
+        [
+          for (final b in e.beats)
+            if (b.bar) b.meter,
+        ],
+        [null, null],
+      );
       expect(measureLengths(e.beats, e.measure), [1.0, 1.0, 1.0]);
     });
 
@@ -337,10 +361,20 @@ void main() {
       final beats = rebar([q, q, q, q, const TabBeat.bar(meter: '2/4'), q, q, const TabBeat.bar(), q, q, q, q], 1.0);
       expect(measureLengths(beats, 1.0), [1.0, 0.5, 0.5, 0.5], reason: 'ab dem Wechsel in 2/4');
       // Takt mit Wechsel löschen: der Wechsel danach gilt weiter
-      final e = TabEditor(
-        [q, q, q, q, const TabBeat.bar(meter: '2/4'), q, q, const TabBeat.bar(meter: '4/4'), q, q, q, q],
-        meter: '4/4',
-      );
+      final e = TabEditor([
+        q,
+        q,
+        q,
+        q,
+        const TabBeat.bar(meter: '2/4'),
+        q,
+        q,
+        const TabBeat.bar(meter: '4/4'),
+        q,
+        q,
+        q,
+        q,
+      ], meter: '4/4');
       e.beat = 5;
       e.deleteMeasure();
       expect(measureLengths(e.beats, e.measure), [1.0, 1.0]);
@@ -396,7 +430,9 @@ void main() {
       expect(e.deleteSelection(), isTrue);
       expect(e.beats.map((b) => b.frets[0]), [3, 4, 2, 3]);
       e.selectAll();
-      e.paste(const [TabBeat(frets: {1: 9})]);
+      e.paste(const [
+        TabBeat(frets: {1: 9}),
+      ]);
       expect(e.beats.single.frets, {1: 9}, reason: 'Einfügen ersetzt die Markierung');
     });
   });
@@ -432,7 +468,10 @@ void main() {
     });
 
     test('Haltebogen setzt die gleiche Bundzahl beim nächsten Schlag, gehaltene in Klammern', () {
-      final e = TabEditor(const [TabBeat(frets: {2: 5}), TabBeat(frets: {0: 1})]);
+      final e = TabEditor(const [
+        TabBeat(frets: {2: 5}),
+        TabBeat(frets: {0: 1}),
+      ]);
       e.string = 2;
       e.toggleTie();
       expect(e.beats[0].ties, {2});
@@ -443,7 +482,10 @@ void main() {
     });
 
     test('Staccato und Akzent pro Schlag, nicht bei Pausen, gespeichert', () {
-      final e = TabEditor(const [TabBeat(frets: {0: 3}), TabBeat()]);
+      final e = TabEditor(const [
+        TabBeat(frets: {0: 3}),
+        TabBeat(),
+      ]);
       e.toggleStaccato();
       e.toggleAccent();
       expect(e.beats[0].staccato, isTrue);
@@ -462,7 +504,10 @@ void main() {
   group('Einzelne Noten löschen, Noten übereinander markieren', () {
     const chord = TabBeat(frets: {0: 0, 1: 1, 2: 0, 3: 2});
     test('Ohne Markierung verschwindet nur die eine Note, der Schlag bleibt', () {
-      final e = TabEditor(const [chord, TabBeat(frets: {0: 3})]);
+      final e = TabEditor(const [
+        chord,
+        TabBeat(frets: {0: 3}),
+      ]);
       e.string = 1;
       e.deleteSelection() ? null : e.clearNote();
       expect(e.beats.length, 2);
@@ -492,7 +537,12 @@ void main() {
     });
 
     test('Ganzen Schlag markieren: alle Noten übereinander, Taktstrich oder Pause; Entf löscht ihn', () {
-      final e = TabEditor(const [chord, TabBeat.bar(), TabBeat(), TabBeat(frets: {0: 3})]);
+      final e = TabEditor(const [
+        chord,
+        TabBeat.bar(),
+        TabBeat(),
+        TabBeat(frets: {0: 3}),
+      ]);
       e.string = 3;
       e.selectColumn();
       expect(e.selection, (0, 0));
@@ -550,9 +600,15 @@ void main() {
       const q = TabBeat(frets: {0: 1});
       final beats = [
         const TabBeat.bar(kind: BarKind.repeatStart),
-        q, q, q, q,
+        q,
+        q,
+        q,
+        q,
         const TabBeat.bar(kind: BarKind.repeatEnd),
-        q, q, q, q,
+        q,
+        q,
+        q,
+        q,
         const TabBeat.bar(kind: BarKind.last),
       ];
       final out = rebar(beats, 1.0);
@@ -657,7 +713,16 @@ void main() {
 
   group('Zusammenführen und Rückgängig', () {
     test('Jüngste Fassung gewinnt als Ganzes, auch beim Löschen', () {
-      final a = ScoreAnnotations()..putTab(block('t', beats: const [TabBeat(frets: {0: 1})], at: DateTime.utc(2026, 2)));
+      final a = ScoreAnnotations()
+        ..putTab(
+          block(
+            't',
+            beats: const [
+              TabBeat(frets: {0: 1}),
+            ],
+            at: DateTime.utc(2026, 2),
+          ),
+        );
       final b = ScoreAnnotations()..putTab(block('t', deleted: true, at: DateTime.utc(2026, 1)));
       expect(ScoreAnnotations.merge(a, b).tab('t')!.deleted, isFalse, reason: 'später zurückgeholt');
       expect(ScoreAnnotations.merge(b, a).tab('t')!.deleted, isFalse);
@@ -708,7 +773,12 @@ void main() {
       addTearDown(() => dir.deleteSync(recursive: true));
       final c = InkController(pdfPath: '${dir.path}/x.pdf');
       final id = c.addTab(page: 1, x: 0.1, y: 0.1, width: 0.8);
-      c.updateTab(id, beats: const [TabBeat(frets: {0: 5})]);
+      c.updateTab(
+        id,
+        beats: const [
+          TabBeat(frets: {0: 5}),
+        ],
+      );
       c.updateTab(id, gap: TabBlock.defaultGap * 1.5);
       expect(c.annotations.tab(id)!.gap, TabBlock.defaultGap * 1.5);
       c.undo();
@@ -831,7 +901,12 @@ void main() {
       final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
       ink.updateTab(
         id,
-        beats: const [TabBeat(frets: {0: 1}), TabBeat(frets: {0: 2}), TabBeat.bar(at: 0.7), TabBeat(frets: {0: 3})],
+        beats: const [
+          TabBeat(frets: {0: 1}),
+          TabBeat(frets: {0: 2}),
+          TabBeat.bar(at: 0.7),
+          TabBeat(frets: {0: 3}),
+        ],
       );
       tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
       await t.pump();
@@ -857,7 +932,14 @@ void main() {
     testWidgets('Taktstrich am Griff ziehen und mit langem Drücken zurücksetzen', (t) async {
       await pump(t);
       final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
-      ink.updateTab(id, beats: const [TabBeat(frets: {0: 1}), TabBeat.bar(kind: BarKind.repeatEnd), TabBeat(frets: {0: 2})]);
+      ink.updateTab(
+        id,
+        beats: const [
+          TabBeat(frets: {0: 1}),
+          TabBeat.bar(kind: BarKind.repeatEnd),
+          TabBeat(frets: {0: 2}),
+        ],
+      );
       tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
       await t.pump();
       await t.pump();
@@ -883,7 +965,13 @@ void main() {
     testWidgets('Umschalt+→ markiert, Strg+C/Strg+V kopiert, Takt einfügen mit Umschalt+N', (t) async {
       await pump(t);
       final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
-      ink.updateTab(id, beats: const [TabBeat(frets: {0: 1}), TabBeat(frets: {0: 2})]);
+      ink.updateTab(
+        id,
+        beats: const [
+          TabBeat(frets: {0: 1}),
+          TabBeat(frets: {0: 2}),
+        ],
+      );
       tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
       await t.pump();
       await t.pump();
@@ -912,7 +1000,13 @@ void main() {
     testWidgets('Umschalt+↓ markiert sofort den ganzen Schlag, Entf löscht ihn', (t) async {
       await pump(t);
       final id = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
-      ink.updateTab(id, beats: const [TabBeat(frets: {0: 1, 1: 3, 2: 2}), TabBeat(frets: {0: 5})]);
+      ink.updateTab(
+        id,
+        beats: const [
+          TabBeat(frets: {0: 1, 1: 3, 2: 2}),
+          TabBeat(frets: {0: 5}),
+        ],
+      );
       tools.tabSession.value = TabSession(ink: ink, id: id, page: 1);
       await t.pump();
       await t.pump();
@@ -993,7 +1087,9 @@ void main() {
       expect(transposeBeat(const TabBeat(frets: {1: 0, 2: 5}), -1), isNull);
       // Tiefe E-Saite leer noch tiefer: geht nicht
       expect(transposeBeat(const TabBeat(frets: {5: 0}), -1), isNull);
-      final e = TabEditor([const TabBeat(frets: {5: 0})]);
+      final e = TabEditor([
+        const TabBeat(frets: {5: 0}),
+      ]);
       expect(e.transpose(-1), 1, reason: 'meldet, was nicht passte');
       expect(e.beats.single.frets, {5: 0}, reason: 'bleibt dann, wie er war');
     });
@@ -1040,7 +1136,9 @@ void main() {
 
     test('Vorschlagsnote: Umschalt+G, dann Bund tippen; zählt nicht zum Rhythmus', () {
       final t0 = DateTime(2026);
-      final e = TabEditor([const TabBeat(frets: {1: 7})]);
+      final e = TabEditor([
+        const TabBeat(frets: {1: 7}),
+      ]);
       e.string = 1;
       e.toggleGrace();
       expect(e.graceInput, isTrue);
@@ -1068,12 +1166,16 @@ void main() {
       e.string = 0;
       e.toggleGrace();
       expect(e.graceInput, isFalse);
-      expect(TabKeymap.defaults.actionFor(LogicalKeyboardKey.keyG, ctrl: false, shift: true, alt: false), TabAction.grace);
+      expect(
+        TabKeymap.defaults.actionFor(LogicalKeyboardKey.keyG, ctrl: false, shift: true, alt: false),
+        TabAction.grace,
+      );
     });
 
-
     test('Doppelt punktiert: Punkt-Taste schaltet durch, dauert 1¾-mal, gespeichert', () {
-      final e = TabEditor([const TabBeat(frets: {0: 3})]);
+      final e = TabEditor([
+        const TabBeat(frets: {0: 3}),
+      ]);
       e.toggleDot();
       expect(e.beats.single.dots, 1);
       expect(e.beats.single.length, closeTo(0.375, 1e-9));
@@ -1090,7 +1192,6 @@ void main() {
       expect(e.beats.single.copyWith(dotted: false).doubleDot, isFalse, reason: 'ohne Punkt kein zweiter');
       expect(const TabBeat(doubleDot: true).length, 0.25, reason: 'zweiter Punkt nur zusammen mit dem ersten');
     });
-
   });
 
   test('Kopieren und Einfügen behält die Breite der Takte', () {
@@ -1137,7 +1238,11 @@ void main() {
     e.anchor = 0;
     e.beat = 3;
     e.setHighlight(0x80FFEE58);
-    expect([for (final b in e.beats) b.highlight], [0x80FFEE58, 0x80FFEE58, 0, 0x80FFEE58], reason: 'Taktstriche nicht');
+    expect(
+      [for (final b in e.beats) b.highlight],
+      [0x80FFEE58, 0x80FFEE58, 0, 0x80FFEE58],
+      reason: 'Taktstriche nicht',
+    );
     expect(TabBeat.fromJson(e.beats.first.toJson()), e.beats.first);
     e.anchor = null;
     e.beat = 1;
