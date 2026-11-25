@@ -63,6 +63,7 @@ class TabBeat {
     this.tieIns = const {},
     this.legato = const {},
     this.graces = const {},
+    this.highlight = 0,
     this.staccato = false,
     this.accent = false,
     this.palmMute = false,
@@ -86,6 +87,7 @@ class TabBeat {
       tieIns = const {},
       legato = const {},
       graces = const {},
+      highlight = 0,
       staccato = false,
       accent = false,
       palmMute = false,
@@ -160,6 +162,10 @@ class TabBeat {
   /// Bogen mit „H“ bzw. „P“ führt in die Hauptnote.
   final Map<int, int> graces;
 
+  /// Farbige Markierung hinter dem Schlag (ARGB mit Deckkraft, 0 = keine).
+  /// Aufeinanderfolgende Schläge gleicher Farbe bilden eine Fläche.
+  final int highlight;
+
   /// Staccato (Punkt über dem Schlag) und Akzent („>“).
   final bool staccato, accent;
 
@@ -205,6 +211,7 @@ class TabBeat {
     Set<int>? tieIns,
     Set<int>? legato,
     Map<int, int>? graces,
+    int? highlight,
     bool? staccato,
     bool? accent,
     bool? palmMute,
@@ -257,6 +264,7 @@ class TabBeat {
       staccato: f.isNotEmpty && (staccato ?? this.staccato),
       accent: f.isNotEmpty && (accent ?? this.accent),
       palmMute: f.isNotEmpty && (palmMute ?? this.palmMute),
+      highlight: highlight ?? this.highlight,
       triplet: triplet ?? this.triplet,
       at: identical(at, _keepMeter) ? this.at : at as double?,
     );
@@ -286,6 +294,7 @@ class TabBeat {
           if (accent) 'acc': true,
           if (palmMute) 'pm': true,
           if (triplet) 'tri': true,
+          if (highlight != 0) 'hl': highlight,
           if (at != null) 'at': at,
         };
 
@@ -347,6 +356,7 @@ class TabBeat {
       accent: frets.isNotEmpty && j['acc'] == true,
       palmMute: frets.isNotEmpty && j['pm'] == true,
       triplet: j['tri'] == true,
+      highlight: (j['hl'] as num?)?.toInt() ?? 0,
       at: (j['at'] as num?)?.toDouble().clamp(0.0, 1.0),
     );
   }
@@ -380,6 +390,7 @@ class TabBeat {
       other.staccato == staccato &&
       other.accent == accent &&
       other.palmMute == palmMute &&
+      other.highlight == highlight &&
       other.triplet == triplet;
 
   @override
@@ -403,6 +414,7 @@ class TabBeat {
     staccato,
     accent,
     palmMute,
+    highlight,
     triplet,
   ]);
 }
@@ -1174,6 +1186,17 @@ class TabEditor {
         }
         break;
       }
+    }
+    _resetDigits();
+  }
+
+  /// Farbige Markierung ([argb], 0 = entfernen) für die markierten Schläge
+  /// bzw. den Schlag unter dem Cursor.
+  void setHighlight(int argb) {
+    if (beats.isEmpty) return;
+    final sel = selection ?? (beat, beat);
+    for (var i = sel.$1; i <= sel.$2 && i < beats.length; i++) {
+      if (!beats[i].bar) beats[i] = beats[i].copyWith(highlight: argb);
     }
     _resetDigits();
   }

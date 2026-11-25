@@ -1130,4 +1130,20 @@ void main() {
     final e = TabEditor(const [q])..paste(clip.beats);
     expect(e.beats.where((x) => x.bar).every((x) => x.at == null), isTrue);
   });
+
+  test('Farbig markieren: Markiertes bzw. Schlag unter dem Cursor, gespeichert', () {
+    const q = TabBeat(frets: {0: 1});
+    final e = TabEditor([q, q, const TabBeat.bar(), q]);
+    e.anchor = 0;
+    e.beat = 3;
+    e.setHighlight(0x80FFEE58);
+    expect([for (final b in e.beats) b.highlight], [0x80FFEE58, 0x80FFEE58, 0, 0x80FFEE58], reason: 'Taktstriche nicht');
+    expect(TabBeat.fromJson(e.beats.first.toJson()), e.beats.first);
+    e.anchor = null;
+    e.beat = 1;
+    e.setHighlight(0);
+    expect([for (final b in e.beats) b.highlight], [0x80FFEE58, 0, 0, 0x80FFEE58]);
+    expect(e.beats.first.copyWith(frets: const {0: 5}).highlight, 0x80FFEE58, reason: 'Bund ändern behält die Farbe');
+    expect(TabBeat.fromJson(q.toJson()).highlight, 0);
+  });
 }

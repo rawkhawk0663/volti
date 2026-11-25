@@ -1880,6 +1880,10 @@ class _TabKeypad extends StatelessWidget {
                 );
               },
             ),
+            // Farbig markieren (wie mit dem Leuchtstift): Markiertes bzw. der
+            // Schlag unter dem Cursor.
+            _Label(tr('Farbig markieren', 'Highlight')),
+            _TabHighlight(session: session, tools: tools),
             // Transponieren: Markiertes (sonst der Schlag unter dem Cursor)
             // um einen Halbton tiefer bzw. höher.
             _Label(tr('Transponieren', 'Transpose')),
@@ -2073,6 +2077,74 @@ class _TabBackgroundState extends State<_TabBackground> {
             },
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// Farbige Markierung der markierten Schläge: helle Leuchtfarben, die
+/// Deckkraft stellt der Regler ein (die Zahlen bleiben gut lesbar).
+class _TabHighlight extends StatefulWidget {
+  const _TabHighlight({required this.session, required this.tools});
+  final TabSession session;
+  final ToolController tools;
+
+  /// Helle Farben, ganz deckend (die Deckkraft kommt vom Regler).
+  static const colors = [0xFFFFEE58, 0xFFAED581, 0xFF81D4FA, 0xFFF48FB1, 0xFFFFB74D, 0xFFCE93D8];
+
+  @override
+  State<_TabHighlight> createState() => _TabHighlightState();
+}
+
+class _TabHighlightState extends State<_TabHighlight> {
+  /// Deckkraft während des Ziehens am Regler.
+  double? _dragging;
+
+  @override
+  Widget build(BuildContext context) {
+    final tools = widget.tools, session = widget.session;
+    final current = session.currentHighlight;
+    final pref = tools.tabHighlight;
+    final alpha = _dragging ?? _alpha(current != 0 ? current : pref);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _Swatch(
+              color: null,
+              tooltip: tr('Markierung entfernen', 'Remove highlight'),
+              selected: false,
+              onTap: () => session.setHighlight(0),
+            ),
+            for (final c in _TabHighlight.colors)
+              _Swatch(
+                color: Color(c),
+                selected: current != 0 && (current & 0xFFFFFF) == (c & 0xFFFFFF),
+                onTap: () {
+                  final argb = _withAlpha(c, alpha);
+                  tools.setTabHighlight(argb);
+                  session.setHighlight(argb);
+                },
+              ),
+          ],
+        ),
+        _Label(tr('Deckkraft ${(alpha * 100).round()} %', 'Opacity ${(alpha * 100).round()} %')),
+        Slider(
+          min: 0.2,
+          max: 1,
+          divisions: 16,
+          value: alpha.clamp(0.2, 1.0),
+          onChanged: (v) => setState(() => _dragging = v),
+          // Erst beim Loslassen: ein einziger Rückgängig-Schritt.
+          onChangeEnd: (v) {
+            setState(() => _dragging = null);
+            tools.setTabHighlight(_withAlpha(pref, v));
+            if (current != 0) session.setHighlight(_withAlpha(current, v));
+          },
+        ),
       ],
     );
   }

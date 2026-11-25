@@ -239,6 +239,21 @@ class TabSession extends ChangeNotifier {
   void setFret(int f) => _edit((e) => e.setFret(f));
   void setValue(int v) => _edit((e) => e.setValue(v));
   void setDots(int n) => _edit((e) => e.setDots(n));
+
+  /// Farbige Markierung für das Markierte (bzw. den Schlag unter dem Cursor).
+  void setHighlight(int argb) => _edit((e) => e.setHighlight(argb));
+
+  /// Farbe der Markierung im Markierten (bzw. unter dem Cursor), 0 = keine.
+  int get currentHighlight {
+    final b = block;
+    if (b == null || b.beats.isEmpty) return 0;
+    _editor.beats = [...b.beats];
+    final sel = _editor.selection ?? (beat, beat);
+    for (var i = sel.$1; i <= sel.$2 && i < b.beats.length; i++) {
+      if (!b.beats[i].bar) return b.beats[i].highlight;
+    }
+    return 0;
+  }
   void bend(int quarters) => _edit((e) => e.bend(quarters));
   void slideIn(int dir) => _edit((e) => e.slideIn(dir));
   void slideOut(int dir) => _edit((e) => e.slideOut(dir));

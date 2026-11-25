@@ -219,6 +219,13 @@ class ToolController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Farbe für farbige Markierungen in Tabulaturen (mit Deckkraft).
+  int get tabHighlight => int.tryParse(settings.text('tabHighlight') ?? '') ?? 0x8CFFEE58;
+  Future<void> setTabHighlight(int v) async {
+    await settings.setText('tabHighlight', '$v');
+    notifyListeners();
+  }
+
   /// Hintergrund für neue Tabulaturen (wie bei Text-Notizen; 0 = ohne).
   int get tabBackground => int.tryParse(settings.text('tabBackground') ?? '') ?? TabBlock.noBackground;
 

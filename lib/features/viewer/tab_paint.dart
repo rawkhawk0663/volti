@@ -397,6 +397,8 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   const white = Color(0xFFFFFFFF);
   final ground = bg != null ? Color.alphaBlend(bg, white) : white;
 
+  _paintHighlights(canvas, t, l);
+
   // Linien und Anfangsstrich
   for (var s = 0; s < TabBlock.strings; s++) {
     canvas.drawLine(Offset(l.origin.dx, l.lineY(s)), Offset(lineEnd, l.lineY(s)), thin);
@@ -424,6 +426,8 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   for (var i = 0; i < t.beats.length; i++) {
     final b = t.beats[i];
     final cx = l.xs[i];
+    // Grund hinter den Zahlen: farbig markiert mit der Farbe darunter.
+    knockout.color = _groundOf(b, ground);
     if (b.bar) {
       _paintBar(canvas, b.kind, l.lineXs[i], l, color, stem.strokeWidth);
       // Taktwechsel: neue Taktart gleich nach dem Taktstrich.
@@ -682,10 +686,12 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
     ..color = t.background != TabBlock.noBackground
         ? Color.alphaBlend(Color(t.background), const Color(0xFFFFFFFF))
         : const Color(0xFFFFFFFF);
+  final plain = knockout.color;
   for (var i = 0; i < t.beats.length; i++) {
     final b = t.beats[i];
     if (b.bar) continue;
     final cx = l.xs[i];
+    knockout.color = _groundOf(b, plain);
     // Staccato und Akzent über den Linien (bei Palm Mute darüber).
     var above = l.top - g * (b.palmMute ? 1.75 : 0.9);
     if (b.staccato) {
@@ -882,6 +888,60 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
       label.dispose();
     }
   }
+}
+
+/// Grund hinter Zahlen eines Schlags: bei farbiger Markierung die Farbe
+/// über dem Grund der Tabulatur, sonst dieser.
+Color _groundOf(TabBeat b, Color ground) => b.highlight == 0 ? ground : Color.alphaBlend(Color(b.highlight), ground);
+
+/// Farbige Markierungen hinter den Schlägen (wie mit dem Leuchtstift):
+/// Aufeinanderfolgende Schläge gleicher Farbe bilden eine Fläche, auch über
+/// einen Taktstrich hinweg.
+void _paintHighlights(Canvas canvas, TabBlock t, TabLayout l) {
+  final g = l.gap;
+  int? start;
+  var end = -1, color = 0;
+  void flush() {
+    final s = start;
+    if (s == null) return;
+    final r = Rect.fromLTRB(
+      l.xs[s] - l.slotWidths[s] / 2,
+      l.top - g * 0.75,
+      l.xs[end] + l.slotWidths[end] / 2,
+      l.bottom + g * 0.75,
+    );
+    canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(g * 0.35)), Paint()..color = Color(color));
+    start = null;
+  }
+
+  for (var i = 0; i < t.beats.length; i++) {
+    final b = t.beats[i];
+    if (b.bar) {
+      if (start == null) continue;
+      // Taktstrich mitten in einer Fläche: nur, wenn es danach gleich weitergeht.
+      var j = i + 1;
+      while (j < t.beats.length && t.beats[j].bar) {
+        j++;
+      }
+      if (j < t.beats.length && t.beats[j].highlight == color) {
+        end = i;
+      } else {
+        flush();
+      }
+      continue;
+    }
+    if (b.highlight == 0) {
+      flush();
+    } else if (start != null && b.highlight == color) {
+      end = i;
+    } else {
+      flush();
+      start = i;
+      end = i;
+      color = b.highlight;
+    }
+  }
+  flush();
 }
 
 /// Palm Mute: kleines „P.M.“ gleich über der obersten Linie, bei mehreren
