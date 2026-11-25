@@ -1146,4 +1146,52 @@ void main() {
     expect(e.beats.first.copyWith(frets: const {0: 5}).highlight, 0x80FFEE58, reason: 'Bund ändern behält die Farbe');
     expect(TabBeat.fromJson(q.toJson()).highlight, 0);
   });
+
+  test('Kopieren und Einfügen: jede Note und jeder Taktstrich steht wieder genau gleich', () {
+    final dir = Directory.systemTemp.createTempSync('volti_tabclip2');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final ink = InkController(pdfPath: '${dir.path}/x.pdf');
+    addTearDown(ink.dispose);
+    const unit = Size(1000, 1000);
+    TabBeat n(int f, {double? at, int v = 8}) => TabBeat(frets: {2: f}, value: v, at: at);
+    double worst(String a, String b, int count, {int off = 0}) {
+      final ls = layoutTab(ink.annotations.tab(a)!, unit), ld = layoutTab(ink.annotations.tab(b)!, unit);
+      var w = 0.0;
+      for (var i = 0; i < count; i++) {
+        final d = ((ls.xs[i] - ls.xs[0]) - (ld.xs[i + off] - ld.xs[off])).abs();
+        if (d > w) w = d;
+      }
+      return w;
+    }
+
+    final line = [
+      n(5), n(7, at: 0.3), n(5), n(7), n(5, v: 4), n(3, v: 4),
+      const TabBeat.bar(at: 0.33),
+      n(2, v: 4), n(3, v: 4, at: 0.45), n(5, v: 2),
+      const TabBeat.bar(), // automatisch
+      n(7, v: 2), n(8, v: 4), n(9, v: 4, at: 0.9),
+    ];
+    final a = ink.addTab(page: 1, x: 0.05, y: 0.1, width: 0.9);
+    ink.updateTab(a, meter: '4/4', beats: line);
+    final clip = (TabSession(ink: ink, id: a, page: 1)..selectAll()).copy();
+    expect(clip.manual, isTrue);
+    // In eine schmalere, leere Zeile: wird breiter, alles steht gleich
+    final b = ink.addTab(page: 1, x: 0.05, y: 0.4, width: 0.6);
+    TabSession(ink: ink, id: b, page: 1).paste(clip);
+    expect(worst(a, b, line.length), lessThan(0.5));
+    expect(ink.annotations.tab(b)!.width, greaterThan(0.6), reason: 'Zeile wurde breiter');
+
+    // Hinten an bestehende (automatische) Takte, mit genug Platz
+    final short = [n(5), n(7, at: 0.5), n(5, v: 4), const TabBeat.bar(at: 0.4), n(2, v: 4), n(3, v: 4, at: 0.6)];
+    final c = ink.addTab(page: 1, x: 0.05, y: 0.6, width: 0.5);
+    ink.updateTab(c, beats: short);
+    final shortClip = (TabSession(ink: ink, id: c, page: 1)..selectAll()).copy();
+    final d = ink.addTab(page: 1, x: 0.05, y: 0.8, width: 0.9);
+    ink.updateTab(d, beats: [n(1, v: 1), const TabBeat.bar(), n(1, v: 2)]);
+    final before = layoutTab(ink.annotations.tab(d)!, unit);
+    (TabSession(ink: ink, id: d, page: 1)..moveTo(3, 0)).paste(shortClip);
+    expect(worst(c, d, short.length, off: 3), lessThan(0.5));
+    final after = layoutTab(ink.annotations.tab(d)!, unit);
+    expect(after.xs[1], closeTo(before.xs[1], 0.5), reason: 'der Taktstrich davor verrutscht nicht');
+  });
 }

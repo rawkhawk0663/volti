@@ -147,29 +147,21 @@ class TabSession extends ChangeNotifier {
     final g = l.gap;
     final left = l.xs[sel.$1] - l.slotWidths[sel.$1] / 2;
     final right = l.xs[sel.$2] + l.slotWidths[sel.$2] / 2;
-    // Abstand jedes Taktstrichs zum Taktstrich davor (bzw. zum Anfang der
-    // Zeile), in Linienabständen: So wird jeder Takt beim Einfügen gleich
-    // breit, auch in einer anderen Tabulatur.
-    var prev = l.contentStart;
+    // Stelle jedes Eintrags, gemessen ab dem Taktstrich vor dem Kopierten
+    // (bzw. dem Anfang der Zeile), in Linienabständen: So steht beim
+    // Einfügen alles wieder genau gleich, auch in einer anderen Tabulatur.
+    var ref = l.contentStart;
     for (var i = sel.$1 - 1; i >= 0; i--) {
       if (b.beats[i].bar) {
-        prev = l.xs[i];
+        ref = l.xs[i];
         break;
-      }
-    }
-    final steps = <double?>[];
-    for (var i = sel.$1; i <= sel.$2; i++) {
-      if (b.beats[i].bar) {
-        steps.add((l.xs[i] - prev) / g);
-        prev = l.xs[i];
-      } else {
-        steps.add(null);
       }
     }
     return TabClip(
       beats,
-      barSteps: steps,
-      anchored: [for (var i = sel.$1; i <= sel.$2; i++) b.beats[i].at != null],
+      offsets: [for (var i = sel.$1; i <= sel.$2; i++) (l.xs[i] - ref) / g],
+      // Von Hand angeordnet (Taktstriche oder Noten verschoben)?
+      manual: b.beats.any((x) => x.at != null),
       width: (right - left) / g,
     );
   }
@@ -179,57 +171,120 @@ class TabSession extends ChangeNotifier {
     _edit((e) => e.deleteSelection());
   }
 
-  /// Einfügen mit der Anordnung des Kopierten: Von Hand verschobene
-  /// Taktstriche stehen im gleichen Abstand wie beim Kopieren, von Hand
-  /// verschobene Noten behalten ihre Lage im Takt. Verschobene Taktstriche
-  /// dahinter rücken um die eingefügte Breite nach rechts.
+  /// Einfügen mit der Anordnung des Kopierten.
+  ///
+  /// Hatte die kopierte Tabulatur von Hand verschobene Taktstriche oder
+  /// Noten, steht danach jeder eingefügte Taktstrich im gleichen Abstand zum
+  /// vorigen wie beim Kopieren (also jeder Takt gleich breit, die Noten darin
+  /// an der gleichen Stelle). Der Taktstrich vor der Einfügestelle wird
+  /// festgehalten, damit davor nichts verrutscht; verschobene Taktstriche
+  /// dahinter rücken um die eingefügte Breite nach rechts. Reicht der Platz
+  /// nicht, wird die Zeile breiter (so weit die Seite reicht), die
+  /// bestehenden Takte bleiben dabei, wo sie sind; erst danach wird das
+  /// Eingefügte gleichmässig zusammengeschoben.
   void paste(TabClip clip) {
     markMode = false;
-    if (clip.beats.isEmpty) return;
-    _edit((e) {
-      final b = block!;
-      // Wird eine Markierung ersetzt: ihre Stelle und Breite vor dem Löschen.
-      final ss = e.stringSelection;
-      final replaced = ss == null || (ss.$1 == 0 && ss.$2 == TabBlock.strings - 1) ? e.selection : null;
-      var replacedWidth = 0.0;
-      if (replaced != null) {
-        final before = layoutTab(b.copyWith(beats: e.beats), _unit);
-        replacedWidth =
-            before.xs[replaced.$2] +
-            before.slotWidths[replaced.$2] / 2 -
-            (before.xs[replaced.$1] - before.slotWidths[replaced.$1] / 2);
+    final b = block;
+    if (b == null || clip.beats.isEmpty) return;
+    final e = _editor;
+    e.beats = [...b.beats];
+    e.beat = e.beat.clamp(0, b.beats.length);
+    e.measure = b.measure;
+    e.meter = b.meter;
+
+    // Wird eine Markierung ersetzt: ihre Breite vor dem Löschen.
+    final ss = e.stringSelection;
+    final replaced = ss == null || (ss.$1 == 0 && ss.$2 == TabBlock.strings - 1) ? e.selection : null;
+    var replacedWidth = 0.0;
+    if (replaced != null) {
+      final before = layoutTab(b.copyWith(beats: e.beats), _unit);
+      replacedWidth =
+          before.xs[replaced.$2] +
+          before.slotWidths[replaced.$2] / 2 -
+          (before.xs[replaced.$1] - before.slotWidths[replaced.$1] / 2);
+    }
+    final at = e.preparePaste();
+    final l = layoutTab(b.copyWith(beats: e.beats), _unit);
+    final g = l.gap, start = l.contentStart, n = e.beats.length;
+
+    // Feste Stellen (in Bildpunkten) der bestehenden Taktstriche: verschobene
+    // bleiben, die hinter der Einfügestelle rücken um die eingefügte Breite.
+    final shiftPx = clip.width * g - replacedWidth;
+    final fixed = <int, double>{};
+    for (var i = 0; i < n; i++) {
+      if (e.beats[i].bar && e.beats[i].at != null) fixed[i] = i >= at ? l.xs[i] + shiftPx : l.xs[i];
+    }
+    var prevIdx = -1;
+    for (var i = math.min(at, n) - 1; i >= 0; i--) {
+      if (e.beats[i].bar) {
+        prevIdx = i;
+        break;
       }
-      final at = e.preparePaste();
-      final l = layoutTab(b.copyWith(beats: e.beats), _unit);
-      final g = l.gap, span = l.contentEnd - l.contentStart;
-      final n = e.beats.length;
-      double frac(double x) => ((x - l.contentStart) / span).clamp(0.0, 1.0);
-      final shift = (clip.width * g - replacedWidth) / span;
-      for (var i = at; i < n; i++) {
-        final x = e.beats[i];
-        if (x.bar && x.at != null) e.beats[i] = x.withAt((x.at! + shift).clamp(0.0, 1.0));
+    }
+    final prevX = prevIdx >= 0 ? l.xs[prevIdx] : start;
+    // Stellen aller eingefügten Einträge: wie beim Kopieren, ab dem
+    // Taktstrich vor der Einfügestelle.
+    final pasted = <int, double>{};
+    if (clip.manual) {
+      if (prevIdx >= 0) fixed[prevIdx] = prevX; // davor nichts verrutschen
+      for (var k = 0; k < clip.beats.length; k++) {
+        final off = clip.offsetOf(k);
+        if (off != null) pasted[k] = prevX + off * g;
       }
-      // Taktstrich vor der Einfügestelle (bzw. Anfang der Zeile): von dort
-      // aus bekommt jeder eingefügte Takt seine Breite.
-      var prevX = l.contentStart;
-      for (var i = math.min(at, n) - 1; i >= 0; i--) {
-        if (e.beats[i].bar) {
-          prevX = l.xs[i];
-          break;
-        }
+    }
+
+    // Platz: nötigenfalls die Zeile breiter machen (bestehende Stellen
+    // bleiben, weil sie hier in Bildpunkten stehen).
+    var widthPx = l.width;
+    var span = l.contentEnd - start;
+    final room = g * 2.6; // Platz hinter dem Letzten (wie am Zeilenende üblich)
+    final furthest = [...fixed.values, ...pasted.values].fold<double>(start, math.max);
+    if (furthest + room > l.contentEnd) {
+      final maxWidth = (1.0 - b.x - 0.01) * _unit.width;
+      final grow = math.min(furthest + room - l.contentEnd, maxWidth - widthPx);
+      if (grow > 0) {
+        widthPx += grow;
+        span += grow;
       }
-      final items = <TabBeat>[];
-      for (final (k, x) in clip.beats.indexed) {
-        final step = clip.stepOf(k);
-        if (!x.bar || step == null) {
-          items.add(x.bar ? x.withoutAt : x);
-          continue;
-        }
-        prevX += step * g;
-        items.add(clip.isAnchored(k) ? x.withAt(frac(prevX)) : x.withoutAt);
+    }
+    // Reicht es immer noch nicht: das Eingefügte und alles dahinter
+    // gleichmässig zusammenschieben.
+    final end = start + span - room;
+    if (furthest > end && furthest > prevX) {
+      final k = math.max(0.1, (end - prevX) / (furthest - prevX));
+      pasted.updateAll((_, x) => prevX + (x - prevX) * k);
+      for (final i in fixed.keys.toList()) {
+        if (i >= at) fixed[i] = prevX + (fixed[i]! - prevX) * k;
       }
-      e.insertPasted(at, items);
-    });
+    }
+    double frac(double x) => ((x - start) / span).clamp(0.0, 1.0);
+
+    for (final f in fixed.entries) {
+      e.beats[f.key] = e.beats[f.key].withAt(frac(f.value));
+    }
+    final items = [
+      for (final (k, x) in clip.beats.indexed)
+        x.bar && pasted[k] != null ? x.withAt(frac(pasted[k]!)) : x.withoutAt,
+    ];
+    e.insertPasted(at, items);
+    // Noten: Mit den nun festen Taktstrichen ihre Lage im Takt so setzen,
+    // dass sie genau dort stehen wie beim Kopieren.
+    if (pasted.isNotEmpty) {
+      final t2 = b.copyWith(beats: e.beats, width: widthPx / _unit.width);
+      final l2 = layoutTab(t2, _unit);
+      for (final p in pasted.entries) {
+        final i = at + p.key;
+        if (e.beats[i].bar) continue;
+        final (lo, hi) = measureSpanOf(t2, l2, i);
+        e.beats[i] = e.beats[i].withAt(((p.value - lo) / (hi - lo)).clamp(0.0, 1.0));
+      }
+    }
+    ink.updateTab(
+      id,
+      beats: e.beats,
+      width: widthPx != l.width ? widthPx / _unit.width : null,
+    );
+    notifyListeners();
   }
 
   void digit(int d) => _edit((e) {
@@ -344,16 +399,17 @@ class TabSession extends ChangeNotifier {
 
 /// Kopierte Schläge einer Tabulatur mit ihrer Anordnung.
 class TabClip {
-  const TabClip(this.beats, {this.barSteps = const [], this.anchored = const [], this.width = 0});
+  const TabClip(this.beats, {this.offsets = const [], this.manual = false, this.width = 0});
 
   final List<TabBeat> beats;
 
-  /// Pro Eintrag: bei einem Taktstrich sein Abstand zum Taktstrich davor
-  /// (in Linienabständen), sonst null.
-  final List<double?> barSteps;
+  /// Pro Eintrag seine Stelle ab dem Taktstrich vor dem Kopierten (bzw. dem
+  /// Anfang der Zeile), in Linienabständen.
+  final List<double> offsets;
 
-  /// Pro Eintrag: war der Taktstrich von Hand verschoben?
-  final List<bool> anchored;
+  /// War die Tabulatur von Hand angeordnet? Dann werden beim Einfügen alle
+  /// Taktstriche genau gesetzt.
+  final bool manual;
 
   /// Breite des Kopierten (in Linienabständen).
   final double width;
@@ -361,6 +417,5 @@ class TabClip {
   bool get isEmpty => beats.isEmpty;
   bool get isNotEmpty => beats.isNotEmpty;
 
-  double? stepOf(int i) => i < barSteps.length ? barSteps[i] : null;
-  bool isAnchored(int i) => i < anchored.length && anchored[i];
+  double? offsetOf(int i) => i < offsets.length ? offsets[i] : null;
 }
