@@ -200,6 +200,19 @@ class ToolController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Zugeklappte Abschnitte in den Werkzeugfenstern (pro Gerät). Ohne
+  /// Eintrag sind beim Tab-Werkzeug „Bearbeiten“ und „Darstellung“ zu.
+  late final collapsedSections = ValueNotifier<Set<String>>(
+    settings.text('collapsedSections')?.split(',').where((x) => x.isNotEmpty).toSet() ?? {'tab.edit', 'tab.look'},
+  );
+
+  void toggleSection(String id) {
+    final next = {...collapsedSections.value};
+    if (!next.remove(id)) next.add(id);
+    collapsedSections.value = next;
+    settings.setText('collapsedSections', next.join(','));
+  }
+
   /// Bund-Knöpfe im Tab-Fenster: automatisch (nur im Tablet-Modus), immer, nie.
   TabKeypad get tabKeypad =>
       TabKeypad.values.firstWhere((k) => k.name == settings.text('tabKeypad'), orElse: () => TabKeypad.auto);
@@ -608,6 +621,7 @@ class ToolController extends ChangeNotifier {
     isDrawing.dispose();
     rulerChanged.dispose();
     textRequest.dispose();
+    collapsedSections.dispose();
     super.dispose();
   }
 }

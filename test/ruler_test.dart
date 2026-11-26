@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:volti/features/viewer/ink_controller.dart';
+import 'package:volti/features/viewer/ink_layer.dart';
 import 'package:volti/features/viewer/ruler_overlay.dart';
 import 'package:volti/features/viewer/tool_controller.dart';
 
@@ -25,6 +27,50 @@ void main() {
     );
     return tools;
   }
+
+  testWidgets('Mit sichtbarem Lineal zeichnet der Stift darunter (auch an der Kante)', (t) async {
+    final tools = await t.runAsync(() => makeTools(dir)) as ToolController;
+    tools.toggleRuler();
+    tools.moveRuler(const Offset(400, 300), 0);
+    tools.setMode(ToolMode.pen);
+    final ink = InkController(pdfPath: '${dir.path}/x.pdf');
+    await t.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: InkLayer(page: 1, controller: ink, tools: tools),
+              ),
+              // Wie in der Notenansicht: das Lineal liegt über der Seite.
+              Positioned.fill(child: RulerOverlay(tools: tools)),
+            ],
+          ),
+        ),
+      ),
+    );
+    // Irgendwo auf der Seite
+    var pen = await t.startGesture(const Offset(100, 100), kind: PointerDeviceKind.stylus);
+    await pen.moveBy(const Offset(40, 30));
+    await pen.moveBy(const Offset(40, 30));
+    await pen.up();
+    await t.pump();
+    expect(ink.annotations.visibleStrokesOn(1).length, 1, reason: 'Stift zeichnet trotz Lineal');
+    // Nahe der Kante: gerade daran entlang
+    pen = await t.startGesture(
+      const Offset(300, 300 + ToolController.rulerThickness / 2 + 10),
+      kind: PointerDeviceKind.stylus,
+    );
+    await pen.moveBy(const Offset(50, 6));
+    await pen.moveBy(const Offset(50, -4));
+    await pen.up();
+    await t.pump();
+    final s = ink.annotations.visibleStrokesOn(1).last;
+    final ys = {for (final p in s.points) (p.y * 1000).round()};
+    expect(ys.length, 1, reason: 'alle Punkte auf der Kante: $ys');
+    await t.runAsync(() => tools.flush());
+    ink.dispose();
+  });
 
   testWidgets('Ein Finger verschiebt, der Stift nie', (t) async {
     final tools = await pump(t);
