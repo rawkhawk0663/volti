@@ -214,6 +214,32 @@ class InkController extends ChangeNotifier {
     _push(_UndoEntry(added: ids, removed: [original]));
   }
 
+  /// Wie [replaceStroke], aber jedes Stück mit eigener Farbe und Füllung
+  /// (Teil-Radierer auf einer gefüllten Form: Rand und Fläche getrennt).
+  void replaceStrokeParts(Stroke original, List<({List<InkPoint> points, int color, int? fill})> parts) {
+    if (original.deleted) return;
+    final now = DateTime.now().toUtc();
+    _annotations.put(original.markDeleted(now));
+    final ids = <String>[];
+    for (final part in parts) {
+      final s = Stroke(
+        id: _uuid.v4(),
+        page: original.page,
+        tool: original.tool,
+        color: part.color,
+        width: original.width,
+        points: List.unmodifiable(part.points),
+        createdAt: original.createdAt,
+        modifiedAt: now,
+        layer: original.layer,
+        fill: part.fill,
+      );
+      _annotations.put(s);
+      ids.add(s.id);
+    }
+    _push(_UndoEntry(added: ids, removed: [original]));
+  }
+
   // ---------------------------------------------- mehrere Schritte bündeln
   _UndoEntry? _batch;
 

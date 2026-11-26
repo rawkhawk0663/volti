@@ -271,6 +271,8 @@ void main() {
       final pts = c.annotations.visibleStrokesOn(1).single.points;
       final ys = pts.map((p) => p.y * 600).toSet();
       expect(ys.every((y) => (y - 334).abs() < 0.6), isTrue, reason: 'alle Punkte auf der Kante: $ys');
+      // Gleich breit wie mit der Maus (so wird der Strich in einem Zug gemalt).
+      expect(pts.map((p) => p.pressure).toSet(), {0.5});
       c.dispose();
     });
   });

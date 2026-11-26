@@ -185,6 +185,48 @@ void main() {
     c.dispose();
   });
 
+  testWidgets('Radierer "teilweise" schneidet aus einer gefüllten Fläche nur den Kreis heraus', (t) async {
+    await pump(t);
+    final topLeft = t.getTopLeft(find.byType(InkLayer));
+    // Weisses Rechteck mit schwarzem Rand (x 0.2–0.8, y 0.3–0.7)
+    const corners = [(0.2, 0.3), (0.8, 0.3), (0.8, 0.7), (0.2, 0.7), (0.2, 0.3)];
+    c.addStroke(
+      page: 1,
+      tool: InkTool.pen,
+      color: 0xFF000000,
+      width: 0.003,
+      fill: 0xFFFFFFFF,
+      points: [for (final (x, y) in corners) InkPoint(x, y, 0.5)],
+    );
+    await t.pump();
+    tools.setEraserPartial(true);
+    tools.setEraserRadius(10);
+    tools.setMode(ToolMode.eraser);
+    // Mitten in der Fläche radieren: ein Loch
+    final g = await t.startGesture(topLeft + const Offset(200, 300), kind: PointerDeviceKind.stylus);
+    await g.moveBy(const Offset(1, 0));
+    await g.up();
+    await t.pump();
+    final all = c.annotations.visibleStrokesOn(1);
+    final areas = all.where((s) => s.fill != null).toList();
+    final outline = all.where((s) => s.fill == null).toList();
+    expect(areas, isNotEmpty, reason: 'die Fläche ist nicht ganz weg');
+    expect(outline.single.color, 0xFF000000, reason: 'der Rand bleibt ganz');
+    bool covered(Offset p) => areas.any(
+      (s) => (Path()..addPolygon([for (final q in s.points) Offset(q.x * 400, q.y * 600)], true)).contains(p),
+    );
+    expect(covered(const Offset(200, 300)), isFalse, reason: 'in der Mitte ein Loch');
+    expect(covered(const Offset(200, 330)), isTrue, reason: 'daneben bleibt die Fläche');
+    expect(covered(const Offset(100, 250)), isTrue);
+    expect(covered(const Offset(300, 400)), isTrue);
+    expect(areas.every((s) => s.color == 0xFFFFFFFF), isTrue, reason: 'Flächen ohne schwarzen Rand');
+    // Rückgängig holt das Rechteck zurück
+    c.undo();
+    expect(c.annotations.visibleStrokesOn(1).single.fill, 0xFFFFFFFF);
+    await t.runAsync(() => tools.flush());
+    c.dispose();
+  });
+
   testWidgets('Strich-Bild: Neues wird dazugemalt, Radiertes verschwindet', (t) async {
     await pump(t);
     void line(double y) => c.addStroke(

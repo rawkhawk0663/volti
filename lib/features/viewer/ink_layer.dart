@@ -314,7 +314,12 @@ class _InkLayerState extends State<InkLayer> {
       var p = e.localPosition;
       final edge = _rulerEdge;
       if (edge != null) p = _projectOnLine(p, edge.$1, edge.$2);
-      _points.add(InkPoint(p.dx / size.width, p.dy / size.height, normalizedPressure(e)));
+      // Am Lineal immer gleich breit (wie mit der Maus): Mit dem Druck des
+      // Surface Pen wurde der gerade Strich in Teilstücken gemalt, und beim
+      // Besitzer blieb er so nicht liegen. Mit gleichmässigem Druck wird er
+      // in einem Zug gemalt, wie mit der Maus, wo es immer ging.
+      final pressure = edge != null ? 0.5 : normalizedPressure(e);
+      _points.add(InkPoint(p.dx / size.width, p.dy / size.height, pressure));
     }
     _activeRepaint.value++;
   }
@@ -753,21 +758,29 @@ class _InkLayerState extends State<InkLayer> {
   /// Der Rest wird zu einem oder mehreren neuen Strichen.
   void _eraseInside(Stroke s, Offset pos, double r, Size size) {
     if (!_touches(s, pos, r, size)) return;
-    // Gefüllte Formen nicht zerschneiden (die Fläche würde sonst zerfallen).
-    if (s.fill != null) {
-      c.eraseStrokes([s]);
+    // Gefüllte Form (z. B. weisse Fläche zum Abdecken): nur das Radierte
+    // aus der Fläche schneiden, nicht die ganze Form löschen.
+    if (s.fill != null && s.points.length >= 3) {
+      _eraseInsideArea(s, pos, r, size);
       return;
     }
-    final reach = r + s.width * size.width / 2;
+    final pieces = _cutLine(s.points, pos, r + s.width * size.width / 2, r, size);
+    if (pieces == null) return;
+    c.replaceStroke(s, pieces);
+  }
+
+  /// Teilt einen Linienzug am Radierkreis. null = nichts getroffen.
+  /// [reach] = Radius plus halbe Linienbreite, [r] = Radius (für die Unterteilung).
+  List<List<InkPoint>>? _cutLine(List<InkPoint> points, Offset pos, double reach, double r, Size size) {
     Offset at(InkPoint p) => Offset(p.x * size.width, p.y * size.height);
 
     // Lange Teilstücke unterteilen, damit auch ein schnell gezogener Strich
     // genau an der berührten Stelle getrennt wird.
     final dense = <InkPoint>[];
-    for (var i = 0; i < s.points.length; i++) {
-      final p = s.points[i];
+    for (var i = 0; i < points.length; i++) {
+      final p = points[i];
       if (i > 0) {
-        final q = s.points[i - 1];
+        final q = points[i - 1];
         final len = (at(p) - at(q)).distance;
         final steps = (len / (r * 0.4)).ceil();
         for (var k = 1; k < steps; k++) {
@@ -791,10 +804,67 @@ class _InkLayerState extends State<InkLayer> {
       }
     }
     if (current.isNotEmpty) pieces.add(current);
-    if (!removedAny) return;
+    if (!removedAny) return null;
     // Winzige Reste (ein einzelner Punkt eines längeren Strichs) weglassen.
-    pieces.removeWhere((piece) => piece.length < 2 && s.points.length > 1);
-    c.replaceStroke(s, pieces);
+    pieces.removeWhere((piece) => piece.length < 2 && points.length > 1);
+    return pieces;
+  }
+
+  /// Teil-Radierer auf einer gefüllten Form: Die Fläche verliert genau den
+  /// Radierkreis, ein andersfarbiger Rand wird wie ein Strich geteilt.
+  void _eraseInsideArea(Stroke s, Offset pos, double r, Size size) {
+    Offset at(InkPoint p) => Offset(p.x * size.width, p.y * size.height);
+    final fill = s.fill!;
+    final half = s.width * size.width / 2;
+    final poly = Path()..addPolygon([for (final p in s.points) at(p)], true);
+    // Die Fläche wird mit ihrem Rand (in der Füllfarbe) gemalt: Das Loch muss
+    // um die halbe Randbreite grösser sein, damit es so gross wie der Kreis wirkt.
+    final hole = Path()..addOval(Rect.fromCircle(center: pos, radius: r + half));
+    final parts = <({List<InkPoint> points, int color, int? fill})>[];
+
+    // Andersfarbiger Rand: als eigener, ungefüllter Strich, teilweise radiert.
+    if (s.color != fill) {
+      final outline = [...s.points, if (s.points.first != s.points.last) s.points.first];
+      final cut = _cutLine(outline, pos, r + half, r, size);
+      for (final piece in cut ?? [outline]) {
+        parts.add((points: piece, color: s.color, fill: null));
+      }
+    }
+
+    // Liegt der Kreis ganz in der Fläche, gäbe es ein Loch. Ein Strich kann
+    // kein Loch haben – deshalb die Fläche an der Kreismitte in zwei Hälften
+    // teilen (sie überlappen sich ein wenig, damit keine Fuge entsteht).
+    final inside = [for (var k = 0; k < 16; k++) pos + Offset.fromDirection(k * math.pi / 8, r + half + 1)]
+        .every(poly.contains);
+    final b = poly.getBounds().inflate(4);
+    final halves = inside
+        ? [
+            Path()..addRect(Rect.fromLTRB(b.left, b.top, pos.dx + 1, b.bottom)),
+            Path()..addRect(Rect.fromLTRB(pos.dx - 1, b.top, b.right, b.bottom)),
+          ]
+        : [Path()..addRect(b)];
+    for (final h in halves) {
+      final area = Path.combine(PathOperation.difference, Path.combine(PathOperation.intersect, poly, h), hole);
+      for (final m in area.computeMetrics()) {
+        final pts = _contourPoints(m);
+        if (pts.length < 3) continue;
+        parts.add((
+          points: [for (final p in pts) InkPoint(p.dx / size.width, p.dy / size.height, 0.5)],
+          color: fill,
+          fill: fill,
+        ));
+      }
+    }
+    c.replaceStrokeParts(s, parts);
+  }
+
+  /// Punkte einer geschlossenen Kontur: in kleinen Schritten abgetastet, dann
+  /// vereinfacht (gerade Kanten brauchen nur ihre Ecken).
+  static List<Offset> _contourPoints(ui.PathMetric m) {
+    if (m.length < 3) return const [];
+    final n = math.max(8, (m.length / 1.5).ceil());
+    final raw = <Offset>[for (var i = 0; i < n; i++) m.getTangentForOffset(m.length * i / n)!.position];
+    return simplifyPolyline([...raw, raw.first], 0.35)..removeLast();
   }
 
   static double _distToSegment(Offset p, Offset a, Offset b) {
@@ -1779,4 +1849,37 @@ void _drawSegments(Canvas canvas, Size size, Paint paint, double w, List<InkPoin
   final dx = (a.dx - b.dx).abs() < 0.05 ? 0.05 : 0.0;
   final dy = (a.dy - b.dy).abs() < 0.05 ? 0.05 : 0.0;
   return (a, b + Offset(dx, dy));
+}
+
+/// Vereinfacht einen Linienzug (Ramer-Douglas-Peucker): Punkte, die weniger
+/// als [tolerance] von der Verbindung ihrer Nachbarn abweichen, fallen weg.
+List<Offset> simplifyPolyline(List<Offset> pts, double tolerance) {
+  if (pts.length < 3) return List.of(pts);
+  final keep = List<bool>.filled(pts.length, false);
+  keep[0] = keep[pts.length - 1] = true;
+  final stack = <(int, int)>[(0, pts.length - 1)];
+  while (stack.isNotEmpty) {
+    final (a, b) = stack.removeLast();
+    var worst = -1.0, idx = -1;
+    final pa = pts[a], pb = pts[b];
+    final ab = pb - pa;
+    final len = ab.distance;
+    for (var i = a + 1; i < b; i++) {
+      final ap = pts[i] - pa;
+      final d = len < 1e-9 ? ap.distance : (ab.dx * ap.dy - ab.dy * ap.dx).abs() / len;
+      if (d > worst) {
+        worst = d;
+        idx = i;
+      }
+    }
+    if (idx >= 0 && worst > tolerance) {
+      keep[idx] = true;
+      stack.add((a, idx));
+      stack.add((idx, b));
+    }
+  }
+  return [
+    for (var i = 0; i < pts.length; i++)
+      if (keep[i]) pts[i],
+  ];
 }
