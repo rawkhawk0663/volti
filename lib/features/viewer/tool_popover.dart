@@ -1950,7 +1950,7 @@ class _TabKeypad extends StatelessWidget {
                       ),
                   ],
                 ),
-                _Label(tr('Bending', 'Bend')),
+                _Label(tr('Bending und Hebel', 'Bend and whammy bar')),
                 Wrap(
                   spacing: 4,
                   runSpacing: 4,
@@ -1974,6 +1974,58 @@ class _TabKeypad extends StatelessWidget {
                       ),
                   ],
                 ),
+                const SizedBox(height: 4),
+                // Hebel: Dip (hinunter und zurück) bzw. Dive (hinunter).
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final w in TabMark.whammy.options)
+                      key(
+                        Text(
+                          '${w ~/ 10 == 1 ? 'Dip' : 'Dive'} ${whammyLabel(w)}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        () => session.setMark(TabMark.whammy, w),
+                        selected: session.currentMark(TabMark.whammy) == w,
+                        tooltip: tip(TabAction.whammy),
+                        width: 58,
+                      ),
+                  ],
+                ),
+                _Label(tr('Vibrato und Triller', 'Vibrato and trill')),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final v in [1, 2])
+                      key(
+                        CustomPaint(
+                          size: const Size(28, 14),
+                          painter: _WaveIcon(wide: v == 2, color: scheme.onSurface),
+                        ),
+                        () => session.setMark(TabMark.vibrato, v),
+                        selected: session.currentMark(TabMark.vibrato) == v,
+                        tooltip: v == 1
+                            ? tr(
+                                'Vibrato (${tools.tabKeys[TabAction.vibrato]?.label ?? ''})',
+                                'Vibrato (${tools.tabKeys[TabAction.vibrato]?.label ?? ''})',
+                              )
+                            : tr('Breites Vibrato', 'Wide vibrato'),
+                        width: 56,
+                      ),
+                    key(
+                      const Text(
+                        'tr',
+                        style: TextStyle(fontSize: 15, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700),
+                      ),
+                      () => session.perform(TabAction.trill),
+                      selected: session.trillInput || (cur?.trills.containsKey(session.string) ?? false),
+                      tooltip: tip(TabAction.trill),
+                      width: 56,
+                    ),
+                  ],
+                ),
                 _Label(tr('Anschlag', 'Attack')),
                 Wrap(
                   spacing: 4,
@@ -1987,6 +2039,13 @@ class _TabKeypad extends StatelessWidget {
                       width: 37,
                     ),
                     key(
+                      const Text('(5)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      () => session.perform(TabAction.ghostParen),
+                      selected: cur?.ghosts.contains(session.string) ?? false,
+                      tooltip: tip(TabAction.ghostParen),
+                      width: 40,
+                    ),
+                    key(
                       const Text(
                         'P.M.',
                         style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700),
@@ -1995,6 +2054,16 @@ class _TabKeypad extends StatelessWidget {
                       selected: cur?.palmMute ?? false,
                       tooltip: tip(TabAction.palmMute),
                       width: 44,
+                    ),
+                    key(
+                      const Text(
+                        'let ring',
+                        style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700),
+                      ),
+                      () => session.setMark(TabMark.letRing, 1),
+                      selected: session.currentMark(TabMark.letRing) != 0,
+                      tooltip: tip(TabAction.letRing),
+                      width: 56,
                     ),
                     key(
                       Padding(padding: const EdgeInsets.only(top: 10), child: glyph(0xE4A2)),
@@ -2009,6 +2078,108 @@ class _TabKeypad extends StatelessWidget {
                       selected: cur?.accent ?? false,
                       tooltip: tip(TabAction.accent),
                       width: 37,
+                    ),
+                    key(
+                      Padding(padding: const EdgeInsets.only(top: 12), child: glyph(0xE4C0)),
+                      () => session.setMark(TabMark.fermata, 1),
+                      selected: session.currentMark(TabMark.fermata) != 0,
+                      tooltip: tip(TabAction.fermata),
+                      width: 37,
+                    ),
+                    for (final n in [1, 2, 3])
+                      key(
+                        CustomPaint(size: const Size(20, 22), painter: _TremoloIcon(n, scheme.onSurface)),
+                        () => session.setMark(TabMark.tremolo, n),
+                        selected: session.currentMark(TabMark.tremolo) == n,
+                        tooltip:
+                            '${tr('Tremolo-Picking', 'Tremolo picking')} ($n) · ${tools.tabKeys[TabAction.tremolo]?.label ?? ''}',
+                        width: 37,
+                      ),
+                  ],
+                ),
+                _Label(tr('Flageolett und Tapping', 'Harmonics and tapping')),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final (kind, text, de, en) in [
+                      (harmonicNatural, '<12>', 'Natürliches Flageolett', 'Natural harmonic'),
+                      (harmonicArtificial, 'A.H.', 'Künstliches Flageolett', 'Artificial harmonic'),
+                      (harmonicPinch, 'P.H.', 'Pinch Harmonic', 'Pinch harmonic'),
+                    ])
+                      key(
+                        Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        () => session.setHarmonic(kind),
+                        selected: cur?.harmonics[session.string] == kind,
+                        tooltip: '${tr(de, en)} (${tools.tabKeys[TabAction.harmonic]?.label ?? ''})',
+                        width: 42,
+                      ),
+                    for (final (v, text, de, en) in [
+                      (1, 'T', 'Tapping', 'Tapping'),
+                      (2, 'S', 'Slap', 'Slap'),
+                      (3, 'P', 'Pop', 'Pop'),
+                    ])
+                      key(
+                        Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                        () => session.setMark(TabMark.tap, v),
+                        selected: session.currentMark(TabMark.tap) == v,
+                        tooltip: '${tr(de, en)} (${tools.tabKeys[TabAction.tapSlapPop]?.label ?? ''})',
+                        width: 32,
+                      ),
+                  ],
+                ),
+                _Label(tr('Anschlagsrichtung und Strumming', 'Picking and strumming')),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final (v, code, de, en) in [
+                      (1, 0xE610, 'Abschlag', 'Downstroke'),
+                      (2, 0xE612, 'Aufschlag', 'Upstroke'),
+                    ])
+                      key(
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            String.fromCharCode(code),
+                            style: TextStyle(fontFamily: 'Bravura', fontSize: 30, height: 1, color: scheme.onSurface),
+                          ),
+                        ),
+                        () => session.setMark(TabMark.pick, v),
+                        selected: session.currentMark(TabMark.pick) == v,
+                        tooltip: '${tr(de, en)} (${tools.tabKeys[TabAction.pick]?.label ?? ''})',
+                        width: 34,
+                      ),
+                    for (final (v, icon, de, en) in [
+                      (1, Icons.arrow_upward, 'Strumming: Pfeil nach oben', 'Strumming: arrow up'),
+                      (2, Icons.arrow_downward, 'Strumming: Pfeil nach unten', 'Strumming: arrow down'),
+                    ])
+                      key(
+                        Icon(icon, size: 18),
+                        () => session.setMark(TabMark.strum, v),
+                        selected: session.currentMark(TabMark.strum) == v,
+                        tooltip: '${tr(de, en)} (${tools.tabKeys[TabAction.strum]?.label ?? ''})',
+                        width: 34,
+                      ),
+                    key(
+                      const Text(
+                        'rasg.',
+                        style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700),
+                      ),
+                      () => session.setMark(TabMark.strum, 3),
+                      selected: session.currentMark(TabMark.strum) == 3,
+                      tooltip: tr('Rasgueado', 'Rasgueado'),
+                      width: 40,
+                    ),
+                    key(
+                      const Text(
+                        'rake',
+                        style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700),
+                      ),
+                      () => session.setMark(TabMark.rake, 1),
+                      selected: session.currentMark(TabMark.rake) != 0,
+                      tooltip: tip(TabAction.rake),
+                      width: 44,
                     ),
                   ],
                 ),
@@ -2331,4 +2502,62 @@ class _TabSizeState extends State<_TabSize> {
       ],
     );
   }
+}
+
+/// Knopf-Symbol: Wellenlinie für Vibrato (breit = grössere Wellen).
+class _WaveIcon extends CustomPainter {
+  _WaveIcon({required this.wide, required this.color});
+  final bool wide;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+    final len = wide ? 10.0 : 6.0, amp = wide ? 4.5 : 2.8;
+    final y = size.height / 2;
+    final path = Path()..moveTo(0, y);
+    var x = 0.0, up = true;
+    while (x + len / 2 <= size.width) {
+      path.quadraticBezierTo(x + len / 4, y + (up ? -amp : amp), x + len / 2, y);
+      x += len / 2;
+      up = !up;
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_WaveIcon old) => old.wide != wide || old.color != color;
+}
+
+/// Knopf-Symbol: Hals mit [count] Schrägstrichen (Tremolo-Picking).
+class _TremoloIcon extends CustomPainter {
+  _TremoloIcon(this.count, this.color);
+  final int count;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    canvas.drawLine(
+      Offset(cx, 1),
+      Offset(cx, size.height - 1),
+      Paint()
+        ..color = color
+        ..strokeWidth = 1.3,
+    );
+    final slash = Paint()
+      ..color = color
+      ..strokeWidth = 2.4;
+    for (var k = 0; k < count; k++) {
+      final y = size.height / 2 + (k - (count - 1) / 2) * 5;
+      canvas.drawLine(Offset(cx - 6, y + 2.5), Offset(cx + 6, y - 2.5), slash);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TremoloIcon old) => old.count != count || old.color != color;
 }

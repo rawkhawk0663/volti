@@ -115,7 +115,11 @@ double _naturalWidth(TabBeat b) {
       (b.slideIns.isNotEmpty ? 0.9 : 0.0) +
       (b.slideOuts.isNotEmpty ? 0.7 : 0.0) +
       (b.tieIns.isNotEmpty ? 1.2 : 0.0) +
-      (b.graces.isNotEmpty ? 2.4 : 0.0);
+      (b.graces.isNotEmpty ? 2.4 : 0.0) +
+      // Strumming-Pfeil vor dem Schlag, Trillerbund und Klammern danach.
+      (b.mark(TabMark.strum) == 1 || b.mark(TabMark.strum) == 2 ? 0.9 : 0.0) +
+      (b.trills.isNotEmpty ? 1.3 : 0.0) +
+      (b.harmonics.containsValue(harmonicNatural) || b.ghosts.isNotEmpty ? 0.6 : 0.0);
   return math.max(w, twoDigits ? 2.3 : 1.6) + bend + slide;
 }
 
@@ -384,10 +388,7 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   // Hintergrund (falls gewählt) hinter allem, mit etwas Rand.
   final bg = t.background != TabBlock.noBackground ? Color(t.background) : null;
   if (bg != null) {
-    // Mit Bendings ragt der Pfeil samt Stufe über die oberste Linie hinaus.
-    final above = t.beats.any((b) => b.bends.isNotEmpty)
-        ? 2.4
-        : (t.beats.any((b) => b.staccato || b.accent) ? 2.0 : (t.beats.any((b) => b.palmMute) ? 1.5 : 1.0));
+    final above = _aboveUnits(t, l);
     // Triolen-Zahlen stehen unter den Balken.
     final below = t.beats.any((b) => b.triplet) ? 2.0 : 0.8;
     final r = Rect.fromLTRB(l.origin.dx - g * 0.6, l.top - g * above, lineEnd + g * 0.6, l.stemBottom + g * below);
@@ -456,10 +457,13 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     }
     // Bundzahlen auf den Linien, mit weissem Grund (die Linie läuft nicht durch).
     for (final e in b.frets.entries) {
-      // Ghost Note: ein „x“ statt der Bundzahl.
-      final label = e.value == ghostNote ? 'x' : '${e.value}';
+      // Dead Note: ein „x“ statt der Bundzahl.
+      var label = e.value == ghostNote ? 'x' : '${e.value}';
       final isHeld = held.contains((i, e.key)) || b.tieIns.contains(e.key);
-      final p = _text(isHeld ? '($label)' : label, g * 1.15, color);
+      // Gehaltene Note und Ghost Note: in Klammern; natürliches Flageolett: <12>.
+      if (isHeld || b.ghosts.contains(e.key)) label = '($label)';
+      if (b.harmonics[e.key] == harmonicNatural) label = '<$label>';
+      final p = _text(label, g * 1.15, color);
       final cy = l.lineY(e.key);
       final r = Rect.fromCenter(center: Offset(cx, cy), width: p.width + g * 0.3, height: g * 0.95);
       canvas.drawRect(r, knockout);
@@ -474,7 +478,18 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
             ..strokeWidth = thin.strokeWidth,
         );
       }
+      final numberWidth = p.width;
       p.dispose();
+      // Triller: Bund, mit dem abgewechselt wird, klein in Klammern danach.
+      final trill = b.trills[e.key];
+      if (trill != null) {
+        final q = _text('($trill)', g * _graceSize, color);
+        final tx = cx + numberWidth / 2 + g * 0.15;
+        final tr = Rect.fromLTWH(tx - g * 0.05, cy - g * 0.4, q.width + g * 0.1, g * 0.8);
+        canvas.drawRect(tr, knockout);
+        q.paint(canvas, Offset(tx, cy - q.height / 2));
+        q.dispose();
+      }
       // Vorschlagsnote: kleine Zahl gleich davor.
       final grace = b.graces[e.key];
       if (grace != null) {
@@ -488,6 +503,40 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
     }
     // Hals (nicht bei ganzen Noten)
     if (b.value >= 2) canvas.drawLine(Offset(cx, l.stemTop), Offset(cx, l.stemBottom), stem);
+    // Tremolo-Picking: Schrägstriche über dem Hals.
+    final trem = b.mark(TabMark.tremolo);
+    if (trem > 0) {
+      final slash = Paint()
+        ..color = color
+        ..strokeWidth = g * 0.22
+        ..strokeCap = StrokeCap.butt;
+      final mid = l.stemTop + g * 1.0;
+      for (var k = 0; k < trem; k++) {
+        final y = mid + (k - (trem - 1) / 2) * g * 0.42;
+        canvas.drawLine(Offset(cx - g * 0.42, y + g * 0.18), Offset(cx + g * 0.42, y - g * 0.18), slash);
+      }
+    }
+    // Strumming: senkrechter Pfeil über alle Saiten vor dem Schlag.
+    final strum = b.mark(TabMark.strum);
+    if (strum == 1 || strum == 2) {
+      final left = b.frets.keys.fold<double>(0, (m, st) => math.max(m, _halfNumber(b.frets[st]!, g)));
+      final x = cx - left - g * 0.6;
+      final arrow = Paint()
+        ..color = color
+        ..strokeWidth = math.max(0.8, g * 0.1);
+      final tip = strum == 1 ? l.top - g * 0.2 : l.bottom + g * 0.2;
+      final tail = strum == 1 ? l.bottom : l.top;
+      final dir = strum == 1 ? 1.0 : -1.0; // vom Spitzen-Ende weg
+      canvas.drawLine(Offset(x, tail), Offset(x, tip + dir * g * 0.4), arrow);
+      canvas.drawPath(
+        Path()
+          ..moveTo(x, tip)
+          ..lineTo(x - g * 0.28, tip + dir * g * 0.55)
+          ..lineTo(x + g * 0.28, tip + dir * g * 0.55)
+          ..close(),
+        Paint()..color = color,
+      );
+    }
     if (b.dotted) {
       // Oben neben dem Hals: Dort liegen nie Balken (die sind unten, bis zu
       // drei übereinander bei 32steln).
@@ -499,7 +548,7 @@ void paintTabBlock(Canvas canvas, TabBlock t, Size page, {TabLayout? layout}) {
   }
 
   _paintTechniques(canvas, t, l, color, thin.strokeWidth);
-  _paintPalmMutes(canvas, t, l, color, thin.strokeWidth);
+  _paintMarks(canvas, t, l, color, thin.strokeWidth);
   _paintTriplets(canvas, t, l, color, stem.strokeWidth);
 
   // Balken (mehrere zusammen) und Notenfahnen (einzeln)
@@ -692,22 +741,6 @@ void _paintTechniques(Canvas canvas, TabBlock t, TabLayout l, Color color, doubl
     if (b.bar) continue;
     final cx = l.xs[i];
     knockout.color = _groundOf(b, plain);
-    // Staccato und Akzent über den Linien (bei Palm Mute darüber).
-    var above = l.top - g * (b.palmMute ? 1.75 : 0.9);
-    if (b.staccato) {
-      canvas.drawCircle(Offset(cx, above), g * 0.2, Paint()..color = color);
-      above -= g * 0.8;
-    }
-    if (b.accent) {
-      final w = g * 0.55, h = g * 0.3;
-      canvas.drawPath(
-        Path()
-          ..moveTo(cx - w, above - h)
-          ..lineTo(cx + w, above)
-          ..lineTo(cx - w, above + h),
-        line,
-      );
-    }
     // Haltebogen von davor: kommt von links in die (eingeklammerte) Zahl.
     for (final st in b.tieIns) {
       final fret = b.frets[st];
@@ -944,54 +977,48 @@ void _paintHighlights(Canvas canvas, TabBlock t, TabLayout l) {
   flush();
 }
 
-/// Palm Mute: kleines „P.M.“ gleich über der obersten Linie, bei mehreren
-/// Schlägen hintereinander eine gestrichelte Linie bis zum letzten mit einem
-/// kurzen Strich am Ende. Taktstriche unterbrechen nicht, Pausen schon.
-void _paintPalmMutes(Canvas canvas, TabBlock t, TabLayout l, Color color, double lineWidth) {
+/// Palm Mute bzw. Let ring für die Schläge [first]..[last]: kleiner Text
+/// über den Linien, bei mehreren Schlägen eine gestrichelte Linie bis zum
+/// letzten mit einem kurzen Strich am Ende.
+void _paintSpan(
+  Canvas canvas,
+  TabBlock t,
+  TabLayout l,
+  Color color,
+  double lineWidth,
+  int first,
+  int last,
+  double y,
+  String text,
+) {
   final g = l.gap;
-  final y = l.top - g * 0.85;
   final dash = Paint()
     ..color = color
     ..strokeWidth = math.max(0.7, lineWidth);
-  void group(int first, int last) {
-    final p = TextPainter(
-      text: TextSpan(
-        text: 'P.M.',
-        style: TextStyle(
-          fontFamily: 'VoltiSans',
-          fontSize: g * 0.85,
-          color: color,
-          height: 1,
-          fontStyle: FontStyle.italic,
-          fontVariations: const [FontVariation.weight(600)],
-        ),
+  final p = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: TextStyle(
+        fontFamily: 'VoltiSans',
+        fontSize: g * 0.85,
+        color: color,
+        height: 1,
+        fontStyle: FontStyle.italic,
+        fontVariations: const [FontVariation.weight(600)],
       ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final x0 = l.xs[first] - p.width / 2;
-    p.paint(canvas, Offset(x0, y - p.height / 2));
-    final from = x0 + p.width + g * 0.25, to = l.xs[last] + g * 0.6;
-    if (last > first && to > from + g * 0.3) {
-      for (var x = from; x < to; x += g * 0.55) {
-        canvas.drawLine(Offset(x, y), Offset(math.min(x + g * 0.3, to), y), dash);
-      }
-      canvas.drawLine(Offset(to, y), Offset(to, y + g * 0.4), dash);
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final x0 = l.xs[first] - p.width / 2;
+  p.paint(canvas, Offset(x0, y - p.height / 2));
+  final from = x0 + p.width + g * 0.25, to = l.xs[last] + g * 0.6;
+  if (last > first && to > from + g * 0.3) {
+    for (var x = from; x < to; x += g * 0.55) {
+      canvas.drawLine(Offset(x, y), Offset(math.min(x + g * 0.3, to), y), dash);
     }
-    p.dispose();
+    canvas.drawLine(Offset(to, y), Offset(to, y + g * 0.4), dash);
   }
-
-  int? start, end;
-  for (var i = 0; i <= t.beats.length; i++) {
-    final b = i < t.beats.length ? t.beats[i] : null;
-    if (b != null && b.bar) continue;
-    if (b != null && b.palmMute) {
-      start ??= i;
-      end = i;
-    } else if (start != null) {
-      group(start, end!);
-      start = end = null;
-    }
-  }
+  p.dispose();
 }
 
 /// Taktart (Zähler oben, Nenner unten) mit der Mitte bei [cx].
@@ -1226,4 +1253,283 @@ class _SlideIconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SlideIconPainter old) => old.into != into || old.dir != dir || old.color != color;
+}
+
+/// Zeichen über den Linien, die über einen Schlag hinaus laufen. Jedes
+/// bekommt die unterste Zeile, die an seiner Stelle noch frei ist; so bleibt
+/// es kompakt (Wunsch des Besitzers: wenig Platz).
+enum _Row { palmMute, letRing, rake, vibrato, trill, whammy }
+
+/// Ein Zeichen in einer Zeile: Art, Schläge [first]..[last], Ausdehnung und Zeile.
+class _Segment {
+  _Segment(this.kind, this.first, this.last, this.x1, this.x2);
+  final _Row kind;
+  final int first, last;
+  final double x1, x2;
+  int row = 0;
+}
+
+/// Breite eines kleinen Textes über den Linien (in Linienabständen, grob).
+double _labelWidth(String s) => s.length * 0.48;
+
+List<_Segment> _segmentsOf(TabBlock t, TabLayout l) {
+  final g = l.gap;
+  final out = <_Segment>[];
+  // Palm Mute und Let ring: zusammenhängende Gruppen (Taktstriche unterbrechen
+  // nicht, Pausen schon).
+  void groups(_Row kind, bool Function(TabBeat) on, String text) {
+    int? start, end;
+    for (var i = 0; i <= t.beats.length; i++) {
+      final b = i < t.beats.length ? t.beats[i] : null;
+      if (b != null && b.bar) continue;
+      if (b != null && on(b)) {
+        start ??= i;
+        end = i;
+      } else if (start != null) {
+        final x1 = l.xs[start] - g * _labelWidth(text) / 2;
+        final x2 = math.max(l.xs[end!] + g * 0.6, x1 + g * _labelWidth(text));
+        out.add(_Segment(kind, start, end, x1, x2));
+        start = end = null;
+      }
+    }
+  }
+
+  groups(_Row.palmMute, (b) => b.palmMute, 'P.M.');
+  groups(_Row.letRing, (b) => b.mark(TabMark.letRing) != 0, 'let ring');
+  for (var i = 0; i < t.beats.length; i++) {
+    final b = t.beats[i];
+    if (b.bar) continue;
+    final cx = l.xs[i];
+    if (b.mark(TabMark.rake) != 0) out.add(_Segment(_Row.rake, i, i, cx - g * 3.4, cx - g * 0.3));
+    if (b.mark(TabMark.vibrato) != 0) out.add(_Segment(_Row.vibrato, i, i, cx - g * 0.3, _spanEnd(t, l, i)));
+    if (b.trills.isNotEmpty) {
+      out.add(_Segment(_Row.trill, i, i, cx - g * 0.1, math.max(_spanEnd(t, l, i), cx + g * 1.2)));
+    }
+    if (b.mark(TabMark.whammy) != 0) out.add(_Segment(_Row.whammy, i, i, cx, cx + g * 2.7));
+  }
+  // Zeilen verteilen: zuerst nach Art (Palm Mute zuunterst), dann von links.
+  out.sort((p, q) => p.kind != q.kind ? p.kind.index.compareTo(q.kind.index) : p.x1.compareTo(q.x1));
+  final placed = <_Segment>[];
+  for (final seg in out) {
+    var row = 0;
+    // Gleiche Art darf direkt anschliessen (z. B. Vibrato über mehrere Schläge).
+    bool clash(_Segment o) {
+      final pad = o.kind == seg.kind ? 0.0 : g * 0.2;
+      return o.row == row && o.x1 < seg.x2 + pad && seg.x1 < o.x2 + pad;
+    }
+
+    while (placed.any(clash)) {
+      row++;
+    }
+    seg.row = row;
+    placed.add(seg);
+  }
+  return out;
+}
+
+/// Mitte der Zeile [k] über der obersten Linie.
+double _rowY(TabLayout l, int k) => l.top - l.gap * (0.85 + k * 1.05);
+
+/// Höchste belegte Zeile um die Stelle [x] herum, ±[half] (−1 = keine).
+int _topRowAt(List<_Segment> segs, double x, double half) {
+  var top = -1;
+  for (final s in segs) {
+    if (s.x1 <= x + half && x - half <= s.x2) top = math.max(top, s.row);
+  }
+  return top;
+}
+
+/// Zeichen eines Schlags, die übereinander über den Zeilen stehen.
+List<String> _stackOf(TabBeat b) => [
+  if (b.staccato) 'stacc',
+  if (b.accent) 'acc',
+  if (b.mark(TabMark.pick) != 0) 'pick',
+  if (b.harmonics.values.any((h) => h != harmonicNatural)) 'harm',
+  if (b.mark(TabMark.tap) != 0) 'tap',
+  if (b.mark(TabMark.strum) == 3) 'rasg',
+  if (b.mark(TabMark.fermata) != 0) 'fer',
+];
+
+/// Wie weit die Tabulatur über die oberste Linie hinausreicht (in
+/// Linienabständen), für den Hintergrund.
+double _aboveUnits(TabBlock t, TabLayout l) {
+  final segs = _segmentsOf(t, l);
+  var u = 1.0;
+  for (final s in segs) {
+    u = math.max(u, 0.85 + s.row * 1.05 + 0.6);
+  }
+  for (var i = 0; i < t.beats.length; i++) {
+    final b = t.beats[i];
+    if (b.bar) continue;
+    final stack = _stackOf(b);
+    if (stack.isEmpty) continue;
+    final rows = _topRowAt(segs, l.xs[i], l.gap * 0.7) + 1;
+    u = math.max(u, 0.9 + rows * 1.05 + (stack.length - 1) * 0.85 + (stack.last == 'fer' ? 1.0 : 0.6));
+  }
+  if (t.beats.any((b) => b.bends.isNotEmpty)) u = math.max(u, 2.4);
+  return u;
+}
+
+/// Wellenlinie von [x1] bis [x2] auf der Höhe [y] (Vibrato, Triller).
+void _wave(Canvas canvas, double x1, double x2, double y, double g, Paint paint, {bool wide = false}) {
+  final len = g * (wide ? 0.9 : 0.6), amp = g * (wide ? 0.32 : 0.2);
+  if (x2 - x1 < len) return;
+  final path = Path()..moveTo(x1, y);
+  var x = x1, up = true;
+  while (x + len / 2 <= x2) {
+    path.quadraticBezierTo(x + len / 4, y + (up ? -amp : amp), x + len / 2, y);
+    x += len / 2;
+    up = !up;
+  }
+  canvas.drawPath(path, paint);
+}
+
+/// Bis wohin ein Zeichen ab Schlag [i] reicht: kurz vor den nächsten
+/// Schlag bzw. ans Ende seines Platzes.
+double _spanEnd(TabBlock t, TabLayout l, int i) {
+  for (var k = i + 1; k < t.beats.length; k++) {
+    if (!t.beats[k].bar) return l.xs[k] - l.gap * 0.35;
+  }
+  return l.xs[i] + l.slotWidths[i] / 2;
+}
+
+/// Zeichen über den Linien: Palm Mute, Let ring, Rake, Vibrato, Triller,
+/// Hebel (je eine Zeile), darüber pro Schlag Staccato, Akzent,
+/// Anschlagsrichtung, Flageolett, Tapping/Slap/Pop, rasg. und Fermate.
+void _paintMarks(Canvas canvas, TabBlock t, TabLayout l, Color color, double lineWidth) {
+  final g = l.gap;
+  final segs = _segmentsOf(t, l);
+  final line = Paint()
+    ..color = color
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeWidth = math.max(0.9, lineWidth * 1.4);
+  final fill = Paint()..color = color;
+  TextPainter label(String s, double size, {bool italic = true, int weight = 600, String family = 'VoltiSans'}) =>
+      TextPainter(
+        text: TextSpan(
+          text: s,
+          style: TextStyle(
+            fontFamily: family,
+            fontSize: size,
+            color: color,
+            height: 1,
+            fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+            fontVariations: [FontVariation.weight(weight.toDouble())],
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+  for (final seg in segs) {
+    final y = _rowY(l, seg.row);
+    final i = seg.first;
+    final cx = l.xs[i];
+    final b = t.beats[i];
+    switch (seg.kind) {
+      case _Row.palmMute:
+        _paintSpan(canvas, t, l, color, lineWidth, seg.first, seg.last, y, 'P.M.');
+      case _Row.letRing:
+        _paintSpan(canvas, t, l, color, lineWidth, seg.first, seg.last, y, 'let ring');
+      case _Row.rake:
+        // „rake“ und eine gepunktete Linie mit Pfeil bis zum Schlag.
+        final p = label('rake', g * 0.75);
+        final x0 = cx - g * 3.4;
+        p.paint(canvas, Offset(x0, y - p.height / 2));
+        final from = x0 + p.width + g * 0.2, to = cx - g * 0.35;
+        for (var x = from; x < to - g * 0.3; x += g * 0.32) {
+          canvas.drawCircle(Offset(x, y), g * 0.07, fill);
+        }
+        canvas.drawPath(
+          Path()
+            ..moveTo(to, y)
+            ..lineTo(to - g * 0.4, y - g * 0.2)
+            ..lineTo(to - g * 0.4, y + g * 0.2)
+            ..close(),
+          fill,
+        );
+        p.dispose();
+      case _Row.vibrato:
+        _wave(canvas, cx - g * 0.3, _spanEnd(t, l, i), y, g, line, wide: b.mark(TabMark.vibrato) == 2);
+      case _Row.trill:
+        final p = label('tr', g * 0.95, weight: 700);
+        final x0 = cx - g * 0.4;
+        p.paint(canvas, Offset(x0, y - p.height / 2));
+        _wave(canvas, x0 + p.width + g * 0.15, seg.x2, y, g, line);
+        p.dispose();
+      case _Row.whammy:
+        final w = b.mark(TabMark.whammy);
+        final top = y - g * 0.4, low = y + g * 0.4;
+        final path = Path()..moveTo(cx, top);
+        final double end;
+        if (w ~/ 10 == 1) {
+          // Dip: kurz hinunter und wieder hinauf.
+          path
+            ..lineTo(cx + g * 0.6, low)
+            ..lineTo(cx + g * 1.2, top);
+          end = cx + g * 1.2;
+        } else {
+          // Dive: hinunter und unten bleiben.
+          path.lineTo(cx + g * 1.3, low);
+          end = cx + g * 1.3;
+        }
+        canvas.drawPath(path, line);
+        final p = label(whammyLabel(w), g * 0.75, italic: false);
+        p.paint(canvas, Offset(end + g * 0.1, top - p.height * 0.2));
+        p.dispose();
+    }
+  }
+
+  // Pro Schlag übereinander, über den Zeilen an seiner Stelle.
+  for (var i = 0; i < t.beats.length; i++) {
+    final b = t.beats[i];
+    if (b.bar) continue;
+    final cx = l.xs[i];
+    var y = l.top - g * (0.9 + (_topRowAt(segs, cx, g * 0.7) + 1) * 1.05);
+    for (final item in _stackOf(b)) {
+      switch (item) {
+        case 'stacc':
+          canvas.drawCircle(Offset(cx, y), g * 0.2, fill);
+        case 'acc':
+          final w = g * 0.55, h = g * 0.3;
+          canvas.drawPath(
+            Path()
+              ..moveTo(cx - w, y - h)
+              ..lineTo(cx + w, y)
+              ..lineTo(cx - w, y + h),
+            line,
+          );
+        case 'pick':
+          // Abschlag (⊓) bzw. Aufschlag (V) aus der Notenschrift.
+          final p = _text(
+            String.fromCharCode(b.mark(TabMark.pick) == 1 ? 0xE610 : 0xE612),
+            g * 2.2,
+            color,
+            family: 'Bravura',
+          );
+          final baseLine = p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+          p.paint(canvas, Offset(cx - p.width / 2, y + g * 0.3 - baseLine));
+          p.dispose();
+        case 'harm':
+          final pinch = b.harmonics.values.contains(harmonicPinch);
+          final p = label(pinch ? 'P.H.' : 'A.H.', g * 0.75);
+          p.paint(canvas, Offset(cx - p.width / 2, y - p.height / 2));
+          p.dispose();
+        case 'tap':
+          final p = label(['T', 'S', 'P'][b.mark(TabMark.tap) - 1], g * 0.95, italic: false, weight: 700);
+          p.paint(canvas, Offset(cx - p.width / 2, y - p.height / 2));
+          p.dispose();
+        case 'rasg':
+          final p = label('rasg.', g * 0.75);
+          p.paint(canvas, Offset(cx - p.width / 2, y - p.height / 2));
+          p.dispose();
+        case 'fer':
+          final p = _text(String.fromCharCode(0xE4C0), g * 2.6, color, family: 'Bravura');
+          final baseLine = p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+          p.paint(canvas, Offset(cx - p.width / 2, y + g * 0.35 - baseLine));
+          p.dispose();
+      }
+      y -= g * 0.85;
+    }
+  }
 }

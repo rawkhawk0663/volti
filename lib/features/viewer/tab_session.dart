@@ -307,6 +307,22 @@ class TabSession extends ChangeNotifier {
   }
 
   void bend(int quarters) => _edit((e) => e.bend(quarters));
+
+  /// Zeichen für das Markierte bzw. den Schlag unter dem Cursor setzen
+  /// (gleicher Wert nochmals = entfernen).
+  void setMark(TabMark m, int value) => _edit((e) => e.setMark(m, value));
+  void setHarmonic(int kind) => _edit((e) => e.setHarmonic(kind));
+
+  /// Wert eines Zeichens im Markierten bzw. unter dem Cursor (0 = keines).
+  int currentMark(TabMark m) {
+    final b = block;
+    if (b == null) return 0;
+    _editor.beats = [...b.beats];
+    return _editor.currentMark(m);
+  }
+
+  /// Gibt die Note unter dem Cursor gerade einen Trillerbund ein?
+  bool get trillInput => _editor.trillInput;
   void slideIn(int dir) => _edit((e) => e.slideIn(dir));
   void slideOut(int dir) => _edit((e) => e.slideOut(dir));
 
@@ -367,6 +383,30 @@ class TabSession extends ChangeNotifier {
         _edit((e) => e.togglePalmMute());
       case TabAction.ghost:
         _edit((e) => e.toggleGhost());
+      case TabAction.ghostParen:
+        _edit((e) => e.toggleGhostParen());
+      case TabAction.trill:
+        _edit((e) => e.toggleTrill());
+      case TabAction.harmonic:
+        _edit((e) => e.cycleHarmonic());
+      case TabAction.letRing:
+        _edit((e) => e.cycleMark(TabMark.letRing));
+      case TabAction.vibrato:
+        _edit((e) => e.cycleMark(TabMark.vibrato));
+      case TabAction.whammy:
+        _edit((e) => e.cycleMark(TabMark.whammy));
+      case TabAction.tapSlapPop:
+        _edit((e) => e.cycleMark(TabMark.tap));
+      case TabAction.tremolo:
+        _edit((e) => e.cycleMark(TabMark.tremolo));
+      case TabAction.fermata:
+        _edit((e) => e.cycleMark(TabMark.fermata));
+      case TabAction.pick:
+        _edit((e) => e.cycleMark(TabMark.pick));
+      case TabAction.strum:
+        _edit((e) => e.cycleMark(TabMark.strum));
+      case TabAction.rake:
+        _edit((e) => e.cycleMark(TabMark.rake));
       case TabAction.repeatStart:
         _edit((e) => e.repeatStart());
       case TabAction.repeatEnd:

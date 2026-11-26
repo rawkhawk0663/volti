@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -811,16 +812,16 @@ void main() {
       expect(d.actionFor(LogicalKeyboardKey.keyA, ctrl: true, shift: false, alt: false), isNull);
       expect(digitOf(LogicalKeyboardKey.digit7), 7);
       expect(digitOf(LogicalKeyboardKey.numpad7), 7);
-      // Q für Achtel: Q gehörte niemandem
-      final r = d.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.keyQ));
+      // F9 für Achtel: F9 gehörte niemandem
+      final r = d.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.f9));
       expect(r.swapped, isNull);
-      // S (Sechzehntel) für Achtel: getauscht, Sechzehntel bekommt Q
+      // S (Sechzehntel) für Achtel: getauscht, Sechzehntel bekommt F9
       final r2 = r.map.withBinding(TabAction.eighth, const KeyBinding(LogicalKeyboardKey.keyS));
       expect(r2.swapped, TabAction.sixteenth);
-      expect(r2.map[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyQ);
+      expect(r2.map[TabAction.sixteenth]!.key, LogicalKeyboardKey.f9);
       final back = TabKeymap.fromJson(r2.map.toJson());
       expect(back[TabAction.eighth]!.key, LogicalKeyboardKey.keyS);
-      expect(back[TabAction.sixteenth]!.key, LogicalKeyboardKey.keyQ);
+      expect(back[TabAction.sixteenth]!.key, LogicalKeyboardKey.f9);
       expect(back[TabAction.bar]!.key, LogicalKeyboardKey.keyT);
       expect(TabKeymap.fromJson('kaputt')[TabAction.rest]!.key, LogicalKeyboardKey.keyP);
       expect(const KeyBinding(LogicalKeyboardKey.keyK, ctrl: true).label, contains('K'));
@@ -1298,5 +1299,134 @@ void main() {
     expect(worst(c, d, short.length, off: 3), lessThan(0.5));
     final after = layoutTab(ink.annotations.tab(d)!, unit);
     expect(after.xs[1], closeTo(before.xs[1], 0.5), reason: 'der Taktstrich davor verrutscht nicht');
+  });
+
+  group('Weitere Spieltechniken', () {
+    test('Zeichen für Schläge: durchschalten, für Markiertes, gespeichert', () {
+      final e = TabEditor([
+        const TabBeat(frets: {0: 5}),
+        const TabBeat(frets: {1: 7}),
+        const TabBeat(), // Pause
+      ]);
+      e.cycleMark(TabMark.vibrato);
+      expect(e.beats[0].mark(TabMark.vibrato), 1);
+      e.cycleMark(TabMark.vibrato);
+      expect(e.beats[0].mark(TabMark.vibrato), 2, reason: 'breit');
+      e.cycleMark(TabMark.vibrato);
+      expect(e.beats[0].mark(TabMark.vibrato), 0);
+      // Let ring für zwei markierte Schläge, nochmals = weg
+      e.anchor = 0;
+      e.beat = 1;
+      e.setMark(TabMark.letRing, 1);
+      expect([for (final b in e.beats) b.mark(TabMark.letRing)], [1, 1, 0]);
+      e.setMark(TabMark.letRing, 1);
+      expect([for (final b in e.beats) b.mark(TabMark.letRing)], [0, 0, 0]);
+      e.anchor = null;
+      // Fermate auch über einer Pause, Vibrato dort nicht
+      e.beat = 2;
+      e.setMark(TabMark.fermata, 1);
+      e.setMark(TabMark.vibrato, 1);
+      expect(e.beats[2].mark(TabMark.fermata), 1);
+      expect(e.beats[2].mark(TabMark.vibrato), 0);
+      // Hebel, Strumming, Anschlag, T/S/P, Tremolo, Rake
+      e.beat = 1;
+      for (final (m, v) in [
+        (TabMark.whammy, 22),
+        (TabMark.strum, 3),
+        (TabMark.pick, 2),
+        (TabMark.tap, 1),
+        (TabMark.tremolo, 3),
+        (TabMark.rake, 1),
+      ]) {
+        e.setMark(m, v);
+        expect(e.beats[1].mark(m), v);
+      }
+      final back = TabBeat.fromJson(e.beats[1].toJson());
+      expect(back, e.beats[1]);
+      expect(TabBeat.fromJson(e.beats[2].toJson()).mark(TabMark.fermata), 1);
+      expect(whammyLabel(22), '−1');
+      expect(whammyLabel(11), '−½');
+      expect(whammyLabel(24), '−2');
+    });
+
+    test('Flageolett, Ghost Note in Klammern und Triller pro Note', () {
+      final e = TabEditor([
+        const TabBeat(frets: {2: 12, 3: 5}),
+      ], string: 2);
+      e.cycleHarmonic();
+      expect(e.beats[0].harmonics[2], harmonicNatural);
+      e.cycleHarmonic();
+      e.cycleHarmonic();
+      expect(e.beats[0].harmonics[2], harmonicPinch);
+      e.cycleHarmonic();
+      expect(e.beats[0].harmonics, isEmpty);
+      e.setHarmonic(harmonicArtificial);
+      e.toggleGhostParen();
+      expect(e.beats[0].ghosts, {2});
+      // Triller: zuerst ein Ganzton höher, dann die getippte Zahl (auch zweistellig)
+      e.string = 3;
+      e.toggleTrill();
+      expect(e.beats[0].trills[3], 7);
+      final t0 = DateTime(2026);
+      e.digit(1, now: t0);
+      e.digit(0, now: t0.add(const Duration(milliseconds: 200)));
+      expect(e.beats[0].trills[3], 10);
+      expect(e.beats[0].frets[3], 5, reason: 'die Hauptnote bleibt');
+      e.toggleTrill();
+      expect(e.beats[0].trills, isEmpty);
+      e.toggleTrill();
+      e.digit(8, now: t0);
+      final back = TabBeat.fromJson(e.beats[0].toJson());
+      expect(back, e.beats[0]);
+      expect(back.trills[3], 8);
+      expect(back.harmonics[2], harmonicArtificial);
+      // Bundzahl weg: ihre Techniken auch
+      final cleared = e.beats[0].copyWith(frets: {3: 5});
+      expect(cleared.harmonics, isEmpty);
+      expect(cleared.ghosts, isEmpty);
+      expect(cleared.trills, {3: 8});
+    });
+
+    test('Transponieren nimmt Flageolett, Klammern und Triller mit', () {
+      const b = TabBeat(frets: {0: 0}, harmonics: {0: 1}, ghosts: {0}, trills: {0: 2});
+      // Leere hohe E-Saite einen Halbton tiefer: auf die H-Saite, Bund 4
+      final down = transposeBeat(b, -1)!;
+      expect(down.frets, {1: 4});
+      expect(down.harmonics, {1: 1});
+      expect(down.ghosts, {1});
+      expect(down.trills, {1: 6});
+    });
+
+    test('Zeichnen mit allen Zeichen geht ohne Fehler, der Hintergrund reicht höher', () {
+      final t = TabBlock(
+        id: 'x',
+        page: 1,
+        x: 0.1,
+        y: 0.3,
+        width: 0.8,
+        gap: 0.012,
+        createdAt: DateTime.utc(2026),
+        background: 0xFFFFF59D,
+        beats: const [
+          TabBeat(
+            frets: {0: 5, 1: 7},
+            marks: {TabMark.vibrato: 2, TabMark.letRing: 1, TabMark.pick: 1, TabMark.strum: 1, TabMark.tremolo: 2},
+            harmonics: {0: harmonicNatural, 1: harmonicPinch},
+            ghosts: {1},
+            trills: {0: 7},
+            palmMute: true,
+            staccato: true,
+          ),
+          TabBeat(
+            frets: {2: 3},
+            marks: {TabMark.whammy: 11, TabMark.rake: 1, TabMark.tap: 2, TabMark.strum: 3, TabMark.fermata: 1},
+          ),
+          TabBeat(marks: {TabMark.fermata: 1}),
+        ],
+      );
+      final recorder = ui.PictureRecorder();
+      paintTabBlock(Canvas(recorder), t, const Size(1000, 1400));
+      recorder.endRecording().dispose();
+    });
   });
 }

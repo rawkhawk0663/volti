@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'annotation_layer.dart';
 
 /// Notenwerte für Tabulatur-Schläge (Nenner: 1 = ganze, 4 = Viertel …).
@@ -68,6 +70,10 @@ class TabBeat {
     this.accent = false,
     this.palmMute = false,
     this.triplet = false,
+    this.marks = const {},
+    this.harmonics = const {},
+    this.ghosts = const {},
+    this.trills = const {},
     this.at,
   }) : kind = BarKind.normal,
        meter = null;
@@ -91,7 +97,11 @@ class TabBeat {
       staccato = false,
       accent = false,
       palmMute = false,
-      triplet = false;
+      triplet = false,
+      marks = const {},
+      harmonics = const {},
+      ghosts = const {},
+      trills = const {};
 
   /// Art des Taktstrichs (Wiederholung, Schlussstrich …).
   final BarKind kind;
@@ -172,6 +182,25 @@ class TabBeat {
   /// Teil einer Triole (drei im Raum von zwei): dauert ⅔ so lange.
   final bool triplet;
 
+  /// Zeichen für den ganzen Schlag ([TabMark] → Wert, 0 fehlt): Vibrato,
+  /// Let ring, Anschlagsrichtung, Strumming, Tapping/Slap/Pop, Fermate,
+  /// Tremolo-Picking, Hebel, Rake.
+  final Map<TabMark, int> marks;
+
+  /// Wert eines Zeichens ([TabMark]), 0 = keines.
+  int mark(TabMark m) => marks[m] ?? 0;
+
+  /// Flageoletts: Saite → [harmonicNatural], [harmonicArtificial] oder
+  /// [harmonicPinch].
+  final Map<int, int> harmonics;
+
+  /// Ghost Notes: Saiten, deren Bundzahl in Klammern steht (leise gespielt).
+  final Set<int> ghosts;
+
+  /// Triller: Saite → Bund, mit dem abgewechselt wird (klein in Klammern
+  /// nach der Zahl, darüber „tr“ mit Wellenlinie).
+  final Map<int, int> trills;
+
   /// Notenwert als Nenner (1, 2, 4, 8, 16, 32).
   final int value;
   final bool dotted;
@@ -212,9 +241,14 @@ class TabBeat {
     bool? accent,
     bool? palmMute,
     bool? triplet,
+    Map<TabMark, int>? marks,
+    Map<int, int>? harmonics,
+    Set<int>? ghosts,
+    Map<int, int>? trills,
     Object? at = _keepMeter,
   }) {
     final f = frets ?? this.frets;
+    bool pitched(int st) => (f[st] ?? ghostNote) >= 0;
     // Bendings und Slides nur dort, wo es eine Bundzahl gibt.
     return TabBeat(
       frets: f,
@@ -262,6 +296,23 @@ class TabBeat {
       palmMute: f.isNotEmpty && (palmMute ?? this.palmMute),
       highlight: highlight ?? this.highlight,
       triplet: triplet ?? this.triplet,
+      // Ohne Bundzahl nur, was auch über einer Pause stehen darf (Fermate).
+      marks: {
+        for (final e in (marks ?? this.marks).entries)
+          if (e.value != 0 && (f.isNotEmpty || e.key.onRest)) e.key: e.value,
+      },
+      harmonics: {
+        for (final e in (harmonics ?? this.harmonics).entries)
+          if (pitched(e.key)) e.key: e.value,
+      },
+      ghosts: {
+        for (final st in ghosts ?? this.ghosts)
+          if (pitched(st)) st,
+      },
+      trills: {
+        for (final e in (trills ?? this.trills).entries)
+          if (pitched(e.key)) e.key: e.value,
+      },
       at: identical(at, _keepMeter) ? this.at : at as double?,
     );
   }
@@ -291,6 +342,10 @@ class TabBeat {
           if (palmMute) 'pm': true,
           if (triplet) 'tri': true,
           if (highlight != 0) 'hl': highlight,
+          for (final e in marks.entries) e.key.json: e.value,
+          if (harmonics.isNotEmpty) 'hm': {for (final e in harmonics.entries) '${e.key}': e.value},
+          if (ghosts.isNotEmpty) 'gh': (ghosts.toList()..sort()),
+          if (trills.isNotEmpty) 'tr': {for (final e in trills.entries) '${e.key}': e.value},
           if (at != null) 'at': at,
         };
 
@@ -353,6 +408,24 @@ class TabBeat {
       palmMute: frets.isNotEmpty && j['pm'] == true,
       triplet: j['tri'] == true,
       highlight: (j['hl'] as num?)?.toInt() ?? 0,
+      marks: {
+        for (final m in TabMark.values)
+          if ((j[m.json] as num?)?.toInt() case final v? when m.options.contains(v) && (frets.isNotEmpty || m.onRest))
+            m: v,
+      },
+      harmonics: {
+        for (final e in strings(j['hm'] as Map<String, dynamic>? ?? const {}).entries)
+          if ((frets[e.key] ?? ghostNote) >= 0 && e.value >= harmonicNatural && e.value <= harmonicPinch)
+            e.key: e.value,
+      },
+      ghosts: {
+        for (final st in j['gh'] as List<dynamic>? ?? const [])
+          if (st is int && (frets[st] ?? ghostNote) >= 0) st,
+      },
+      trills: {
+        for (final e in strings(j['tr'] as Map<String, dynamic>? ?? const {}).entries)
+          if ((frets[e.key] ?? ghostNote) >= 0 && e.value >= 0) e.key: e.value,
+      },
       at: (j['at'] as num?)?.toDouble().clamp(0.0, 1.0),
     );
   }
@@ -387,7 +460,13 @@ class TabBeat {
       other.accent == accent &&
       other.palmMute == palmMute &&
       other.highlight == highlight &&
-      other.triplet == triplet;
+      other.triplet == triplet &&
+      other.marks.length == marks.length &&
+      other.marks.entries.every((e) => marks[e.key] == e.value) &&
+      _sameMap(other.harmonics, harmonics) &&
+      other.ghosts.length == ghosts.length &&
+      other.ghosts.containsAll(ghosts) &&
+      _sameMap(other.trills, trills);
 
   @override
   int get hashCode => Object.hashAll([
@@ -412,8 +491,64 @@ class TabBeat {
     palmMute,
     highlight,
     triplet,
+    Object.hashAllUnordered(marks.entries.map((e) => e.key.index * 1000 + e.value)),
+    Object.hashAllUnordered(harmonics.entries.map((e) => e.key * 10 + e.value)),
+    Object.hashAllUnordered(ghosts),
+    Object.hashAllUnordered(trills.entries.map((e) => e.key * 100 + e.value)),
   ]);
 }
+
+/// Flageolett-Arten (Werte in [TabBeat.harmonics]).
+const harmonicNatural = 1, harmonicArtificial = 2, harmonicPinch = 3;
+
+/// Zeichen, die für einen ganzen Schlag gelten ([TabBeat.marks]).
+enum TabMark {
+  /// 1 = Vibrato, 2 = breites Vibrato (Wellenlinie über den Linien).
+  vibrato('vib', [1, 2]),
+
+  /// „let ring“ mit gestrichelter Linie (wie Palm Mute).
+  letRing('lr', [1]),
+
+  /// Anschlagsrichtung: 1 = Abschlag (⊓), 2 = Aufschlag (V).
+  pick('pk', [1, 2]),
+
+  /// Strumming: 1 = Pfeil nach oben, 2 = Pfeil nach unten, 3 = „rasg.“.
+  strum('st', [1, 2, 3]),
+
+  /// 1 = Tapping („T“), 2 = Slap („S“), 3 = Pop („P“).
+  tap('tsp', [1, 2, 3]),
+
+  /// Fermate (auch über einer Pause).
+  fermata('fer', [1], onRest: true),
+
+  /// Tremolo-Picking: Zahl der Schrägstriche am Hals (1–3).
+  tremolo('trem', [1, 2, 3]),
+
+  /// Hebel (Whammy-Bar): Zehner = Art (1 Dip, 2 Dive), Einer = Tiefe in
+  /// Halbtönen (Dip −½, Dip −1, Dive −1, Dive −2).
+  whammy('wb', [11, 12, 22, 24]),
+
+  /// Rake: „rake“ mit gepunkteter Linie bis zum Schlag.
+  rake('rk', [1]);
+
+  const TabMark(this.json, this.options, {this.onRest = false});
+
+  /// Schlüssel in der Zusatzdatei.
+  final String json;
+
+  /// Erlaubte Werte, in der Reihenfolge beim Durchschalten.
+  final List<int> options;
+
+  /// Darf auch über einer Pause stehen.
+  final bool onRest;
+}
+
+/// Tiefe des Hebels als Text („−½“, „−1“, „−2“).
+String whammyLabel(int code) => switch (code % 10) {
+  1 => '−½',
+  2 => '−1',
+  _ => '−${(code % 10) ~/ 2}',
+};
 
 /// Taktarten zur Auswahl.
 const tabMeters = ['2/4', '3/4', '4/4', '5/4', '2/2', '3/8', '6/8', '7/8', '9/8', '12/8'];
@@ -740,6 +875,15 @@ TabBeat? transposeBeat(TabBeat b, int semitones) {
             when e.value + fret - b.frets[e.key]! >= 0 && e.value + fret - b.frets[e.key]! <= TabEditor.maxFret)
           st: e.value + fret - b.frets[e.key]!,
     },
+    harmonics: remap(b.harmonics),
+    ghosts: remapSet(b.ghosts),
+    // Triller im gleichen Abstand zur Hauptnote.
+    trills: {
+      for (final e in b.trills.entries)
+        if (target[e.key] case (final st, final fret)
+            when e.value + fret - b.frets[e.key]! >= 0 && e.value + fret - b.frets[e.key]! <= TabEditor.maxFret)
+          st: e.value + fret - b.frets[e.key]!,
+    },
   );
 }
 
@@ -966,8 +1110,13 @@ class TabEditor {
   void _resetDigits() {
     _lastDigit = null;
     graceInput = false;
+    trillInput = false;
     _graceDigitAt = null;
   }
+
+  /// Die nächste getippte Bundzahl wird zum Trillerbund der Note unter dem
+  /// Cursor (wie bei [graceInput]).
+  bool trillInput = false;
 
   /// Die nächste getippte Bundzahl wird zur Vorschlagsnote der Note unter
   /// dem Cursor (bis zu einer anderen Taste oder einer Pause).
@@ -997,8 +1146,8 @@ class TabEditor {
   /// Ziffer tippen. Kommt rasch eine zweite (z. B. 1 dann 2), entsteht 12.
   void digit(int d, {DateTime? now}) {
     final t = now ?? DateTime.now();
-    if (graceInput) {
-      // Vorschlagsnote: erste Ziffer, oder die zweite rasch danach.
+    if (graceInput || trillInput) {
+      // Vorschlagsnote bzw. Triller: erste Ziffer, oder die zweite rasch danach.
       final at = _graceDigitAt;
       final cur = current;
       if ((at == null || t.difference(at) <= digitPause) &&
@@ -1008,7 +1157,7 @@ class TabEditor {
         final last = _lastDigit;
         final fret = at != null && last != null && last * 10 + d <= maxFret ? last * 10 + d : d;
         _lastDigit = fret == d ? d : null;
-        _setGrace(fret);
+        trillInput ? _setTrill(fret) : _setGrace(fret);
         _graceDigitAt = t;
         return;
       }
@@ -1037,8 +1186,8 @@ class TabEditor {
   /// Bund direkt setzen (Zahlenfeld 0–24).
   void setFret(int fret) {
     final cur = current;
-    if (graceInput && cur != null && !cur.bar && (cur.frets[string] ?? ghostNote) >= 0) {
-      _setGrace(fret);
+    if ((graceInput || trillInput) && cur != null && !cur.bar && (cur.frets[string] ?? ghostNote) >= 0) {
+      trillInput ? _setTrill(fret) : _setGrace(fret);
       _resetDigits();
       return;
     }
@@ -1304,6 +1453,101 @@ class TabEditor {
     if (b == null || b.bar || b.frets.isEmpty) return;
     beats[beat] = b.copyWith(accent: !b.accent);
     _resetDigits();
+  }
+
+  /// Schläge, für die ein Zeichen gilt: das Markierte bzw. der Schlag unter
+  /// dem Cursor (ohne Taktstriche; ohne Pausen, ausser bei der Fermate).
+  List<int> _markTargets(TabMark m) {
+    final range = selection ?? (beat, beat);
+    return [
+      for (var i = range.$1; i <= range.$2 && i < beats.length; i++)
+        if (!beats[i].bar && (beats[i].frets.isNotEmpty || m.onRest)) i,
+    ];
+  }
+
+  /// Zeichen [m] mit dem Wert [value] setzen. Haben schon alle Schläge
+  /// diesen Wert, wird es entfernt.
+  void setMark(TabMark m, int value) {
+    final idx = _markTargets(m);
+    if (idx.isEmpty) return;
+    final off = idx.every((i) => beats[i].mark(m) == value);
+    for (final i in idx) {
+      beats[i] = beats[i].copyWith(marks: {...beats[i].marks, m: off ? 0 : value});
+    }
+    _resetDigits();
+  }
+
+  /// Zeichen [m] durchschalten (z. B. Vibrato → breit → keines).
+  void cycleMark(TabMark m) {
+    final idx = _markTargets(m);
+    if (idx.isEmpty) return;
+    final k = m.options.indexOf(beats[idx.first].mark(m)) + 1;
+    final next = k >= m.options.length ? 0 : m.options[k];
+    for (final i in idx) {
+      beats[i] = beats[i].copyWith(marks: {...beats[i].marks, m: next});
+    }
+    _resetDigits();
+  }
+
+  /// Wert des Zeichens [m] im Markierten bzw. unter dem Cursor (0 = keines).
+  int currentMark(TabMark m) {
+    final idx = _markTargets(m);
+    return idx.isEmpty ? 0 : beats[idx.first].mark(m);
+  }
+
+  /// Flageolett ([harmonicNatural] …) auf der Note unter dem Cursor setzen
+  /// bzw. (gleiche Art nochmals) entfernen.
+  void setHarmonic(int kind) {
+    final b = current;
+    if (b == null || b.bar || (b.frets[string] ?? ghostNote) < 0) return;
+    final h = {...b.harmonics};
+    h[string] == kind ? h.remove(string) : h[string] = kind;
+    beats[beat] = b.copyWith(harmonics: h);
+    _resetDigits();
+  }
+
+  /// Flageolett durchschalten: natürlich → künstlich → Pinch → keines.
+  void cycleHarmonic() {
+    final b = current;
+    if (b == null || b.bar || (b.frets[string] ?? ghostNote) < 0) return;
+    final now = b.harmonics[string] ?? 0;
+    final h = {...b.harmonics};
+    now >= harmonicPinch ? h.remove(string) : h[string] = now + 1;
+    beats[beat] = b.copyWith(harmonics: h);
+    _resetDigits();
+  }
+
+  /// Ghost Note in Klammern auf der Note unter dem Cursor ein/aus.
+  void toggleGhostParen() {
+    final b = current;
+    if (b == null || b.bar || (b.frets[string] ?? ghostNote) < 0) return;
+    final g = {...b.ghosts};
+    g.contains(string) ? g.remove(string) : g.add(string);
+    beats[beat] = b.copyWith(ghosts: g);
+    _resetDigits();
+  }
+
+  /// Triller auf der Note unter dem Cursor: Gibt es schon einen, wird er
+  /// entfernt. Sonst bekommt sie einen (zuerst einen Ganzton höher), und
+  /// die nächste getippte Bundzahl wird zum Trillerbund.
+  void toggleTrill() {
+    final b = current;
+    if (b == null || b.bar) return;
+    final fret = b.frets[string];
+    if (fret == null || fret < 0) return;
+    if (b.trills.containsKey(string)) {
+      beats[beat] = b.copyWith(trills: {...b.trills}..remove(string));
+      _resetDigits();
+      return;
+    }
+    beats[beat] = b.copyWith(trills: {...b.trills, string: math.min(fret + 2, maxFret)});
+    _resetDigits();
+    trillInput = true;
+  }
+
+  void _setTrill(int fret) {
+    final b = beats[beat];
+    beats[beat] = b.copyWith(trills: {...b.trills, string: fret.clamp(0, maxFret)});
   }
 
   /// Ganzen Schlag (oder Taktstrich) unter dem Cursor entfernen.

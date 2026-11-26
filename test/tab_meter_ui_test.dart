@@ -66,6 +66,8 @@ void main() {
     }
     await t.pump();
     expect(find.text('Nur Takt 2'), findsOneWidget);
+    await t.ensureVisible(find.widgetWithText(ChoiceChip, '2/4'));
+    await t.pump();
     await t.tap(find.widgetWithText(ChoiceChip, '2/4'));
     await t.pump();
     final tab = ink.annotations.tab(id)!;
@@ -80,7 +82,11 @@ void main() {
     expect(measureLengths(tab.beats, tab.measure), [1.0, 0.5]);
 
     // Ganze Zeile: Taktart vorne, Taktstriche neu
+    await t.ensureVisible(find.text('Ganze Zeile'));
+    await t.pump();
     await t.tap(find.text('Ganze Zeile'));
+    await t.pump();
+    await t.ensureVisible(find.widgetWithText(ChoiceChip, '3/4'));
     await t.pump();
     await t.tap(find.widgetWithText(ChoiceChip, '3/4'));
     await t.pump();
